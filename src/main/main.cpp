@@ -65,16 +65,13 @@ void clear(unsigned char color) {
 int main() {
     cout << '\n';
 
-    for(int red = 0; red < 6; red++) {
-        for(int green = 0; green < 6; green++) {
-            for(int blue = 0; blue < 6; blue++) {
-                int color = 16 + (red * 36) + (green * 6) + blue;
-                clear(color);
-                swap_buffers();
-                cout << reset_cursor();
-                this_thread::sleep_for(20ms);
-            }
-        }
+    int color = 255;
+    while(color >= 0) {
+        clear(color);
+        swap_buffers();
+        cout << reset_cursor();
+        color--;
+        this_thread::sleep_for(20ms);
     }
 
     cout << command << 0 << set_color_command;
