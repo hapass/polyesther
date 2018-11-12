@@ -42,7 +42,7 @@ string reset_cursor() {
 void swap_buffers() {
     bool should_color_pixel = true;
     for(int i = 0; i < frame_buffer.size(); i++) {
-        unsigned char pixel_color = frame_buffer[i];
+        unsigned short pixel_color = frame_buffer[i];
 
         if(should_color_pixel) {
             cout << change_color(pixel_color);
@@ -58,7 +58,7 @@ void swap_buffers() {
     }
 }
 
-void clear(unsigned char color) {
+void clear(unsigned short color) {
     std::fill(frame_buffer.begin(), frame_buffer.end(), color);
 }
 
