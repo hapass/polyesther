@@ -3,7 +3,7 @@ SRCFOLDER = src/main
 INCLUDESFOLDER = src/main
 
 CXX = clang++
-CXXFLAGS = -I${INCLUDESFOLDER} -std=c++17
+CXXFLAGS = -I${INCLUDESFOLDER} -std=c++17 -g
 
 SOURCES = main.cpp
 SRC = $(addprefix ${SRCFOLDER}/, ${SOURCES})

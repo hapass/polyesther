@@ -8,22 +8,30 @@
 using namespace std;
 
 //renderer
-const int screen_width = 100;
-const int screen_height = 100;
-const string pixel = "\u25A0";
+const int screen_width = 50;
+const int screen_height = 50;
+const string pixel = " ";
 const string command = "\x1b[";
-const string color_palette_256 = "38;5;";
+const string color_background = "48;5;";
 const string set_color_command = "m";
 const string cursor_up_command = "A";
 const string cursor_left_command = "D";
 
 vector<unsigned short> frame_buffer(screen_width * screen_height);
 
+bool isValidColor(int color) {
+    return 0 <= color && color <= 15;
+}
+
+//8-15
 string change_color(int color) {
+    if(!isValidColor(color))
+        throw invalid_argument("color");
+
     stringstream change_color_command;
 
     change_color_command <<
-        command << color_palette_256 << color << set_color_command;
+        command << color_background << color << set_color_command;
 
     return change_color_command.str();
 }
@@ -41,23 +49,27 @@ string reset_cursor() {
 }
 
 void swap_buffers() {
+    stringstream backbuffer;
     bool should_color_pixel = true;
     for(int i = 0; i < frame_buffer.size(); i++) {
         unsigned short pixel_color = frame_buffer[i];
 
         if(should_color_pixel) {
-            cout << change_color(pixel_color);
+            backbuffer << change_color(pixel_color);
         }
 
-        cout << pixel;
+        backbuffer << pixel;
 
         if((i + 1) % screen_width == 0) {
-            cout << '\n';
+            backbuffer << '\n';
         }
 
         should_color_pixel = pixel_color != frame_buffer[i + 1];
     }
-    cout << reset_cursor();
+
+    backbuffer << reset_cursor();
+
+    cout << backbuffer.str();
 }
 
 void clear(unsigned short color) {
@@ -98,7 +110,7 @@ bool too_close(float z) {
 }
 
 void draw_stars(chrono::milliseconds delta) {
-    clear(0);
+    clear(8);
 
     auto delta_seconds = chrono::duration_cast<chrono::seconds>(delta);
     for(int i = 0; i < stars_count; i++) {
@@ -121,7 +133,7 @@ void draw_stars(chrono::milliseconds delta) {
             continue;
         }
 
-        draw_pixel(x, y, 17);
+        draw_pixel(x, y, 11);
     }
 
     swap_buffers();
