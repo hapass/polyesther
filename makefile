@@ -17,8 +17,6 @@ CXXFLAGS = -I${INCLUDESFOLDER} \
 SOURCES = main.cpp
 SRC = $(addprefix ${SRCFOLDER}/, ${SOURCES})
 
-main: bin
-	$(CXX) $(CXXFLAGS) -o ${BINFOLDER}/main ${SRC}
-
-bin:
+main:
 	mkdir -p ${BINFOLDER}
+	$(CXX) $(CXXFLAGS) -o ${BINFOLDER}/main ${SRC}
