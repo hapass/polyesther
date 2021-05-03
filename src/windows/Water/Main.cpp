@@ -1,45 +1,49 @@
-#include <windows.h>
+#include <Windows.h>
 
-LRESULT CALLBACK WaterMainWindowMessageHandler(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
+LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
-	return DefWindowProc(hWnd, uMsg, wParam, lParam);
+    return DefWindowProc(hWnd, uMsg, wParam, lParam);
 }
 
-int CALLBACK WinMain(HINSTANCE instance, HINSTANCE, LPSTR, int)
+int CALLBACK WinMain(
+    _In_ HINSTANCE hInstance,
+    _In_opt_ HINSTANCE hPrevInstance,
+    _In_ LPSTR lpCmdLine,
+    _In_ int nShowCmd)
 {
-	WNDCLASS WaterWindowClass = {};
-	WaterWindowClass.style = CS_OWNDC | CS_HREDRAW | CS_VREDRAW;
-	WaterWindowClass.lpfnWndProc = WaterMainWindowMessageHandler;
-	WaterWindowClass.hInstance = instance;
-	WaterWindowClass.lpszClassName = L"WaterMainWindow";
+    WNDCLASS MainWindowClass = {};
+    MainWindowClass.style = CS_OWNDC | CS_HREDRAW | CS_VREDRAW;
+    MainWindowClass.lpfnWndProc = MainWindowProc;
+    MainWindowClass.hInstance = hInstance;
+    MainWindowClass.lpszClassName = L"MainWindow";
 
-	if (RegisterClass(&WaterWindowClass))
-	{
-		HWND hWindow = CreateWindowEx(
-			0,
-			L"WaterMainWindow",
-			L"Water", 
-			WS_OVERLAPPEDWINDOW | WS_VISIBLE, 
-			CW_USEDEFAULT, 
-			CW_USEDEFAULT, 
-			CW_USEDEFAULT, 
-			CW_USEDEFAULT, 
-			0, 
-			0, 
-			instance, 
-			0
-		);
+    if (RegisterClass(&MainWindowClass))
+    {
+        HWND hWindow = CreateWindowEx(
+            0,
+            L"MainWindow",
+            L"Software Rasterizer",
+            WS_OVERLAPPEDWINDOW | WS_VISIBLE,
+            CW_USEDEFAULT,
+            CW_USEDEFAULT,
+            CW_USEDEFAULT,
+            CW_USEDEFAULT,
+            0,
+            0,
+            hInstance,
+            0
+        );
 
-		if (hWindow)
-		{
-			MSG message;
-			while (GetMessage(&message, 0, 0, 0))
-			{
-				TranslateMessage(&message);
-				DispatchMessage(&message);
-			}
-		}
-	}
+        if (hWindow)
+        {
+            MSG message;
+            while (GetMessage(&message, 0, 0, 0))
+            {
+                TranslateMessage(&message);
+                DispatchMessage(&message);
+            }
+        }
+    }
 
-	return 0;
+    return 0;
 }
