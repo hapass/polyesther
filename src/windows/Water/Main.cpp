@@ -2,7 +2,30 @@
 
 LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
-    return DefWindowProc(hWnd, uMsg, wParam, lParam);
+    switch (uMsg)
+    {
+    case WM_CLOSE:
+    case WM_DESTROY:
+    {
+        PostQuitMessage(0);
+        return 0;
+    }
+    case WM_PAINT:
+    {
+        PAINTSTRUCT paint;
+        HDC deviceContext = BeginPaint(hWnd, &paint);
+        PatBlt(
+            deviceContext,
+            paint.rcPaint.left,
+            paint.rcPaint.top,
+            paint.rcPaint.right - paint.rcPaint.left,
+            paint.rcPaint.bottom - paint.rcPaint.top,
+            BLACKNESS
+        );
+        EndPaint(hWnd, &paint);
+    }
+    default: return DefWindowProc(hWnd, uMsg, wParam, lParam);
+    }
 }
 
 int CALLBACK WinMain(
@@ -17,9 +40,9 @@ int CALLBACK WinMain(
     MainWindowClass.hInstance = hInstance;
     MainWindowClass.lpszClassName = L"MainWindow";
 
-    if (RegisterClass(&MainWindowClass))
+    if (RegisterClassW(&MainWindowClass))
     {
-        HWND hWindow = CreateWindowEx(
+        HWND hWindow = CreateWindowExW(
             0,
             L"MainWindow",
             L"Software Rasterizer",
@@ -37,10 +60,10 @@ int CALLBACK WinMain(
         if (hWindow)
         {
             MSG message;
-            while (GetMessage(&message, 0, 0, 0))
+            while (GetMessageW(&message, 0, 0, 0))
             {
                 TranslateMessage(&message);
-                DispatchMessage(&message);
+                DispatchMessageW(&message);
             }
         }
     }
