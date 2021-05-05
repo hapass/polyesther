@@ -14,7 +14,7 @@ static void* BackBuffer;
 
 void CreateBackBuffer()
 {
-    OS_CALL(BackBuffer = VirtualAlloc(0, BackBufferInfo.bmiHeader.biWidth * BackBufferInfo.bmiHeader.biHeight * (BackBufferInfo.bmiHeader.biBitCount / CHAR_BIT), MEM_COMMIT, PAGE_READWRITE));
+    OS_CALL(BackBuffer = VirtualAlloc(0, BackBufferInfo.bmiHeader.biWidth * BackBufferInfo.bmiHeader.biHeight * sizeof(uint32_t), MEM_COMMIT, PAGE_READWRITE));
 }
 
 void DestroyBackBuffer()
@@ -29,19 +29,9 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 {
     switch (uMsg)
     {
-    case WM_SIZE:
-    {
-        DestroyBackBuffer();
-        CreateBackBuffer();
-        break;
-    }
     case WM_DESTROY:
     {
         PostQuitMessage(0);
-        break;
-    }
-    case WM_PAINT:
-    {
         break;
     }
     }
@@ -83,6 +73,15 @@ int CALLBACK WinMain(
         HDC screenContext;
         OS_CALL(screenContext = GetDC(window));
 
+        BackBufferInfo.bmiHeader.biSize = sizeof(BackBufferInfo.bmiHeader);
+        BackBufferInfo.bmiHeader.biWidth = 1920;
+        BackBufferInfo.bmiHeader.biHeight = 1080;
+        BackBufferInfo.bmiHeader.biPlanes = 1;
+        BackBufferInfo.bmiHeader.biBitCount = 32;
+        BackBufferInfo.bmiHeader.biCompression = BI_RGB;
+        CreateBackBuffer();
+
+        //TODO.PAVELZA: cannot move this inside the loop. Bad window handle in case of closed? Should recalculate in window handler?
         RECT drawingArea;
         OS_CALL(GetClientRect(window, &drawingArea));
 
@@ -103,17 +102,35 @@ int CALLBACK WinMain(
                 }
             }
 
-            //StretchDIBits(
-            //    screenContext,
-            //    drawingArea.left,
-            //    drawingArea.top,
-            //    drawingArea.right - drawingArea.left,
-            //    drawingArea.bottom - drawingArea.top,
+            uint32_t* color = (uint32_t*)BackBuffer;
+            for (uint32_t i = 0; i < BackBufferInfo.bmiHeader.biWidth; i++)
+            {
+                for (uint32_t j = 0; j < BackBufferInfo.bmiHeader.biHeight; j++)
+                {
+                    //xxGGRRBB
+                    color[j * BackBufferInfo.bmiHeader.biWidth + i] = 0x000000FFU;
+                }
+            }
 
-            //    )
+            StretchDIBits(
+                screenContext,
+                drawingArea.left,
+                drawingArea.top,
+                drawingArea.right - drawingArea.left,
+                drawingArea.bottom - drawingArea.top,
+                0,
+                0,
+                BackBufferInfo.bmiHeader.biWidth,
+                BackBufferInfo.bmiHeader.biHeight,
+                BackBuffer,
+                &BackBufferInfo,
+                DIB_RGB_COLORS,
+                SRCCOPY
+            );
         }
 
         ReleaseDC(window, screenContext);
+        DestroyBackBuffer();
     }
 
     return 0;
