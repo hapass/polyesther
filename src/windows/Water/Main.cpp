@@ -2,33 +2,32 @@
 #include <stdint.h>
 #include <cassert>
 
+static RECT ScreenSize;
+
+static int32_t WindowWidth;
+static int32_t WindowHeight;
 static BITMAPINFO BackBufferInfo;
 static void* BackBuffer;
 
-#define OS_CALL(call) \
-    if (!(call)) \
+#define NOT_FAILED(call, failureCode) \
+    if ((call) == failureCode) \
     { \
          assert(false, "Windows API call failed."); \
          exit(1); \
     } \
 
-void CreateBackBuffer()
-{
-    OS_CALL(BackBuffer = VirtualAlloc(0, BackBufferInfo.bmiHeader.biWidth * BackBufferInfo.bmiHeader.biHeight * sizeof(uint32_t), MEM_COMMIT, PAGE_READWRITE));
-}
-
-void DestroyBackBuffer()
-{
-    if (BackBuffer)
-    {
-        OS_CALL(VirtualFree(BackBuffer, 0, MEM_RELEASE));
-    }
-}
-
 LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
     switch (uMsg)
     {
+    case WM_SIZE:
+    {
+        RECT clientRect;
+        NOT_FAILED(GetClientRect(hWnd, &clientRect), 0);
+        WindowWidth = clientRect.right - clientRect.left;
+        WindowHeight = clientRect.bottom - clientRect.top;
+        break;
+    }
     case WM_DESTROY:
     {
         PostQuitMessage(0);
@@ -55,7 +54,7 @@ int CALLBACK WinMain(
     if (RegisterClassW(&MainWindowClass))
     {
         HWND window;
-        OS_CALL(window = CreateWindowExW(
+        NOT_FAILED(window = CreateWindowExW(
             0,
             L"MainWindow",
             L"Software Rasterizer",
@@ -68,23 +67,21 @@ int CALLBACK WinMain(
             0,
             hInstance,
             0
-        ));
+        ), 0);
 
         HDC screenContext;
-        OS_CALL(screenContext = GetDC(window));
+        NOT_FAILED(screenContext = GetDC(window), 0);
 
         BackBufferInfo.bmiHeader.biSize = sizeof(BackBufferInfo.bmiHeader);
         BackBufferInfo.bmiHeader.biWidth = 1920;
         BackBufferInfo.bmiHeader.biHeight = 1080;
         BackBufferInfo.bmiHeader.biPlanes = 1;
-        BackBufferInfo.bmiHeader.biBitCount = 32;
+        BackBufferInfo.bmiHeader.biBitCount = sizeof(uint32_t) * CHAR_BIT;
         BackBufferInfo.bmiHeader.biCompression = BI_RGB;
-        CreateBackBuffer();
+        NOT_FAILED(BackBuffer = VirtualAlloc(0, BackBufferInfo.bmiHeader.biWidth * BackBufferInfo.bmiHeader.biHeight * sizeof(uint32_t), MEM_COMMIT, PAGE_READWRITE), 0);
 
-        //TODO.PAVELZA: cannot move this inside the loop. Bad window handle in case of closed? Should recalculate in window handler?
-        RECT drawingArea;
-        OS_CALL(GetClientRect(window, &drawingArea));
-
+        uint32_t offset = 0x00U;
+        int32_t direction = 1;
         while (isRunning)
         {
             MSG message;
@@ -107,17 +104,25 @@ int CALLBACK WinMain(
             {
                 for (uint32_t j = 0; j < BackBufferInfo.bmiHeader.biHeight; j++)
                 {
-                    //xxGGRRBB
-                    color[j * BackBufferInfo.bmiHeader.biWidth + i] = 0x000000FFU;
+                    uint32_t red = (static_cast<float>(j) / BackBufferInfo.bmiHeader.biHeight) * 0xFF;
+                    uint32_t green = offset;
+                    uint32_t blue = (static_cast<float>(i) / BackBufferInfo.bmiHeader.biWidth) * 0xFF;
+
+                    uint32_t finalColor = 0U;
+                    finalColor |= red << 16;
+                    finalColor |= green << 8;
+                    finalColor |= blue << 0;
+
+                    color[j * BackBufferInfo.bmiHeader.biWidth + i] = finalColor;
                 }
             }
 
             StretchDIBits(
                 screenContext,
-                drawingArea.left,
-                drawingArea.top,
-                drawingArea.right - drawingArea.left,
-                drawingArea.bottom - drawingArea.top,
+                0,
+                0,
+                WindowWidth,
+                WindowHeight,
                 0,
                 0,
                 BackBufferInfo.bmiHeader.biWidth,
@@ -127,10 +132,22 @@ int CALLBACK WinMain(
                 DIB_RGB_COLORS,
                 SRCCOPY
             );
+
+            if (offset == 0xFFU)
+            {
+                direction = -1;
+            }
+
+            if (offset == 0x00U)
+            {
+                direction = 1;
+            }
+
+            offset += direction;
         }
 
-        ReleaseDC(window, screenContext);
-        DestroyBackBuffer();
+        NOT_FAILED(VirtualFree(BackBuffer, 0, MEM_RELEASE), 0);
+        NOT_FAILED(ReleaseDC(window, screenContext), 1);
     }
 
     return 0;
