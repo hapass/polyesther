@@ -2,7 +2,8 @@
 #include <stdint.h>
 #include <cassert>
 
-static RECT ScreenSize;
+static uint32_t GameWidth = 800;
+static uint32_t GameHeight = 600;
 
 static int32_t WindowWidth;
 static int32_t WindowHeight;
@@ -15,6 +16,41 @@ static void* BackBuffer;
          assert(false, "Windows API call failed."); \
          exit(1); \
     } \
+
+struct Color
+{
+    uint8_t r;
+    uint8_t g;
+    uint8_t b;
+};
+
+void DrawPixel(float x, float y, Color color)
+{
+    assert(GameWidth > 0, "biWidth should be greater than 0.");
+    assert(GameHeight > 0, "biHeight should be greater than 0.");
+    assert(-1 <= x && x <= 1, "X should be in clip space.");
+    assert(-1 <= y && y <= 1, "Y should be in clip space.");
+    assert(0x00 <= color.r && color.r <= 0xFF, "Red should be between 0x00 and 0xFF.");
+    assert(0x00 <= color.g && color.g <= 0xFF, "Green should be between 0x00 and 0xFF.");
+    assert(0x00 <= color.b && color.b <= 0xFF, "Blue should be between 0x00 and 0xFF.");
+    assert(BackBuffer, "BackBuffer should exist before drawing.");
+
+    uint32_t* backBuffer = (uint32_t*)BackBuffer;
+
+    uint32_t i = (GameWidth - 1) * ((x + 1) / 2.0f);
+    uint32_t j = (GameHeight - 1) * ((y + 1) / 2.0f);
+
+    uint32_t red = color.r;
+    uint32_t green = color.g;
+    uint32_t blue = color.b;
+
+    uint32_t finalColor = 0U;
+    finalColor |= red << 16;
+    finalColor |= green << 8;
+    finalColor |= blue << 0;
+
+    backBuffer[j * GameWidth + i] = finalColor;
+}
 
 LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
@@ -61,8 +97,8 @@ int CALLBACK WinMain(
             WS_OVERLAPPEDWINDOW | WS_VISIBLE,
             CW_USEDEFAULT,
             CW_USEDEFAULT,
-            CW_USEDEFAULT,
-            CW_USEDEFAULT,
+            GameWidth,
+            GameHeight,
             0,
             0,
             hInstance,
@@ -73,14 +109,14 @@ int CALLBACK WinMain(
         NOT_FAILED(screenContext = GetDC(window), 0);
 
         BackBufferInfo.bmiHeader.biSize = sizeof(BackBufferInfo.bmiHeader);
-        BackBufferInfo.bmiHeader.biWidth = 1920;
-        BackBufferInfo.bmiHeader.biHeight = 1080;
+        BackBufferInfo.bmiHeader.biWidth = GameWidth;
+        BackBufferInfo.bmiHeader.biHeight = GameHeight;
         BackBufferInfo.bmiHeader.biPlanes = 1;
         BackBufferInfo.bmiHeader.biBitCount = sizeof(uint32_t) * CHAR_BIT;
         BackBufferInfo.bmiHeader.biCompression = BI_RGB;
-        NOT_FAILED(BackBuffer = VirtualAlloc(0, BackBufferInfo.bmiHeader.biWidth * BackBufferInfo.bmiHeader.biHeight * sizeof(uint32_t), MEM_COMMIT, PAGE_READWRITE), 0);
+        NOT_FAILED(BackBuffer = VirtualAlloc(0, GameWidth * GameHeight * sizeof(uint32_t), MEM_COMMIT, PAGE_READWRITE), 0);
 
-        uint32_t offset = 0x00U;
+        uint8_t offset = 0x00U;
         int32_t direction = 1;
         while (isRunning)
         {
@@ -99,21 +135,11 @@ int CALLBACK WinMain(
                 }
             }
 
-            uint32_t* color = (uint32_t*)BackBuffer;
-            for (uint32_t i = 0; i < BackBufferInfo.bmiHeader.biWidth; i++)
+            for (uint32_t i = 0; i < GameWidth; i++)
             {
-                for (uint32_t j = 0; j < BackBufferInfo.bmiHeader.biHeight; j++)
+                for (uint32_t j = 0; j < GameHeight; j++)
                 {
-                    uint32_t red = (static_cast<float>(j) / BackBufferInfo.bmiHeader.biHeight) * 0xFF;
-                    uint32_t green = offset;
-                    uint32_t blue = (static_cast<float>(i) / BackBufferInfo.bmiHeader.biWidth) * 0xFF;
-
-                    uint32_t finalColor = 0U;
-                    finalColor |= red << 16;
-                    finalColor |= green << 8;
-                    finalColor |= blue << 0;
-
-                    color[j * BackBufferInfo.bmiHeader.biWidth + i] = finalColor;
+                    DrawPixel(2.0f / GameWidth * i - 1.0f, 2.0f / GameHeight * j - 1.0f, { static_cast<uint8_t>((static_cast<float>(i) / GameWidth) * 0xFF) , offset, static_cast<uint8_t>((static_cast<float>(j) / GameHeight) * 0xFF) });
                 }
             }
 
@@ -125,8 +151,8 @@ int CALLBACK WinMain(
                 WindowHeight,
                 0,
                 0,
-                BackBufferInfo.bmiHeader.biWidth,
-                BackBufferInfo.bmiHeader.biHeight,
+                GameWidth,
+                GameHeight,
                 BackBuffer,
                 &BackBufferInfo,
                 DIB_RGB_COLORS,
