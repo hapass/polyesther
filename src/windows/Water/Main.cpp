@@ -26,8 +26,8 @@ struct Color
 
 void DrawPixel(float x, float y, Color color)
 {
-    assert(GameWidth > 0, "biWidth should be greater than 0.");
-    assert(GameHeight > 0, "biHeight should be greater than 0.");
+    assert(GameWidth > 0, "GameWidth should be greater than 0.");
+    assert(GameHeight > 0, "GameHeight should be greater than 0.");
     assert(-1 <= x && x <= 1, "X should be in clip space.");
     assert(-1 <= y && y <= 1, "Y should be in clip space.");
     assert(0x00 <= color.r && color.r <= 0xFF, "Red should be between 0x00 and 0xFF.");
@@ -135,13 +135,17 @@ int CALLBACK WinMain(
                 }
             }
 
-            for (uint32_t i = 0; i < GameWidth; i++)
-            {
-                for (uint32_t j = 0; j < GameHeight; j++)
-                {
-                    DrawPixel(2.0f / GameWidth * i - 1.0f, 2.0f / GameHeight * j - 1.0f, { static_cast<uint8_t>((static_cast<float>(i) / GameWidth) * 0xFF) , offset, static_cast<uint8_t>((static_cast<float>(j) / GameHeight) * 0xFF) });
-                }
-            }
+            for (uint32_t i = 0; i <= GameWidth; i++)
+            for (uint32_t j = 0; j <= GameHeight; j++)
+                DrawPixel(
+                    2.0f / GameWidth * i - 1.0f,
+                    2.0f / GameHeight * j - 1.0f,
+                    { 
+                        static_cast<uint8_t>((static_cast<float>(i) / GameWidth) * 0xFF),
+                        offset,
+                        static_cast<uint8_t>((static_cast<float>(j) / GameHeight) * 0xFF)
+                    }
+                );
 
             StretchDIBits(
                 screenContext,
