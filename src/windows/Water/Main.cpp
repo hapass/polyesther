@@ -21,7 +21,7 @@ static void* BackBuffer;
 #define NOT_FAILED(call, failureCode) \
     if ((call) == failureCode) \
     { \
-         assert(false, "Windows API call failed."); \
+         assert(false); \
          exit(1); \
     } \
 
@@ -34,19 +34,19 @@ struct Color
 
 void DrawPixel(float x, float y, Color color)
 {
-    assert(GameWidth > 0, "GameWidth should be greater than 0.");
-    assert(GameHeight > 0, "GameHeight should be greater than 0.");
-    assert(-1 <= x && x <= 1, "X should be in clip space.");
-    assert(-1 <= y && y <= 1, "Y should be in clip space.");
-    assert(0x00 <= color.r && color.r <= 0xFF, "Red should be between 0x00 and 0xFF.");
-    assert(0x00 <= color.g && color.g <= 0xFF, "Green should be between 0x00 and 0xFF.");
-    assert(0x00 <= color.b && color.b <= 0xFF, "Blue should be between 0x00 and 0xFF.");
-    assert(BackBuffer, "BackBuffer should exist before drawing.");
+    assert(GameWidth > 0);
+    assert(GameHeight > 0);
+    assert(-1 <= x && x <= 1);
+    assert(-1 <= y && y <= 1);
+    assert(0x00 <= color.r && color.r <= 0xFF);
+    assert(0x00 <= color.g && color.g <= 0xFF);
+    assert(0x00 <= color.b && color.b <= 0xFF);
+    assert(BackBuffer);
 
     uint32_t* backBuffer = (uint32_t*)BackBuffer;
 
-    uint32_t i = (GameWidth - 1) * ((x + 1) / 2.0f);
-    uint32_t j = (GameHeight - 1) * ((y + 1) / 2.0f);
+    uint32_t i = static_cast<uint32_t>((GameWidth - 1) * ((x + 1) / 2.0f));
+    uint32_t j = static_cast<uint32_t>((GameHeight - 1) * ((y + 1) / 2.0f));
 
     uint32_t red = color.r;
     uint32_t green = color.g;
@@ -60,58 +60,59 @@ void DrawPixel(float x, float y, Color color)
     backBuffer[j * GameWidth + i] = finalColor;
 }
 
-float star_speed = 0.01;
-int stars_count = 200;
-int fps = 25;
+float StarSpeed = 0.01f;
+int StarsCount = 500;
+int FPS = 30;
 
-vector<float> star_x(stars_count);
-vector<float> star_y(stars_count);
-vector<float> star_z(stars_count);
+vector<float> StarX(StarsCount);
+vector<float> StarY(StarsCount);
+vector<float> StarZ(StarsCount);
 
-float generate_random() {
+float Random() {
     return static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
 }
 
-void create_star(int i) {
-    star_x[i] = generate_random() * 2 - 1;
-    star_y[i] = generate_random() * 2 - 1;
-    star_z[i] = generate_random() + 0.1;
+void CreateStar(int i) {
+    StarX[i] = Random() * 2 - 1;
+    StarY[i] = Random() * 2 - 1;
+    StarZ[i] = Random() + 0.1f;
 }
 
-bool within_screen(float x, float y) {
-    return (-1 <= x && x <= 1) &&
-        (-1 <= y && y <= 1);
+bool IsWithinScreen(float x, float y) {
+    return (-1 <= x && x <= 1) && (-1 <= y && y <= 1);
 }
 
-bool too_close(float z) {
+bool IsTooCloseToCamera(float z) {
     return z <= 0;
 }
 
-void draw_stars(chrono::milliseconds delta) 
+void Clear(Color color)
 {
     for (uint32_t i = 0; i <= GameWidth; i++)
+    {
         for (uint32_t j = 0; j <= GameHeight; j++)
-            DrawPixel(
-                2.0f / GameWidth * i - 1.0f,
-                2.0f / GameHeight * j - 1.0f,
-                { 0, 0, 0 }
-            );
+        {
+            DrawPixel(2.0f / GameWidth * i - 1.0f, 2.0f / GameHeight * j - 1.0f, color);
+        }
+    }
+}
 
-    auto delta_seconds = chrono::duration_cast<chrono::seconds>(delta);
-    for (int i = 0; i < stars_count; i++) {
-        star_z[i] -= star_speed;
+void RenderStars(chrono::milliseconds delta) 
+{
+    for (int i = 0; i < StarsCount; i++) {
+        StarZ[i] -= StarSpeed;
 
-        float z = star_z[i];
-        if (too_close(z)) {
-            create_star(i);
+        float z = StarZ[i];
+        if (IsTooCloseToCamera(z)) {
+            CreateStar(i);
             continue;
         }
 
-        float x = (star_x[i] / z);
-        float y = (star_y[i] / z);
+        float x = StarX[i] / z;
+        float y = StarY[i] / z;
 
-        if (!within_screen(x, y)) {
-            create_star(i);
+        if (!IsWithinScreen(x, y)) {
+            CreateStar(i);
             continue;
         }
 
@@ -149,7 +150,6 @@ int CALLBACK WinMain(
     bool isRunning = true;
 
     WNDCLASS MainWindowClass = {};
-    MainWindowClass.style = CS_OWNDC | CS_HREDRAW | CS_VREDRAW;
     MainWindowClass.lpfnWndProc = MainWindowProc;
     MainWindowClass.hInstance = hInstance;
     MainWindowClass.lpszClassName = L"MainWindow";
@@ -183,11 +183,11 @@ int CALLBACK WinMain(
         BackBufferInfo.bmiHeader.biCompression = BI_RGB;
         NOT_FAILED(BackBuffer = VirtualAlloc(0, GameWidth * GameHeight * sizeof(uint32_t), MEM_COMMIT, PAGE_READWRITE), 0);
 
-        for (int i = 0; i < stars_count; i++) {
-            create_star(i);
+        for (int i = 0; i < StarsCount; i++) {
+            CreateStar(i);
         }
 
-        auto frame_time = chrono::milliseconds(1000 / fps);
+        auto frameTime = chrono::milliseconds(1000 / FPS);
 
         while (isRunning)
         {
@@ -208,8 +208,10 @@ int CALLBACK WinMain(
                 }
             }
 
-            draw_stars(frame_time);
+            Clear({ 0, 0, 0 });
+            RenderStars(frameTime);
 
+            //swap buffers
             StretchDIBits(
                 screenContext,
                 0,
@@ -227,10 +229,10 @@ int CALLBACK WinMain(
             );
 
             auto finish = chrono::steady_clock::now();
-            auto time_left = frame_time - (finish - start);
+            auto timeLeft = frameTime - (finish - start);
 
-            if (time_left > 0ms) {
-                this_thread::sleep_for(time_left);
+            if (timeLeft > 0ms) {
+                this_thread::sleep_for(timeLeft);
             }
         }
 
