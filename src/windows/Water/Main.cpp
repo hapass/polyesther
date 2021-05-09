@@ -1,22 +1,19 @@
 #include <Windows.h>
 #include <stdint.h>
 #include <cassert>
-#include <iostream>
-#include <vector>
-#include <string>
-#include <sstream>
 #include <thread>
 #include <chrono>
 
 using namespace std;
 
-static uint32_t GameWidth = 800;
-static uint32_t GameHeight = 600;
+static const uint32_t GameWidth = 800;
+static const uint32_t GameHeight = 600;
+static const uint32_t FPS = 30;
 
 static int32_t WindowWidth;
 static int32_t WindowHeight;
 static BITMAPINFO BackBufferInfo;
-static void* BackBuffer;
+static uint32_t* BackBuffer;
 
 #define NOT_FAILED(call, failureCode) \
     if ((call) == failureCode) \
@@ -27,10 +24,21 @@ static void* BackBuffer;
 
 struct Color
 {
-    uint8_t r;
-    uint8_t g;
-    uint8_t b;
+    Color(uint8_t r, uint8_t g, uint8_t b): rgb(0u)
+    {
+        rgb |= r << 16;
+        rgb |= g << 8;
+        rgb |= b << 0;
+    }
+
+    uint32_t rgb;
+
+    static Color Black;
+    static Color White;
 };
+
+Color Color::Black = Color(0u, 0u, 0u);
+Color Color::White = Color(255u, 255u, 255u);
 
 void DrawPixel(float x, float y, Color color)
 {
@@ -38,85 +46,39 @@ void DrawPixel(float x, float y, Color color)
     assert(GameHeight > 0);
     assert(-1 <= x && x <= 1);
     assert(-1 <= y && y <= 1);
-    assert(0x00 <= color.r && color.r <= 0xFF);
-    assert(0x00 <= color.g && color.g <= 0xFF);
-    assert(0x00 <= color.b && color.b <= 0xFF);
     assert(BackBuffer);
-
-    uint32_t* backBuffer = (uint32_t*)BackBuffer;
 
     uint32_t i = static_cast<uint32_t>((GameWidth - 1) * ((x + 1) / 2.0f));
     uint32_t j = static_cast<uint32_t>((GameHeight - 1) * ((y + 1) / 2.0f));
 
-    uint32_t red = color.r;
-    uint32_t green = color.g;
-    uint32_t blue = color.b;
-
-    uint32_t finalColor = 0U;
-    finalColor |= red << 16;
-    finalColor |= green << 8;
-    finalColor |= blue << 0;
-
-    backBuffer[j * GameWidth + i] = finalColor;
+    BackBuffer[j * GameWidth + i] = color.rgb;
 }
 
-float StarSpeed = 0.01f;
-int StarsCount = 500;
-int FPS = 30;
-
-vector<float> StarX(StarsCount);
-vector<float> StarY(StarsCount);
-vector<float> StarZ(StarsCount);
-
-float Random() {
-    return static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
-}
-
-void CreateStar(int i) {
-    StarX[i] = Random() * 2 - 1;
-    StarY[i] = Random() * 2 - 1;
-    StarZ[i] = Random() + 0.1f;
-}
-
-bool IsWithinScreen(float x, float y) {
-    return (-1 <= x && x <= 1) && (-1 <= y && y <= 1);
-}
-
-bool IsTooCloseToCamera(float z) {
-    return z <= 0;
-}
-
-void Clear(Color color)
+void ClearScreen(Color color)
 {
-    for (uint32_t i = 0; i <= GameWidth; i++)
+    assert(GameWidth > 0);
+    assert(GameHeight > 0);
+    assert(BackBuffer);
+
+    for (uint32_t i = 0; i < GameWidth * GameHeight; i++)
     {
-        for (uint32_t j = 0; j <= GameHeight; j++)
-        {
-            DrawPixel(2.0f / GameWidth * i - 1.0f, 2.0f / GameHeight * j - 1.0f, color);
-        }
+        BackBuffer[i] = color.rgb;
     }
 }
 
-void RenderStars(chrono::milliseconds delta) 
+template <typename TFuncXMin, typename TFuncXMax>
+void DrawVirtualScanBuffer(int32_t lineMin, int32_t lineMax, TFuncXMin columnMinFunc, TFuncXMax columnMaxFunc)
 {
-    for (int i = 0; i < StarsCount; i++) {
-        StarZ[i] -= StarSpeed;
-
-        float z = StarZ[i];
-        if (IsTooCloseToCamera(z)) {
-            CreateStar(i);
-            continue;
+    for (int32_t line = lineMin; line < lineMax; line++)
+    {
+        int32_t columnMin = columnMinFunc(line);
+        int32_t columnMax = columnMaxFunc(line);
+        for (int32_t column = columnMin; column < columnMax; column++)
+        {
+            float x = (2.0f / GameWidth) * column - 1.0f;
+            float y = -((2.0f / GameHeight) * line - 1.0f);
+            DrawPixel(x, y, Color::White);
         }
-
-        float x = StarX[i] / z;
-        float y = StarY[i] / z;
-
-        if (!IsWithinScreen(x, y)) {
-            CreateStar(i);
-            continue;
-        }
-
-        DrawPixel(x, y, { 255, 255, 255 });
     }
 }
 
@@ -181,17 +143,15 @@ int CALLBACK WinMain(
         BackBufferInfo.bmiHeader.biPlanes = 1;
         BackBufferInfo.bmiHeader.biBitCount = sizeof(uint32_t) * CHAR_BIT;
         BackBufferInfo.bmiHeader.biCompression = BI_RGB;
-        NOT_FAILED(BackBuffer = VirtualAlloc(0, GameWidth * GameHeight * sizeof(uint32_t), MEM_COMMIT, PAGE_READWRITE), 0);
+        NOT_FAILED(BackBuffer = (uint32_t*)VirtualAlloc(0, GameWidth * GameHeight * sizeof(uint32_t), MEM_COMMIT, PAGE_READWRITE), 0);
 
-        for (int i = 0; i < StarsCount; i++) {
-            CreateStar(i);
-        }
+        auto frameExpectedTime = chrono::milliseconds(1000 / FPS);
 
-        auto frameTime = chrono::milliseconds(1000 / FPS);
+
 
         while (isRunning)
         {
-            auto start = chrono::steady_clock::now();
+            auto frameStart = chrono::steady_clock::now();
 
             MSG message;
             if (PeekMessageW(&message, 0, 0, 0, PM_REMOVE))
@@ -208,8 +168,10 @@ int CALLBACK WinMain(
                 }
             }
 
-            Clear({ 0, 0, 0 });
-            RenderStars(frameTime);
+            ClearScreen(Color::Black);
+            DrawVirtualScanBuffer(100, 200, 
+                [](int32_t line) { return 300 - line; },
+                [](int32_t line) { return 300 + line; });
 
             //swap buffers
             StretchDIBits(
@@ -228,10 +190,11 @@ int CALLBACK WinMain(
                 SRCCOPY
             );
 
-            auto finish = chrono::steady_clock::now();
-            auto timeLeft = frameTime - (finish - start);
+            auto frameActualTime = frameStart - chrono::steady_clock::now();
+            auto timeLeft = frameExpectedTime - frameActualTime;
 
-            if (timeLeft > 0ms) {
+            if (timeLeft > 0ms) 
+            {
                 this_thread::sleep_for(timeLeft);
             }
         }
