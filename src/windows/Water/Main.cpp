@@ -66,13 +66,18 @@ void ClearScreen(Color color)
     }
 }
 
-template <typename TFuncXMin, typename TFuncXMax>
-void DrawVirtualScanBuffer(int32_t lineMin, int32_t lineMax, TFuncXMin columnMinFunc, TFuncXMax columnMaxFunc)
+static int32_t ScanLineBuffer[2 * GameHeight];
+
+
+void DrawScanLineBuffer()
 {
-    for (int32_t line = lineMin; line < lineMax; line++)
+    for (int32_t line = 0; line < GameHeight; line++)
     {
-        int32_t columnMin = columnMinFunc(line);
-        int32_t columnMax = columnMaxFunc(line);
+        int32_t columnMin = ScanLineBuffer[line * 2];
+        int32_t columnMax = ScanLineBuffer[line * 2 + 1];
+
+        if (columnMin == 0 || columnMax == 0) continue;
+
         for (int32_t column = columnMin; column < columnMax; column++)
         {
             float x = (2.0f / GameWidth) * column - 1.0f;
@@ -80,6 +85,38 @@ void DrawVirtualScanBuffer(int32_t lineMin, int32_t lineMax, TFuncXMin columnMin
             DrawPixel(x, y, Color::White);
         }
     }
+}
+
+struct Vert
+{
+    int32_t x;
+    int32_t y;
+};
+
+enum class ScanLineBufferSide
+{
+    Left,
+    Right
+};
+
+void AddTriangleSideToScanLineBuffer(Vert begin, Vert end, ScanLineBufferSide side)
+{
+    float stepX = static_cast<float>(end.x - begin.x) / static_cast<float>(end.y - begin.y);
+    float x = static_cast<float>(begin.x);
+
+    for (int32_t i = begin.y; i < end.y; i++)
+    {
+        int32_t bufferOffset = side == ScanLineBufferSide::Left ? 0 : 1;
+        ScanLineBuffer[i * 2 + bufferOffset] = static_cast<int32_t>(x);
+        x += stepX;
+    }
+}
+
+void DrawTriangle(Vert min, Vert mid, Vert max)
+{
+    AddTriangleSideToScanLineBuffer(min, mid, ScanLineBufferSide::Right);
+    AddTriangleSideToScanLineBuffer(mid, max, ScanLineBufferSide::Right);
+    AddTriangleSideToScanLineBuffer(min, max, ScanLineBufferSide::Left);
 }
 
 LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
@@ -147,8 +184,6 @@ int CALLBACK WinMain(
 
         auto frameExpectedTime = chrono::milliseconds(1000 / FPS);
 
-
-
         while (isRunning)
         {
             auto frameStart = chrono::steady_clock::now();
@@ -169,9 +204,8 @@ int CALLBACK WinMain(
             }
 
             ClearScreen(Color::Black);
-            DrawVirtualScanBuffer(100, 200, 
-                [](int32_t line) { return 300 - line; },
-                [](int32_t line) { return 300 + line; });
+            DrawTriangle({ 100, 100 }, { 150, 200 }, { 80, 300 });
+            DrawScanLineBuffer();
 
             //swap buffers
             StretchDIBits(
