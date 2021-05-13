@@ -3,6 +3,8 @@
 #include <cassert>
 #include <thread>
 #include <chrono>
+#include <algorithm>
+#include <array>
 
 using namespace std;
 
@@ -87,11 +89,26 @@ void DrawScanLineBuffer()
     }
 }
 
-struct Vert
+struct Vec
 {
-    int32_t x;
-    int32_t y;
+    float x;
+    float y;
 };
+
+Vec operator+(Vec a, Vec b)
+{
+    return Vec { a.x + b.x, a.y + b.y };
+}
+
+Vec operator-(Vec b)
+{
+    return Vec { -b.x, -b.y };
+}
+
+Vec operator-(Vec a, Vec b)
+{
+    return Vec { a.x + (-b.x), b.y + (-b.y) };
+}
 
 enum class ScanLineBufferSide
 {
@@ -99,12 +116,12 @@ enum class ScanLineBufferSide
     Right
 };
 
-void AddTriangleSideToScanLineBuffer(Vert begin, Vert end, ScanLineBufferSide side)
+void AddTriangleSideToScanLineBuffer(Vec begin, Vec end, ScanLineBufferSide side)
 {
     float stepX = static_cast<float>(end.x - begin.x) / static_cast<float>(end.y - begin.y);
     float x = static_cast<float>(begin.x);
 
-    for (int32_t i = begin.y; i < end.y; i++)
+    for (int32_t i = static_cast<int32_t>(begin.y); i < static_cast<int32_t>(end.y); i++)
     {
         int32_t bufferOffset = side == ScanLineBufferSide::Left ? 0 : 1;
         ScanLineBuffer[i * 2 + bufferOffset] = static_cast<int32_t>(x);
@@ -112,11 +129,14 @@ void AddTriangleSideToScanLineBuffer(Vert begin, Vert end, ScanLineBufferSide si
     }
 }
 
-void DrawTriangle(Vert min, Vert mid, Vert max)
+void DrawTriangle(Vec a, Vec b, Vec c)
 {
-    AddTriangleSideToScanLineBuffer(min, mid, ScanLineBufferSide::Right);
-    AddTriangleSideToScanLineBuffer(mid, max, ScanLineBufferSide::Right);
-    AddTriangleSideToScanLineBuffer(min, max, ScanLineBufferSide::Left);
+    std::array<Vec, 3> vertices { a, b, c };
+    std::sort(std::begin(vertices), std::end(vertices), [](const Vec& lhs, const Vec& rhs) { return lhs.y < rhs.y; });
+
+    AddTriangleSideToScanLineBuffer(vertices[0], vertices[1], ScanLineBufferSide::Right);
+    AddTriangleSideToScanLineBuffer(vertices[1], vertices[2], ScanLineBufferSide::Right);
+    AddTriangleSideToScanLineBuffer(vertices[0], vertices[2], ScanLineBufferSide::Left);
 }
 
 LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
