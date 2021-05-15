@@ -107,7 +107,7 @@ Vec operator-(Vec b)
 
 Vec operator-(Vec a, Vec b)
 {
-    return Vec { a.x + (-b.x), b.y + (-b.y) };
+    return a + (-b);
 }
 
 enum class ScanLineBufferSide
@@ -134,9 +134,13 @@ void DrawTriangle(Vec a, Vec b, Vec c)
     std::array<Vec, 3> vertices { a, b, c };
     std::sort(std::begin(vertices), std::end(vertices), [](const Vec& lhs, const Vec& rhs) { return lhs.y < rhs.y; });
 
-    AddTriangleSideToScanLineBuffer(vertices[0], vertices[1], ScanLineBufferSide::Right);
-    AddTriangleSideToScanLineBuffer(vertices[1], vertices[2], ScanLineBufferSide::Right);
-    AddTriangleSideToScanLineBuffer(vertices[0], vertices[2], ScanLineBufferSide::Left);
+    Vec minMax = vertices[2] - vertices[0];
+    Vec minMiddle = vertices[1] - vertices[0];
+    bool isMiddleLeft = (minMax.x * minMiddle.y - minMax.y * minMiddle.x) > 0;
+
+    AddTriangleSideToScanLineBuffer(vertices[0], vertices[2], isMiddleLeft ? ScanLineBufferSide::Right : ScanLineBufferSide::Left);
+    AddTriangleSideToScanLineBuffer(vertices[0], vertices[1], isMiddleLeft ? ScanLineBufferSide::Left : ScanLineBufferSide::Right);
+    AddTriangleSideToScanLineBuffer(vertices[1], vertices[2], isMiddleLeft ? ScanLineBufferSide::Left : ScanLineBufferSide::Right);
 }
 
 LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
@@ -224,7 +228,7 @@ int CALLBACK WinMain(
             }
 
             ClearScreen(Color::Black);
-            DrawTriangle({ 100, 100 }, { 150, 200 }, { 80, 300 });
+            DrawTriangle({ 500, 100 }, { 100, 400 }, { 600, 300 });
             DrawScanLineBuffer();
 
             //swap buffers
