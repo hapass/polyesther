@@ -6,6 +6,13 @@
 #include <algorithm>
 #include <array>
 
+/*
+TODO:
+1. _ independent coordinates.
+2. _ rotation and translation matrices.
+3. _ rotation about triangle's pivot point.
+*/
+
 using namespace std;
 
 static const uint32_t GameWidth = 800;
@@ -42,18 +49,14 @@ struct Color
 Color Color::Black = Color(0u, 0u, 0u);
 Color Color::White = Color(255u, 255u, 255u);
 
-void DrawPixel(float x, float y, Color color)
+void DrawPixel(int32_t x, int32_t y, Color color)
 {
     assert(GameWidth > 0);
     assert(GameHeight > 0);
-    assert(-1 <= x && x <= 1);
-    assert(-1 <= y && y <= 1);
+    assert(0 <= x && x < GameWidth);
+    assert(0 <= y && y < GameHeight);
     assert(BackBuffer);
-
-    uint32_t i = static_cast<uint32_t>((GameWidth - 1) * ((x + 1) / 2.0f));
-    uint32_t j = static_cast<uint32_t>((GameHeight - 1) * ((y + 1) / 2.0f));
-
-    BackBuffer[j * GameWidth + i] = color.rgb;
+    BackBuffer[y * GameWidth + x] = color.rgb;
 }
 
 void ClearScreen(Color color)
@@ -73,17 +76,15 @@ static int32_t ScanLineBuffer[2 * GameHeight];
 
 void DrawScanLineBuffer()
 {
-    for (int32_t line = 0; line < GameHeight; line++)
+    for (int32_t y = 0; y < GameHeight; y++)
     {
-        int32_t columnMin = ScanLineBuffer[line * 2];
-        int32_t columnMax = ScanLineBuffer[line * 2 + 1];
+        int32_t columnMin = ScanLineBuffer[y * 2];
+        int32_t columnMax = ScanLineBuffer[y * 2 + 1];
 
         if (columnMin == 0 || columnMax == 0) continue;
 
-        for (int32_t column = columnMin; column < columnMax; column++)
+        for (int32_t x = columnMin; x < columnMax; x++)
         {
-            float x = (2.0f / GameWidth) * column - 1.0f;
-            float y = -((2.0f / GameHeight) * line - 1.0f);
             DrawPixel(x, y, Color::White);
         }
     }
