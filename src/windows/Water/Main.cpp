@@ -6,6 +6,8 @@
 #include <algorithm>
 #include <array>
 
+#include <cmath>
+
 /*
 TODO:
 1. _ independent coordinates.
@@ -73,7 +75,6 @@ void ClearScreen(Color color)
 
 static int32_t ScanLineBuffer[2 * GameHeight];
 
-
 void DrawScanLineBuffer()
 {
     for (int32_t y = 0; y < GameHeight; y++)
@@ -90,25 +91,85 @@ void DrawScanLineBuffer()
     }
 }
 
+struct Matrix
+{
+    Matrix()
+    {
+        for (uint32_t i = 0; i < 16U; i++)
+        {
+            m[i] = 0;
+        }
+    }
+
+    float m[16U];
+};
+
+Matrix rotateZ(float alpha)
+{
+    Matrix m;
+
+    //col 1
+    m.m[0] = cosf(alpha);
+    m.m[4] = sinf(alpha);
+    m.m[8] = 0.0f;
+    m.m[12] = 0.0f;
+
+    //col 2
+    m.m[1] = -sinf(alpha);
+    m.m[5] = cosf(alpha);
+    m.m[9] = 0.0f;
+    m.m[13] = 0.0f;
+
+    //col 3
+    m.m[2] = 0.0f;
+    m.m[6] = 0.0f;
+    m.m[10] = 1.0f;
+    m.m[14] = 0.0f;
+
+    //col 4
+    m.m[3] = 0.0f;
+    m.m[7] = 0.0f;
+    m.m[11] = 0.0f;
+    m.m[15] = 0.0f;
+
+    return m;
+}
+
 struct Vec
 {
-    float x;
-    float y;
+    float x = 0.0f;
+    float y = 0.0f;
+    float z = 0.0f;
+    float w = 0.0f;
 };
+
+float dot(Vec a, Vec b)
+{
+    return a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w;
+}
 
 Vec operator+(Vec a, Vec b)
 {
-    return Vec { a.x + b.x, a.y + b.y };
+    return Vec { a.x + b.x, a.y + b.y, a.z + b.z };
 }
 
 Vec operator-(Vec b)
 {
-    return Vec { -b.x, -b.y };
+    return Vec { -b.x, -b.y, -b.z };
 }
 
 Vec operator-(Vec a, Vec b)
 {
     return a + (-b);
+}
+
+Vec operator*(Matrix m, Vec v)
+{
+    float x = dot(Vec { m.m[0],  m.m[1],  m.m[2],  m.m[3] }, v);
+    float y = dot(Vec { m.m[4],  m.m[5],  m.m[6],  m.m[7] }, v);
+    float z = dot(Vec { m.m[8],  m.m[9],  m.m[10], m.m[11] }, v);
+    float w = dot(Vec { m.m[12], m.m[13], m.m[14], m.m[15] }, v);
+    return Vec { x, y, z, w };
 }
 
 enum class ScanLineBufferSide
@@ -209,6 +270,8 @@ int CALLBACK WinMain(
 
         auto frameExpectedTime = chrono::milliseconds(1000 / FPS);
 
+        std::array<Vec, 3> vertices { Vec{ 500, 100 }, Vec{ 100, 400 }, Vec{ 600, 300 } };
+
         while (isRunning)
         {
             auto frameStart = chrono::steady_clock::now();
@@ -228,8 +291,14 @@ int CALLBACK WinMain(
                 }
             }
 
+            for (Vec& v : vertices)
+            {
+                v = rotateZ(3.14f * 0.1f) * v;
+            }
+
             ClearScreen(Color::Black);
-            DrawTriangle({ 500, 100 }, { 100, 400 }, { 600, 300 });
+            // TODO.PAVELZA: Need to clip coordinates before scanline buffer phaze.
+            DrawTriangle(vertices[0], vertices[1], vertices[2]);
             DrawScanLineBuffer();
 
             //swap buffers
