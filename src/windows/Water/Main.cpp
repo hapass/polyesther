@@ -1,3 +1,5 @@
+#define _USE_MATH_DEFINES
+
 #include <Windows.h>
 #include <stdint.h>
 #include <cassert>
@@ -5,14 +7,14 @@
 #include <chrono>
 #include <algorithm>
 #include <array>
-
 #include <cmath>
 
 /*
 TODO:
-1. _ independent coordinates.
-2. _ rotation and translation matrices.
+1. _ independent coordinates. (clip space)
+2. _ rotation and translation matrices. !almost done, but forgot coordinates
 3. _ rotation about triangle's pivot point.
+4. _ clipping to screen.
 */
 
 using namespace std;
@@ -135,6 +137,42 @@ Matrix rotateZ(float alpha)
     return m;
 }
 
+Matrix perspective()
+{
+    float farPlane = 400.0f;
+    float nearPlane = 20.0f;
+    float halfFieldOfView = 40 * (180 / static_cast<float>(M_PI));
+    float aspect = static_cast<float>(WindowWidth) / static_cast<float>(WindowHeight);
+
+    Matrix m;
+
+    //col 1
+    m.m[0] = 1 / (tanf(halfFieldOfView) * aspect);
+    m.m[4] = 0.0f;
+    m.m[8] = 0.0f;
+    m.m[12] = 0.0f;
+
+    //col 2
+    m.m[1] = 0.0f;
+    m.m[5] = 1 / tanf(halfFieldOfView);
+    m.m[9] = 0.0f;
+    m.m[13] = 0.0f;
+
+    //col 3
+    m.m[2] = 0.0f;
+    m.m[6] = 0.0f;
+    m.m[10] = -(farPlane + nearPlane) / (farPlane - nearPlane);
+    m.m[14] = -1.0f;
+
+    //col 4
+    m.m[3] = 0.0f;
+    m.m[7] = 0.0f;
+    m.m[11] = -(2 * farPlane * nearPlane) / (farPlane - nearPlane);
+    m.m[15] = 0.0f;
+
+    return m;
+}
+
 struct Vec
 {
     float x = 0.0f;
@@ -194,6 +232,12 @@ void AddTriangleSideToScanLineBuffer(Vec begin, Vec end, ScanLineBufferSide side
 void DrawTriangle(Vec a, Vec b, Vec c)
 {
     std::array<Vec, 3> vertices { a, b, c };
+
+    for (Vec& v : vertices)
+    {
+        // do transform from -1 1 to width, height
+    }
+
     std::sort(std::begin(vertices), std::end(vertices), [](const Vec& lhs, const Vec& rhs) { return lhs.y < rhs.y; });
 
     Vec minMax = vertices[2] - vertices[0];
@@ -270,7 +314,7 @@ int CALLBACK WinMain(
 
         auto frameExpectedTime = chrono::milliseconds(1000 / FPS);
 
-        std::array<Vec, 3> vertices { Vec{ 500, 100 }, Vec{ 100, 400 }, Vec{ 600, 300 } };
+        std::array<Vec, 3> vertices { Vec{ 500, 100, 0, 1 }, Vec{ 100, 400, 0, 1 }, Vec{ 600, 300, 0, 1 } };
 
         while (isRunning)
         {
@@ -293,7 +337,8 @@ int CALLBACK WinMain(
 
             for (Vec& v : vertices)
             {
-                v = rotateZ(3.14f * 0.1f) * v;
+                v = rotateZ(static_cast<float>(M_PI) * 0.1f) * v;
+                v = perspective() * v;
             }
 
             ClearScreen(Color::Black);
