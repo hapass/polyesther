@@ -11,10 +11,8 @@
 
 /*
 TODO:
-1. _ independent coordinates. (clip space)
-2. _ rotation and translation matrices. !almost done, but forgot coordinates
-3. _ rotation about triangle's pivot point.
-4. _ clipping to screen.
+1. fix perspective projection until works with non moving triangle
+3. make triangle move
 */
 
 using namespace std;
@@ -137,10 +135,13 @@ Matrix rotateZ(float alpha)
     return m;
 }
 
+float Far = 400.0f;
+float Near = 20.0f;
+
 Matrix perspective()
 {
-    float farPlane = 400.0f;
-    float nearPlane = 20.0f;
+    float farPlane = Far;
+    float nearPlane = Near;
     float halfFieldOfView = 40 * (180 / static_cast<float>(M_PI));
     float aspect = static_cast<float>(WindowWidth) / static_cast<float>(WindowHeight);
 
@@ -235,7 +236,12 @@ void DrawTriangle(Vec a, Vec b, Vec c)
 
     for (Vec& v : vertices)
     {
-        // do transform from -1 1 to width, height
+        assert(-1.0f <= v.x && v.x <= 1.0f);
+        assert(-1.0f <= v.y && v.y <= 1.0f);
+        assert(-1.0f <= v.z && v.z <= 1.0f);
+        v.x = (GameWidth - 1) * ((v.x + 1) / 2.0f);
+        v.y = (GameHeight - 1) * ((v.y + 1) / 2.0f);
+        v.z = (Far - Near - 1) * ((v.z + 1) / 2.0f);
     }
 
     std::sort(std::begin(vertices), std::end(vertices), [](const Vec& lhs, const Vec& rhs) { return lhs.y < rhs.y; });
@@ -314,7 +320,7 @@ int CALLBACK WinMain(
 
         auto frameExpectedTime = chrono::milliseconds(1000 / FPS);
 
-        std::array<Vec, 3> vertices { Vec{ 500, 100, 0, 1 }, Vec{ 100, 400, 0, 1 }, Vec{ 600, 300, 0, 1 } };
+        std::array<Vec, 3> vertices { Vec{ -50, 0, 0, 1 }, Vec{ 50, 0, 0, 1 }, Vec{ 0, 50, 0, 1 } };
 
         while (isRunning)
         {
@@ -337,7 +343,7 @@ int CALLBACK WinMain(
 
             for (Vec& v : vertices)
             {
-                v = rotateZ(static_cast<float>(M_PI) * 0.1f) * v;
+                //v = rotateZ(static_cast<float>(M_PI) * 0.1f) * v;
                 v = perspective() * v;
             }
 
