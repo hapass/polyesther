@@ -168,7 +168,7 @@ Matrix perspective()
     //col 4
     m.m[3] = 0.0f;
     m.m[7] = 0.0f;
-    m.m[11] = -(2 * farPlane * nearPlane) / (farPlane - nearPlane);
+    m.m[11] = 2 * farPlane * nearPlane / (farPlane - nearPlane);
     m.m[15] = 0.0f;
 
     return m;
@@ -320,7 +320,7 @@ int CALLBACK WinMain(
 
         auto frameExpectedTime = chrono::milliseconds(1000 / FPS);
 
-        std::array<Vec, 3> vertices { Vec{ -50, 0, 0, 1 }, Vec{ 50, 0, 0, 1 }, Vec{ 0, 50, 0, 1 } };
+        std::array<Vec, 3> vertices { Vec{ -50, 0, 30.f, 1 }, Vec{ 50, 0, 30.f, 1 }, Vec{ 0, 50, 30.f, 1 } };
 
         while (isRunning)
         {
@@ -345,6 +345,10 @@ int CALLBACK WinMain(
             {
                 //v = rotateZ(static_cast<float>(M_PI) * 0.1f) * v;
                 v = perspective() * v;
+                v.x /= v.w;
+                v.y /= v.w;
+                v.z /= v.w;
+                v.w = 1.0f;
             }
 
             ClearScreen(Color::Black);
