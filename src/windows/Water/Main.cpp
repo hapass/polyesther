@@ -130,7 +130,69 @@ Matrix rotateZ(float alpha)
     m.m[3] = 0.0f;
     m.m[7] = 0.0f;
     m.m[11] = 0.0f;
+    m.m[15] = 1.0f;
+
+    return m;
+}
+
+Matrix rotateY(float alpha)
+{
+    Matrix m;
+
+    //col 1
+    m.m[0] = cosf(alpha);
+    m.m[4] = 0.0f;
+    m.m[8] = -sinf(alpha);
+    m.m[12] = 0.0f;
+
+    //col 2
+    m.m[1] = 0.0f;
+    m.m[5] = 1.0f;
+    m.m[9] = 0.0f;
+    m.m[13] = 0.0f;
+
+    //col 3
+    m.m[2] = sinf(alpha);
+    m.m[6] = 0.0f;
+    m.m[10] = cosf(alpha);
+    m.m[14] = 0.0f;
+
+    //col 4
+    m.m[3] = 0.0f;
+    m.m[7] = 0.0f;
+    m.m[11] = 0.0f;
     m.m[15] = 0.0f;
+
+    return m;
+}
+
+Matrix translate(float x, float y, float z)
+{
+    Matrix m;
+
+    //col 1
+    m.m[0] = 1.0f;
+    m.m[4] = 0.0f;
+    m.m[8] = 0.0f;
+    m.m[12] = 0.0f;
+
+    //col 2
+    m.m[1] = 0.0f;
+    m.m[5] = 1.0f;
+    m.m[9] = 0.0f;
+    m.m[13] = 0.0f;
+
+    //col 3
+    m.m[2] = 0.0f;
+    m.m[6] = 0.0f;
+    m.m[10] = 1.0f;
+    m.m[14] = 0.0f;
+
+    //col 4
+    m.m[3] = x;
+    m.m[7] = y;
+    m.m[11] = z;
+    m.m[15] = 1.0f;
 
     return m;
 }
@@ -189,12 +251,12 @@ float dot(Vec a, Vec b)
 
 Vec operator+(Vec a, Vec b)
 {
-    return Vec { a.x + b.x, a.y + b.y, a.z + b.z };
+    return Vec { a.x + b.x, a.y + b.y, a.z + b.z, a.w + b.w };
 }
 
 Vec operator-(Vec b)
 {
-    return Vec { -b.x, -b.y, -b.z };
+    return Vec { -b.x, -b.y, -b.z, -b.w };
 }
 
 Vec operator-(Vec a, Vec b)
@@ -238,10 +300,9 @@ void DrawTriangle(Vec a, Vec b, Vec c)
     {
         assert(-1.0f <= v.x && v.x <= 1.0f);
         assert(-1.0f <= v.y && v.y <= 1.0f);
-        assert(-1.0f <= v.z && v.z <= 1.0f);
+        //assert(-1.0f <= v.z && v.z <= 1.0f);
         v.x = (GameWidth - 1) * ((v.x + 1) / 2.0f);
         v.y = (GameHeight - 1) * ((v.y + 1) / 2.0f);
-        v.z = (Far - Near - 1) * ((v.z + 1) / 2.0f);
     }
 
     std::sort(std::begin(vertices), std::end(vertices), [](const Vec& lhs, const Vec& rhs) { return lhs.y < rhs.y; });
@@ -320,7 +381,7 @@ int CALLBACK WinMain(
 
         auto frameExpectedTime = chrono::milliseconds(1000 / FPS);
 
-        std::array<Vec, 3> vertices { Vec{ -50, 0, 30.f, 1 }, Vec{ 50, 0, 30.f, 1 }, Vec{ 0, 50, 30.f, 1 } };
+        float multiplier = 0.0f;
 
         while (isRunning)
         {
@@ -341,9 +402,17 @@ int CALLBACK WinMain(
                 }
             }
 
+            std::array<Vec, 3> vertices{ Vec{ -50, 0, 30.f, 1 }, Vec{ 50, 0, 30.f, 1 }, Vec{ 0, 50, 30.f, 1 } };
+            multiplier += 0.01f;
+            if (multiplier > 2.0f)
+            {
+                multiplier = 0.0f;
+            }
             for (Vec& v : vertices)
             {
-                //v = rotateZ(static_cast<float>(M_PI) * 0.1f) * v;
+                v = translate(0.0f, 0.0f, -30.0f) * v;
+                v = rotateZ(static_cast<float>(M_PI) * multiplier) * v;
+                v = translate(0.0f, 0.0f, 30.0f) * v;
                 v = perspective() * v;
                 v.x /= v.w;
                 v.y /= v.w;
