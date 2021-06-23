@@ -161,7 +161,7 @@ Matrix rotateY(float alpha)
     m.m[3] = 0.0f;
     m.m[7] = 0.0f;
     m.m[11] = 0.0f;
-    m.m[15] = 0.0f;
+    m.m[15] = 1.0f;
 
     return m;
 }
@@ -402,17 +402,18 @@ int CALLBACK WinMain(
                 }
             }
 
-            std::array<Vec, 3> vertices{ Vec{ -50, 0, 30.f, 1 }, Vec{ 50, 0, 30.f, 1 }, Vec{ 0, 50, 30.f, 1 } };
+            float zCoord = 70.f;
+            std::array<Vec, 3> vertices{ Vec{ -50, 0, zCoord, 1 }, Vec{ 50, 0, zCoord, 1 }, Vec{ 0, 50, zCoord, 1 } };
             multiplier += 0.01f;
-            if (multiplier > 2.0f)
+            if (multiplier > 1.0f)
             {
                 multiplier = 0.0f;
             }
             for (Vec& v : vertices)
             {
-                v = translate(0.0f, 0.0f, -30.0f) * v;
-                v = rotateZ(static_cast<float>(M_PI) * multiplier) * v;
-                v = translate(0.0f, 0.0f, 30.0f) * v;
+                v = translate(0.0f, 0.0f, -zCoord) * v;
+                v = rotateY(static_cast<float>(M_PI) * multiplier) * v;
+                v = translate(0.0f, 0.0f, zCoord) * v;
                 v = perspective() * v;
                 v.x /= v.w;
                 v.y /= v.w;
