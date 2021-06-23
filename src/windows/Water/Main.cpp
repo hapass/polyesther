@@ -11,8 +11,7 @@
 
 /*
 TODO:
-1. fix perspective projection until works with non moving triangle
-3. make triangle move
+1. make triangle move
 */
 
 using namespace std;
@@ -198,13 +197,13 @@ Matrix translate(float x, float y, float z)
 }
 
 float Far = 400.0f;
-float Near = 20.0f;
+float Near = 1.0f;
 
 Matrix perspective()
 {
     float farPlane = Far;
     float nearPlane = Near;
-    float halfFieldOfView = 40 * (180 / static_cast<float>(M_PI));
+    float halfFieldOfView = 45 * (static_cast<float>(M_PI) / 180);
     float aspect = static_cast<float>(WindowWidth) / static_cast<float>(WindowHeight);
 
     Matrix m;
@@ -298,9 +297,10 @@ void DrawTriangle(Vec a, Vec b, Vec c)
 
     for (Vec& v : vertices)
     {
+        // TODO.PAVELZA: Need to clip coordinates before scanline buffer phaze.
         assert(-1.0f <= v.x && v.x <= 1.0f);
         assert(-1.0f <= v.y && v.y <= 1.0f);
-        //assert(-1.0f <= v.z && v.z <= 1.0f);
+        assert(-1.0f <= v.z && v.z <= 1.0f);
         v.x = (GameWidth - 1) * ((v.x + 1) / 2.0f);
         v.y = (GameHeight - 1) * ((v.y + 1) / 2.0f);
     }
@@ -402,10 +402,10 @@ int CALLBACK WinMain(
                 }
             }
 
-            float zCoord = 70.f;
-            std::array<Vec, 3> vertices{ Vec{ -50, 0, zCoord, 1 }, Vec{ 50, 0, zCoord, 1 }, Vec{ 0, 50, zCoord, 1 } };
+            float zCoord = 100.f;
+            std::array<Vec, 3> vertices{ Vec{ -50, 0, zCoord, 1 }, Vec{ 50, 0, zCoord, 1 }, Vec{ 0, -50, zCoord, 1 } };
             multiplier += 0.01f;
-            if (multiplier > 1.0f)
+            if (multiplier > 2.0f)
             {
                 multiplier = 0.0f;
             }
@@ -422,7 +422,6 @@ int CALLBACK WinMain(
             }
 
             ClearScreen(Color::Black);
-            // TODO.PAVELZA: Need to clip coordinates before scanline buffer phaze.
             DrawTriangle(vertices[0], vertices[1], vertices[2]);
             DrawScanLineBuffer();
 
