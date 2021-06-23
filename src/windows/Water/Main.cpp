@@ -24,6 +24,7 @@ static int32_t WindowWidth;
 static int32_t WindowHeight;
 static BITMAPINFO BackBufferInfo;
 static uint32_t* BackBuffer;
+static int32_t ScanLineBuffer[2 * GameHeight];
 
 #define NOT_FAILED(call, failureCode) \
     if ((call) == failureCode) \
@@ -70,9 +71,12 @@ void ClearScreen(Color color)
     {
         BackBuffer[i] = color.rgb;
     }
-}
 
-static int32_t ScanLineBuffer[2 * GameHeight];
+    for (uint32_t i = 0; i < 2 * GameHeight; i++)
+    {
+        ScanLineBuffer[i] = 0;
+    }
+}
 
 void DrawScanLineBuffer()
 {
@@ -209,14 +213,14 @@ Matrix perspective()
     Matrix m;
 
     //col 1
-    m.m[0] = 1 / (tanf(halfFieldOfView) * aspect);
+    m.m[0] = 1 / (tan(halfFieldOfView) * aspect);
     m.m[4] = 0.0f;
     m.m[8] = 0.0f;
     m.m[12] = 0.0f;
 
     //col 2
     m.m[1] = 0.0f;
-    m.m[5] = 1 / tanf(halfFieldOfView);
+    m.m[5] = 1 / tan(halfFieldOfView);
     m.m[9] = 0.0f;
     m.m[13] = 0.0f;
 
@@ -280,13 +284,13 @@ enum class ScanLineBufferSide
 
 void AddTriangleSideToScanLineBuffer(Vec begin, Vec end, ScanLineBufferSide side)
 {
-    float stepX = static_cast<float>(end.x - begin.x) / static_cast<float>(end.y - begin.y);
-    float x = static_cast<float>(begin.x);
+    float stepX = (end.x - begin.x) / (end.y - begin.y);
+    float x = begin.x;
 
-    for (int32_t i = static_cast<int32_t>(begin.y); i < static_cast<int32_t>(end.y); i++)
+    for (int32_t i = static_cast<int32_t>(ceil(begin.y)); i < static_cast<int32_t>(ceil(end.y)); i++)
     {
         int32_t bufferOffset = side == ScanLineBufferSide::Left ? 0 : 1;
-        ScanLineBuffer[i * 2 + bufferOffset] = static_cast<int32_t>(x);
+        ScanLineBuffer[i * 2 + bufferOffset] = static_cast<int32_t>(ceil(x));
         x += stepX;
     }
 }
@@ -403,7 +407,7 @@ int CALLBACK WinMain(
             }
 
             float zCoord = 100.f;
-            std::array<Vec, 3> vertices{ Vec{ -50, 0, zCoord, 1 }, Vec{ 50, 0, zCoord, 1 }, Vec{ 0, -50, zCoord, 1 } };
+            std::array<Vec, 3> vertices{ Vec{ -20, 0, zCoord, 1 }, Vec{ 20, 0, zCoord, 1 }, Vec{ 0, -50, zCoord, 1 } };
             multiplier += 0.01f;
             if (multiplier > 2.0f)
             {
