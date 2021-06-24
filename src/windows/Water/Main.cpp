@@ -284,10 +284,22 @@ enum class ScanLineBufferSide
 
 void AddTriangleSideToScanLineBuffer(Vec begin, Vec end, ScanLineBufferSide side)
 {
-    float stepX = (end.x - begin.x) / (end.y - begin.y);
-    float x = begin.x;
+    float xDistance = end.x - begin.x;
+    float yDistance = end.y - begin.y;
 
-    for (int32_t i = static_cast<int32_t>(ceil(begin.y)); i < static_cast<int32_t>(ceil(end.y)); i++)
+    if (yDistance <= 0)
+    {
+        return;
+    }
+
+    float stepX = xDistance / yDistance;
+    float yPrestep = ceil(begin.y) - begin.y;
+    float x = begin.x + yPrestep * stepX;
+
+    int32_t beginScanLine = static_cast<int32_t>(ceil(begin.y));
+    int32_t endScanLine = static_cast<int32_t>(ceil(end.y));
+
+    for (int32_t i = beginScanLine; i < endScanLine; i++)
     {
         int32_t bufferOffset = side == ScanLineBufferSide::Left ? 0 : 1;
         ScanLineBuffer[i * 2 + bufferOffset] = static_cast<int32_t>(ceil(x));
