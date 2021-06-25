@@ -10,8 +10,7 @@
 #include <cmath>
 
 /*
-TODO:
-1. make triangle move
+* TODO: Remove scanline buffer.
 */
 
 using namespace std;
@@ -24,7 +23,6 @@ static int32_t WindowWidth;
 static int32_t WindowHeight;
 static BITMAPINFO BackBufferInfo;
 static uint32_t* BackBuffer;
-static int32_t ScanLineBuffer[2 * GameHeight];
 
 #define NOT_FAILED(call, failureCode) \
     if ((call) == failureCode) \
@@ -70,27 +68,6 @@ void ClearScreen(Color color)
     for (uint32_t i = 0; i < GameWidth * GameHeight; i++)
     {
         BackBuffer[i] = color.rgb;
-    }
-
-    for (uint32_t i = 0; i < 2 * GameHeight; i++)
-    {
-        ScanLineBuffer[i] = 0;
-    }
-}
-
-void DrawScanLineBuffer()
-{
-    for (int32_t y = 0; y < GameHeight; y++)
-    {
-        int32_t columnMin = ScanLineBuffer[y * 2];
-        int32_t columnMax = ScanLineBuffer[y * 2 + 1];
-
-        if (columnMin == 0 || columnMax == 0) continue;
-
-        for (int32_t x = columnMin; x < columnMax; x++)
-        {
-            DrawPixel(x, y, Color::White);
-        }
     }
 }
 
@@ -276,34 +253,57 @@ Vec operator*(Matrix m, Vec v)
     return Vec { x, y, z, w };
 }
 
-enum class ScanLineBufferSide
+struct Edge
 {
-    Left,
-    Right
-};
-
-void AddTriangleSideToScanLineBuffer(Vec begin, Vec end, ScanLineBufferSide side)
-{
-    float xDistance = end.x - begin.x;
-    float yDistance = end.y - begin.y;
-
-    if (yDistance <= 0)
+    Edge(Vec b, Vec e): begin(b), end(e)
     {
-        return;
+        pixelYBegin = static_cast<int32_t>(ceil(begin.y));
+        pixelYEnd = static_cast<int32_t>(ceil(end.y));
+
+        Vec distance = GetDistance();
+        stepX = distance.y > 0.0f ? distance.x / distance.y : 0.0f;
+        currentX = begin.x + (ceil(begin.y) - begin.y) * stepX;
     }
 
-    float stepX = xDistance / yDistance;
-    float yPrestep = ceil(begin.y) - begin.y;
-    float x = begin.x + yPrestep * stepX;
-
-    int32_t beginScanLine = static_cast<int32_t>(ceil(begin.y));
-    int32_t endScanLine = static_cast<int32_t>(ceil(end.y));
-
-    for (int32_t i = beginScanLine; i < endScanLine; i++)
+    Vec GetDistance() const
     {
-        int32_t bufferOffset = side == ScanLineBufferSide::Left ? 0 : 1;
-        ScanLineBuffer[i * 2 + bufferOffset] = static_cast<int32_t>(ceil(x));
-        x += stepX;
+        return end - begin;
+    }
+
+    int32_t Step()
+    {
+        currentX += stepX;
+        return static_cast<int32_t>(ceil(currentX));
+    }
+
+    int32_t pixelYBegin;
+    int32_t pixelYEnd;
+
+    float stepX;
+    float currentX;
+
+    Vec begin;
+    Vec end;
+};
+
+void DrawScanLine(Edge& minMax, Edge& other)
+{
+    for (int32_t y = other.pixelYBegin; y < other.pixelYEnd; y++)
+    {
+        int32_t pixelXBegin = minMax.Step();
+        int32_t pixelXEnd = other.Step();
+
+        if (pixelXBegin > pixelXEnd)
+        {
+            int32_t temp = pixelXBegin;
+            pixelXBegin = pixelXEnd;
+            pixelXEnd = temp;
+        }
+
+        for (int32_t x = pixelXBegin; x < pixelXEnd; x++)
+        {
+            DrawPixel(x, y, Color::White);
+        }
     }
 }
 
@@ -323,13 +323,12 @@ void DrawTriangle(Vec a, Vec b, Vec c)
 
     std::sort(std::begin(vertices), std::end(vertices), [](const Vec& lhs, const Vec& rhs) { return lhs.y < rhs.y; });
 
-    Vec minMax = vertices[2] - vertices[0];
-    Vec minMiddle = vertices[1] - vertices[0];
-    bool isMiddleLeft = (minMax.x * minMiddle.y - minMax.y * minMiddle.x) > 0;
+    Edge minMax(vertices[0], vertices[2]);
+    Edge minMiddle(vertices[0], vertices[1]);
+    Edge middleMax(vertices[1], vertices[2]);
 
-    AddTriangleSideToScanLineBuffer(vertices[0], vertices[2], isMiddleLeft ? ScanLineBufferSide::Right : ScanLineBufferSide::Left);
-    AddTriangleSideToScanLineBuffer(vertices[0], vertices[1], isMiddleLeft ? ScanLineBufferSide::Left : ScanLineBufferSide::Right);
-    AddTriangleSideToScanLineBuffer(vertices[1], vertices[2], isMiddleLeft ? ScanLineBufferSide::Left : ScanLineBufferSide::Right);
+    DrawScanLine(minMax, minMiddle);
+    DrawScanLine(minMax, middleMax); 
 }
 
 LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
@@ -419,7 +418,7 @@ int CALLBACK WinMain(
             }
 
             float zCoord = 100.f;
-            std::array<Vec, 3> vertices{ Vec{ -20, 0, zCoord, 1 }, Vec{ 20, 0, zCoord, 1 }, Vec{ 0, -50, zCoord, 1 } };
+            std::array<Vec, 3> vertices{ Vec{ -20, 0, zCoord, 1 }, Vec{ 20, 10, zCoord, 1 }, Vec{ 0, -50, zCoord, 1 } };
             multiplier += 0.01f;
             if (multiplier > 2.0f)
             {
@@ -439,7 +438,6 @@ int CALLBACK WinMain(
 
             ClearScreen(Color::Black);
             DrawTriangle(vertices[0], vertices[1], vertices[2]);
-            DrawScanLineBuffer();
 
             //swap buffers
             StretchDIBits(
