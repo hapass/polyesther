@@ -10,7 +10,10 @@
 #include <cmath>
 
 /*
-* TODO: Remove scanline buffer.
+* 1. Add color interpolation.
+* 2. Add texture coordinates interpolation.
+* 3. Load mesh.
+* 4. Do clipping.
 */
 
 using namespace std;
@@ -30,6 +33,16 @@ static uint32_t* BackBuffer;
          assert(false); \
          exit(1); \
     } \
+
+void DebugOut(const wchar_t* fmt, ...)
+{
+    va_list argp;
+    va_start(argp, fmt);
+    wchar_t dbg_out[4096];
+    vswprintf_s(dbg_out, fmt, argp);
+    va_end(argp);
+    OutputDebugString(dbg_out);
+}
 
 struct Color
 {
@@ -253,26 +266,84 @@ Vec operator*(Matrix m, Vec v)
     return Vec { x, y, z, w };
 }
 
-struct Edge
+struct Vert
 {
-    Edge(Vec b, Vec e): begin(b), end(e)
-    {
-        pixelYBegin = static_cast<int32_t>(ceil(begin.y));
-        pixelYEnd = static_cast<int32_t>(ceil(end.y));
+    float x;
+    float y;
+    float c;
+};
 
-        Vec distance = GetDistance();
-        stepX = distance.y > 0.0f ? distance.x / distance.y : 0.0f;
-        currentX = begin.x + (ceil(begin.y) - begin.y) * stepX;
+struct Interpolant
+{
+    Interpolant(Vert a, Vert b, Vert c)
+    {
+        float dx = (b.x - c.x) * (a.y - c.y) - (a.x - c.x) * (b.y - c.y);
+        float dy = -dx;
+
+        stepX = ((b.c - c.c) * (a.y - c.y) - (a.c - c.c) * (b.y - c.y)) / dx;
+        stepY = ((b.c - c.c) * (a.x - c.x) - (a.c - c.c) * (b.x - c.x)) / dy;
+
+        minC = a.c;
+        midC = b.c;
+        maxC = c.c;
     }
 
-    Vec GetDistance() const
+    float minC;
+    float midC;
+    float maxC;
+
+    float stepX;
+    float stepY;
+    float currentC;
+
+    void PreStep(Vert a)
     {
-        return end - begin;
+        currentC = a.c;
+        //currentC += (ceil(a.x) - a.x) * stepX;
+        //currentC += (ceil(a.y) - a.y) * stepY;
+    }
+
+    void Step(float dx, int edge_type)
+    {
+        currentC += stepY;
+        currentC += dx * stepX;
+
+        //DebugOut(L"Type %d. Current c: %f \n", edge_type, currentC);
+    }
+};
+
+struct Edge
+{
+    Edge(Vec b, Vec e, std::array<Interpolant, 3>& inter, int a): interpolants(inter), edge_type(a)
+    {
+        pixelYBegin = static_cast<int32_t>(ceil(b.y));
+        pixelYEnd = static_cast<int32_t>(ceil(e.y));
+
+        float distanceX = e.x - b.x;
+        float distanceY = e.y - b.y;
+        stepX = distanceY > 0.0f ? distanceX / distanceY : 0.0f;
+        currentX = b.x + (ceil(b.y) - b.y) * stepX;
+
+        for (Interpolant& i : interpolants)
+        {
+            if (a == 0 || a == 1)
+            {
+                i.PreStep({ b.x, b.y, i.minC });
+            }
+            else if (a == 2)
+            {
+                i.PreStep({ b.x, b.y, i.midC });
+            }
+        }
     }
 
     int32_t Step()
     {
         currentX += stepX;
+        for (Interpolant& i : interpolants)
+        {
+            i.Step(stepX, edge_type);
+        }
         return static_cast<int32_t>(ceil(currentX));
     }
 
@@ -282,27 +353,35 @@ struct Edge
     float stepX;
     float currentX;
 
-    Vec begin;
-    Vec end;
+    std::array<Interpolant, 3> interpolants;
+    int32_t edge_type;
 };
 
-void DrawScanLine(Edge& minMax, Edge& other)
+void DrawTrianglePart(Edge& minMax, Edge& other)
 {
     for (int32_t y = other.pixelYBegin; y < other.pixelYEnd; y++)
     {
         int32_t pixelXBegin = minMax.Step();
         int32_t pixelXEnd = other.Step();
 
-        if (pixelXBegin > pixelXEnd)
+        std::array<float, 3> interpolants_raw;
+        for (uint32_t i = 0; i < minMax.interpolants.size(); i++)
         {
-            int32_t temp = pixelXBegin;
-            pixelXBegin = pixelXEnd;
-            pixelXEnd = temp;
+            interpolants_raw[i] = minMax.interpolants[i].currentC;
         }
 
         for (int32_t x = pixelXBegin; x < pixelXEnd; x++)
         {
-            DrawPixel(x, y, Color::White);
+            for (uint32_t i = 0; i < minMax.interpolants.size(); i++)
+            {
+                interpolants_raw[i] += (other.interpolants[i].currentC - minMax.interpolants[i].currentC) / ((float)pixelXEnd - (float)pixelXBegin);
+            }
+            
+            DrawPixel(x, y, Color(
+                static_cast<uint8_t>(interpolants_raw[0] * 255.0f),
+                static_cast<uint8_t>(interpolants_raw[1] * 255.0f),
+                static_cast<uint8_t>(interpolants_raw[2] * 255.0f)
+            ));
         }
     }
 }
@@ -323,12 +402,18 @@ void DrawTriangle(Vec a, Vec b, Vec c)
 
     std::sort(std::begin(vertices), std::end(vertices), [](const Vec& lhs, const Vec& rhs) { return lhs.y < rhs.y; });
 
-    Edge minMax(vertices[0], vertices[2]);
-    Edge minMiddle(vertices[0], vertices[1]);
-    Edge middleMax(vertices[1], vertices[2]);
+    Interpolant red({ vertices[0].x, vertices[0].y, 1.0f }, { vertices[1].x, vertices[1].y, 0.0f }, { vertices[2].x, vertices[2].y, 0.0f });
+    Interpolant green({ vertices[0].x, vertices[0].y, 0.0f }, { vertices[1].x, vertices[1].y, 1.0f }, { vertices[2].x, vertices[2].y, 0.0f });
+    Interpolant blue({ vertices[0].x, vertices[0].y, 0.0f }, { vertices[1].x, vertices[1].y, 0.0f }, { vertices[2].x, vertices[2].y, 1.0f });
 
-    DrawScanLine(minMax, minMiddle);
-    DrawScanLine(minMax, middleMax); 
+    std::array<Interpolant, 3> interpolants{ red, green, blue };
+
+    Edge minMax(vertices[0], vertices[2], interpolants, 0);
+    Edge minMiddle(vertices[0], vertices[1], interpolants, 1);
+    Edge middleMax(vertices[1], vertices[2], interpolants, 2);
+
+    DrawTrianglePart(minMax, minMiddle);
+    DrawTrianglePart(minMax, middleMax);
 }
 
 LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
@@ -419,7 +504,7 @@ int CALLBACK WinMain(
 
             float zCoord = 100.f;
             std::array<Vec, 3> vertices{ Vec{ -20, 0, zCoord, 1 }, Vec{ 20, 10, zCoord, 1 }, Vec{ 0, -50, zCoord, 1 } };
-            multiplier += 0.01f;
+            //multiplier += 0.01f;
             if (multiplier > 2.0f)
             {
                 multiplier = 0.0f;
