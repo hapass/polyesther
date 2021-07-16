@@ -10,10 +10,12 @@
 #include <cmath>
 
 /*
-* 1. Add color interpolation.
+* 1. Fix prestep for color interpolation.
 * 2. Add texture coordinates interpolation.
-* 3. Load mesh.
-* 4. Do clipping.
+* 3. World coordinates.
+* 4. Refactoring.
+* 5. Load mesh.
+* 6. Do clipping.
 */
 
 using namespace std;
@@ -337,18 +339,20 @@ struct Edge
         }
     }
 
-    int32_t Step()
+    void Step()
     {
         currentX += stepX;
         for (Interpolant& i : interpolants)
         {
             i.Step(stepX, edge_type);
         }
-        return static_cast<int32_t>(ceil(currentX));
+        pixelX = static_cast<int32_t>(ceil(currentX));
     }
 
     int32_t pixelYBegin;
     int32_t pixelYEnd;
+
+    int32_t pixelX;
 
     float stepX;
     float currentX;
@@ -361,20 +365,33 @@ void DrawTrianglePart(Edge& minMax, Edge& other)
 {
     for (int32_t y = other.pixelYBegin; y < other.pixelYEnd; y++)
     {
-        int32_t pixelXBegin = minMax.Step();
-        int32_t pixelXEnd = other.Step();
+        minMax.Step();
+        other.Step();
+
+        Edge left = minMax;
+        Edge right = other;
+
+        if (left.currentX > right.currentX)
+        {
+            Edge temp = left;
+            left = right;
+            right = temp;
+        }
+
+        int32_t pixelXBegin = left.pixelX;
+        int32_t pixelXEnd = right.pixelX;
 
         std::array<float, 3> interpolants_raw;
-        for (uint32_t i = 0; i < minMax.interpolants.size(); i++)
+        for (uint32_t i = 0; i < left.interpolants.size(); i++)
         {
-            interpolants_raw[i] = minMax.interpolants[i].currentC;
+            interpolants_raw[i] = left.interpolants[i].currentC;
         }
 
         for (int32_t x = pixelXBegin; x < pixelXEnd; x++)
         {
-            for (uint32_t i = 0; i < minMax.interpolants.size(); i++)
+            for (uint32_t i = 0; i < left.interpolants.size(); i++)
             {
-                interpolants_raw[i] += (other.interpolants[i].currentC - minMax.interpolants[i].currentC) / ((float)pixelXEnd - (float)pixelXBegin);
+                interpolants_raw[i] += (right.interpolants[i].currentC - left.interpolants[i].currentC) / ((float)pixelXEnd - (float)pixelXBegin);
             }
             
             DrawPixel(x, y, Color(
@@ -504,7 +521,7 @@ int CALLBACK WinMain(
 
             float zCoord = 100.f;
             std::array<Vec, 3> vertices{ Vec{ -20, 0, zCoord, 1 }, Vec{ 20, 10, zCoord, 1 }, Vec{ 0, -50, zCoord, 1 } };
-            //multiplier += 0.01f;
+            multiplier += 0.01f;
             if (multiplier > 2.0f)
             {
                 multiplier = 0.0f;
