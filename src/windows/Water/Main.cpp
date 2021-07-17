@@ -10,12 +10,11 @@
 #include <cmath>
 
 /*
-* 1. Fix prestep for color interpolation.
-* 2. Add texture coordinates interpolation.
-* 3. World coordinates.
-* 4. Refactoring.
-* 5. Load mesh.
-* 6. Do clipping.
+* 1. Add texture coordinates interpolation.
+* 2. World coordinates.
+* 3. Refactoring.
+* 4. Load mesh.
+* 5. Do clipping.
 */
 
 using namespace std;
@@ -298,19 +297,17 @@ struct Interpolant
     float stepY;
     float currentC;
 
-    void PreStep(Vert a)
+    void PreStep(Vert a, float currentX)
     {
         currentC = a.c;
-        //currentC += (ceil(a.x) - a.x) * stepX;
-        //currentC += (ceil(a.y) - a.y) * stepY;
+        currentC += (ceil(a.y) - a.y) * stepY;
+        currentC += (currentX - a.x) * stepX;
     }
 
     void Step(float dx, int edge_type)
     {
         currentC += stepY;
         currentC += dx * stepX;
-
-        //DebugOut(L"Type %d. Current c: %f \n", edge_type, currentC);
     }
 };
 
@@ -330,11 +327,11 @@ struct Edge
         {
             if (a == 0 || a == 1)
             {
-                i.PreStep({ b.x, b.y, i.minC });
+                i.PreStep({ b.x, b.y, i.minC }, currentX);
             }
             else if (a == 2)
             {
-                i.PreStep({ b.x, b.y, i.midC });
+                i.PreStep({ b.x, b.y, i.midC }, currentX);
             }
         }
     }
