@@ -321,7 +321,7 @@ struct Interpolant
 
 struct Edge
 {
-    Edge(Vec b, Vec e, std::array<Interpolant, 3>& inter, int a): interpolants(inter), edge_type(a)
+    Edge(Vec b, Vec e, std::array<Interpolant, 5>& inter, int a): interpolants(inter), edge_type(a)
     {
         pixelYBegin = static_cast<int32_t>(ceil(b.y));
         pixelYEnd = static_cast<int32_t>(ceil(e.y));
@@ -362,7 +362,7 @@ struct Edge
     float stepX;
     float currentX;
 
-    std::array<Interpolant, 3> interpolants;
+    std::array<Interpolant, 5> interpolants;
     int32_t edge_type;
 };
 
@@ -386,7 +386,7 @@ void DrawTrianglePart(Edge& minMax, Edge& other)
         int32_t pixelXBegin = left.pixelX;
         int32_t pixelXEnd = right.pixelX;
 
-        std::array<float, 3> interpolants_raw;
+        std::array<float, 5> interpolants_raw;
         for (uint32_t i = 0; i < left.interpolants.size(); i++)
         {
             interpolants_raw[i] = left.interpolants[i].currentC;
@@ -399,11 +399,22 @@ void DrawTrianglePart(Edge& minMax, Edge& other)
                 interpolants_raw[i] += (right.interpolants[i].currentC - left.interpolants[i].currentC) / ((float)pixelXEnd - (float)pixelXBegin);
             }
             
+            //colored
             DrawPixel(x, y, Color(
                 static_cast<uint8_t>(interpolants_raw[0] * 255.0f),
                 static_cast<uint8_t>(interpolants_raw[1] * 255.0f),
                 static_cast<uint8_t>(interpolants_raw[2] * 255.0f)
             ));
+
+            //textured
+
+
+
+            int32_t textureX = static_cast<int32_t>(interpolants_raw[3] * TextureWidth);
+            int32_t textureY = static_cast<int32_t>(interpolants_raw[4] * TextureHeight);
+
+            int32_t texelBase = textureY * TextureWidth * 3 + textureX * 3;
+            DrawPixel(x, y, Color(Texture[texelBase], Texture[texelBase + 1], Texture[texelBase + 2]));
         }
     }
 }
@@ -427,8 +438,10 @@ void DrawTriangle(Vec a, Vec b, Vec c)
     Interpolant red({ vertices[0].x, vertices[0].y, 1.0f }, { vertices[1].x, vertices[1].y, 0.0f }, { vertices[2].x, vertices[2].y, 0.0f });
     Interpolant green({ vertices[0].x, vertices[0].y, 0.0f }, { vertices[1].x, vertices[1].y, 1.0f }, { vertices[2].x, vertices[2].y, 0.0f });
     Interpolant blue({ vertices[0].x, vertices[0].y, 0.0f }, { vertices[1].x, vertices[1].y, 0.0f }, { vertices[2].x, vertices[2].y, 1.0f });
+    Interpolant xTexture({ vertices[0].x, vertices[0].y, 0.0f }, { vertices[1].x, vertices[1].y, 0.0f }, { vertices[2].x, vertices[2].y, 1.0f });
+    Interpolant yTexture({ vertices[0].x, vertices[0].y, 0.0f }, { vertices[1].x, vertices[1].y, 1.0f }, { vertices[2].x, vertices[2].y, 0.0f });
 
-    std::array<Interpolant, 3> interpolants{ red, green, blue };
+    std::array<Interpolant, 5> interpolants { red, green, blue, xTexture, yTexture };
 
     Edge minMax(vertices[0], vertices[2], interpolants, 0);
     Edge minMiddle(vertices[0], vertices[1], interpolants, 1);
@@ -502,7 +515,7 @@ int CALLBACK WinMain(
         NOT_FAILED(BackBuffer = (uint32_t*)VirtualAlloc(0, GameWidth * GameHeight * sizeof(uint32_t), MEM_COMMIT, PAGE_READWRITE), 0);
 
         int32_t channels;
-        Texture = stbi_load("test.bmp", &TextureWidth, &TextureHeight, &channels, 3);
+        NOT_FAILED(Texture = stbi_load("test.bmp", &TextureWidth, &TextureHeight, &channels, 3), 0);
 
         auto frameExpectedTime = chrono::milliseconds(1000 / FPS);
         float multiplier = 0.0f;
