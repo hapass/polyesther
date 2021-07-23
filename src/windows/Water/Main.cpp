@@ -8,6 +8,10 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <wincodec.h>
+
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
 
 /*
 * 1. Add texture coordinates interpolation.
@@ -27,6 +31,10 @@ static int32_t WindowWidth;
 static int32_t WindowHeight;
 static BITMAPINFO BackBufferInfo;
 static uint32_t* BackBuffer;
+
+static int32_t TextureWidth;
+static int32_t TextureHeight;
+static uint8_t* Texture;
 
 #define NOT_FAILED(call, failureCode) \
     if ((call) == failureCode) \
@@ -493,8 +501,10 @@ int CALLBACK WinMain(
         BackBufferInfo.bmiHeader.biCompression = BI_RGB;
         NOT_FAILED(BackBuffer = (uint32_t*)VirtualAlloc(0, GameWidth * GameHeight * sizeof(uint32_t), MEM_COMMIT, PAGE_READWRITE), 0);
 
-        auto frameExpectedTime = chrono::milliseconds(1000 / FPS);
+        int32_t channels;
+        Texture = stbi_load("test.bmp", &TextureWidth, &TextureHeight, &channels, 3);
 
+        auto frameExpectedTime = chrono::milliseconds(1000 / FPS);
         float multiplier = 0.0f;
 
         while (isRunning)
@@ -564,6 +574,7 @@ int CALLBACK WinMain(
             }
         }
 
+        stbi_image_free(Texture);
         NOT_FAILED(VirtualFree(BackBuffer, 0, MEM_RELEASE), 0);
         NOT_FAILED(ReleaseDC(window, screenContext), 1);
     }
