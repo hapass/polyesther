@@ -403,14 +403,14 @@ void DrawTrianglePart(Edge& minMax, Edge& other)
             
             //colored
             //DrawPixel(x, y, Color(
-            //    static_cast<uint8_t>(interpolants_raw[0] * 255.0f),
-            //    static_cast<uint8_t>(interpolants_raw[1] * 255.0f),
-            //    static_cast<uint8_t>(interpolants_raw[2] * 255.0f)
+            //    static_cast<uint8_t>(interpolants_raw[0] * (1.0f / interpolants_raw[5]) * 255.0f),
+            //    static_cast<uint8_t>(interpolants_raw[1] * (1.0f / interpolants_raw[5]) * 255.0f),
+            //    static_cast<uint8_t>(interpolants_raw[2] * (1.0f / interpolants_raw[5]) * 255.0f)
             //));
 
             //textured
-            int32_t textureX = static_cast<int32_t>(interpolants_raw[3] * TextureWidth);
-            int32_t textureY = static_cast<int32_t>(interpolants_raw[4] * TextureHeight);
+            int32_t textureX = static_cast<int32_t>(interpolants_raw[3] * (1.0f / interpolants_raw[5]) * TextureWidth);
+            int32_t textureY = static_cast<int32_t>(interpolants_raw[4] * (1.0f / interpolants_raw[5]) * TextureHeight);
 
             int32_t texelBase = textureY * TextureWidth * 3 + textureX * 3;
             DrawPixel(x, y, Color(Texture[texelBase], Texture[texelBase + 1], Texture[texelBase + 2]));
@@ -434,12 +434,14 @@ void DrawTriangle(Vec a, Vec b, Vec c)
 
     std::sort(std::begin(vertices), std::end(vertices), [](const Vec& lhs, const Vec& rhs) { return lhs.y < rhs.y; });
 
-    Interpolant red({ vertices[0].x, vertices[0].y, 1.0f }, { vertices[1].x, vertices[1].y, 0.0f }, { vertices[2].x, vertices[2].y, 0.0f });
-    Interpolant green({ vertices[0].x, vertices[0].y, 0.0f }, { vertices[1].x, vertices[1].y, 1.0f }, { vertices[2].x, vertices[2].y, 0.0f });
-    Interpolant blue({ vertices[0].x, vertices[0].y, 0.0f }, { vertices[1].x, vertices[1].y, 0.0f }, { vertices[2].x, vertices[2].y, 1.0f });
-    Interpolant xTexture({ vertices[0].x, vertices[0].y, 0.0f }, { vertices[1].x, vertices[1].y, 0.0f }, { vertices[2].x, vertices[2].y, 1.0f });
-    Interpolant yTexture({ vertices[0].x, vertices[0].y, 0.0f }, { vertices[1].x, vertices[1].y, 1.0f }, { vertices[2].x, vertices[2].y, 0.0f });
-    Interpolant oneOverW({ vertices[0].x, vertices[0].y, 1.0f / vertices[0].w }, { vertices[1].x, vertices[1].y, 1.0f / vertices[1].w }, { vertices[2].x, vertices[2].y, 1.0f / vertices[2].w });
+    Interpolant red      ({ vertices[0].x, vertices[0].y, 1.0f / vertices[0].w }, { vertices[1].x, vertices[1].y, 0.0f / vertices[1].w }, { vertices[2].x, vertices[2].y, 0.0f / vertices[2].w });
+    Interpolant green    ({ vertices[0].x, vertices[0].y, 0.0f / vertices[0].w }, { vertices[1].x, vertices[1].y, 1.0f / vertices[1].w }, { vertices[2].x, vertices[2].y, 0.0f / vertices[2].w });
+    Interpolant blue     ({ vertices[0].x, vertices[0].y, 0.0f / vertices[0].w }, { vertices[1].x, vertices[1].y, 0.0f / vertices[1].w }, { vertices[2].x, vertices[2].y, 1.0f / vertices[2].w });
+
+    Interpolant xTexture ({ vertices[0].x, vertices[0].y, 0.0f / vertices[0].w }, { vertices[1].x, vertices[1].y, 0.0f / vertices[1].w }, { vertices[2].x, vertices[2].y, 1.0f / vertices[2].w });
+    Interpolant yTexture ({ vertices[0].x, vertices[0].y, 0.0f / vertices[0].w }, { vertices[1].x, vertices[1].y, 1.0f / vertices[1].w }, { vertices[2].x, vertices[2].y, 0.0f / vertices[2].w });
+
+    Interpolant oneOverW ({ vertices[0].x, vertices[0].y, 1.0f / vertices[0].w }, { vertices[1].x, vertices[1].y, 1.0f / vertices[1].w }, { vertices[2].x, vertices[2].y, 1.0f / vertices[2].w });
 
     std::vector<Interpolant> interpolants { red, green, blue, xTexture, yTexture, oneOverW };
 
