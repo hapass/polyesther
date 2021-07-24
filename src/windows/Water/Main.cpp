@@ -6,6 +6,7 @@
 #include <thread>
 #include <chrono>
 #include <algorithm>
+#include <vector>
 #include <array>
 #include <cmath>
 #include <wincodec.h>
@@ -14,7 +15,6 @@
 #include "stb_image.h"
 
 /*
-* 1. Add texture coordinates interpolation.
 * 2. World coordinates.
 * 3. Refactoring.
 * 4. Load mesh.
@@ -321,7 +321,7 @@ struct Interpolant
 
 struct Edge
 {
-    Edge(Vec b, Vec e, std::array<Interpolant, 5>& inter, int a): interpolants(inter), edge_type(a)
+    Edge(Vec b, Vec e, std::vector<Interpolant>& inter, int a): interpolants(inter), edge_type(a)
     {
         pixelYBegin = static_cast<int32_t>(ceil(b.y));
         pixelYEnd = static_cast<int32_t>(ceil(e.y));
@@ -349,6 +349,7 @@ struct Edge
         currentX += stepX;
         for (Interpolant& i : interpolants)
         {
+            //should do a prestep each time?
             i.Step(stepX, edge_type);
         }
         pixelX = static_cast<int32_t>(ceil(currentX));
@@ -362,7 +363,7 @@ struct Edge
     float stepX;
     float currentX;
 
-    std::array<Interpolant, 5> interpolants;
+    std::vector<Interpolant> interpolants;
     int32_t edge_type;
 };
 
@@ -386,8 +387,9 @@ void DrawTrianglePart(Edge& minMax, Edge& other)
         int32_t pixelXBegin = left.pixelX;
         int32_t pixelXEnd = right.pixelX;
 
-        std::array<float, 5> interpolants_raw;
-        for (uint32_t i = 0; i < left.interpolants.size(); i++)
+        std::vector<float> interpolants_raw;
+        interpolants_raw.resize(left.interpolants.size());
+        for (uint32_t i = 0; i < interpolants_raw.size(); i++)
         {
             interpolants_raw[i] = left.interpolants[i].currentC;
         }
@@ -400,16 +402,13 @@ void DrawTrianglePart(Edge& minMax, Edge& other)
             }
             
             //colored
-            DrawPixel(x, y, Color(
-                static_cast<uint8_t>(interpolants_raw[0] * 255.0f),
-                static_cast<uint8_t>(interpolants_raw[1] * 255.0f),
-                static_cast<uint8_t>(interpolants_raw[2] * 255.0f)
-            ));
+            //DrawPixel(x, y, Color(
+            //    static_cast<uint8_t>(interpolants_raw[0] * 255.0f),
+            //    static_cast<uint8_t>(interpolants_raw[1] * 255.0f),
+            //    static_cast<uint8_t>(interpolants_raw[2] * 255.0f)
+            //));
 
             //textured
-
-
-
             int32_t textureX = static_cast<int32_t>(interpolants_raw[3] * TextureWidth);
             int32_t textureY = static_cast<int32_t>(interpolants_raw[4] * TextureHeight);
 
@@ -440,8 +439,9 @@ void DrawTriangle(Vec a, Vec b, Vec c)
     Interpolant blue({ vertices[0].x, vertices[0].y, 0.0f }, { vertices[1].x, vertices[1].y, 0.0f }, { vertices[2].x, vertices[2].y, 1.0f });
     Interpolant xTexture({ vertices[0].x, vertices[0].y, 0.0f }, { vertices[1].x, vertices[1].y, 0.0f }, { vertices[2].x, vertices[2].y, 1.0f });
     Interpolant yTexture({ vertices[0].x, vertices[0].y, 0.0f }, { vertices[1].x, vertices[1].y, 1.0f }, { vertices[2].x, vertices[2].y, 0.0f });
+    Interpolant oneOverW({ vertices[0].x, vertices[0].y, 1.0f / vertices[0].w }, { vertices[1].x, vertices[1].y, 1.0f / vertices[1].w }, { vertices[2].x, vertices[2].y, 1.0f / vertices[2].w });
 
-    std::array<Interpolant, 5> interpolants { red, green, blue, xTexture, yTexture };
+    std::vector<Interpolant> interpolants { red, green, blue, xTexture, yTexture, oneOverW };
 
     Edge minMax(vertices[0], vertices[2], interpolants, 0);
     Edge minMiddle(vertices[0], vertices[1], interpolants, 1);
@@ -540,7 +540,7 @@ int CALLBACK WinMain(
             }
 
             float zCoord = 100.f;
-            std::array<Vec, 3> vertices{ Vec{ -20, 0, zCoord, 1 }, Vec{ 20, 10, zCoord, 1 }, Vec{ 0, -50, zCoord, 1 } };
+            std::array<Vec, 3> vertices{ Vec{ -20, 0, zCoord, 1 }, Vec{ 20, 0, zCoord, 1 }, Vec{ 0, -50, zCoord, 1 } };
             multiplier += 0.01f;
             if (multiplier > 2.0f)
             {
@@ -555,7 +555,6 @@ int CALLBACK WinMain(
                 v.x /= v.w;
                 v.y /= v.w;
                 v.z /= v.w;
-                v.w = 1.0f;
             }
 
             ClearScreen(Color::Black);
