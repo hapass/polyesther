@@ -15,10 +15,12 @@
 #include "stb_image.h"
 
 /*
-* 2. World coordinates.
-* 3. Refactoring.
-* 4. Load mesh.
-* 5. Do clipping.
+* World coordinates.
+* Refactoring.
+* Load mesh.
+* Do z-buffer.
+* Do clipping.
+* Optimization.
 */
 
 using namespace std;
@@ -35,6 +37,24 @@ static uint32_t* BackBuffer;
 static int32_t TextureWidth;
 static int32_t TextureHeight;
 static uint8_t* Texture;
+
+// move all vertices 100 pixels away from camera
+static float zCoord = 100.f;
+static float angle = 0.0f;
+
+struct Vec
+{
+    float x = 0.0f;
+    float y = 0.0f;
+    float z = 0.0f;
+    float w = 0.0f;
+};
+
+static std::vector<Vec> vertices_obj;
+static std::vector<float> textureX;
+static std::vector<float> textureY;
+static std::vector<uint32_t> indices_obj;
+static uint32_t triangles_count = 0;
 
 #define NOT_FAILED(call, failureCode) \
     if ((call) == failureCode) \
@@ -238,14 +258,6 @@ Matrix perspective()
     return m;
 }
 
-struct Vec
-{
-    float x = 0.0f;
-    float y = 0.0f;
-    float z = 0.0f;
-    float w = 0.0f;
-};
-
 float dot(Vec a, Vec b)
 {
     return a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w;
@@ -418,9 +430,23 @@ void DrawTrianglePart(Edge& minMax, Edge& other)
     }
 }
 
-void DrawTriangle(Vec a, Vec b, Vec c)
+void DrawTriangle(uint32_t a, uint32_t b, uint32_t c, const std::vector<Vec>& v)
 {
-    std::array<Vec, 3> vertices { a, b, c };
+    std::array<Vec, 3> vertices { v[a], v[b], v[c] };
+
+    for (Vec& v : vertices)
+    {
+        v = rotateY(static_cast<float>(M_PI) * angle) * v;
+        v = translate(0.0f, 0.0f, zCoord) * v;
+        v = perspective() * v;
+        v.x /= v.w;
+        v.y /= v.w;
+        v.z /= v.w;
+    }
+
+    std::array<uint32_t, 3> indices { a, b, c };
+    std::sort(std::begin(indices), std::end(indices), [&v](const uint32_t lhs, const uint32_t rhs) { return v[lhs].y < v[rhs].y; });
+    std::sort(std::begin(vertices), std::end(vertices), [](const Vec& lhs, const Vec& rhs) { return lhs.y < rhs.y; });
 
     for (Vec& v : vertices)
     {
@@ -432,14 +458,13 @@ void DrawTriangle(Vec a, Vec b, Vec c)
         v.y = (GameHeight - 1) * ((v.y + 1) / 2.0f);
     }
 
-    std::sort(std::begin(vertices), std::end(vertices), [](const Vec& lhs, const Vec& rhs) { return lhs.y < rhs.y; });
 
     Interpolant red      ({ vertices[0].x, vertices[0].y, 1.0f / vertices[0].w }, { vertices[1].x, vertices[1].y, 0.0f / vertices[1].w }, { vertices[2].x, vertices[2].y, 0.0f / vertices[2].w });
     Interpolant green    ({ vertices[0].x, vertices[0].y, 0.0f / vertices[0].w }, { vertices[1].x, vertices[1].y, 1.0f / vertices[1].w }, { vertices[2].x, vertices[2].y, 0.0f / vertices[2].w });
     Interpolant blue     ({ vertices[0].x, vertices[0].y, 0.0f / vertices[0].w }, { vertices[1].x, vertices[1].y, 0.0f / vertices[1].w }, { vertices[2].x, vertices[2].y, 1.0f / vertices[2].w });
 
-    Interpolant xTexture ({ vertices[0].x, vertices[0].y, 0.0f / vertices[0].w }, { vertices[1].x, vertices[1].y, 0.0f / vertices[1].w }, { vertices[2].x, vertices[2].y, 1.0f / vertices[2].w });
-    Interpolant yTexture ({ vertices[0].x, vertices[0].y, 0.0f / vertices[0].w }, { vertices[1].x, vertices[1].y, 1.0f / vertices[1].w }, { vertices[2].x, vertices[2].y, 0.0f / vertices[2].w });
+    Interpolant xTexture ({ vertices[0].x, vertices[0].y, textureX[indices[0]] / vertices[0].w }, { vertices[1].x, vertices[1].y, textureX[indices[1]] / vertices[1].w }, { vertices[2].x, vertices[2].y, textureX[indices[2]] / vertices[2].w });
+    Interpolant yTexture ({ vertices[0].x, vertices[0].y, textureY[indices[0]] / vertices[0].w }, { vertices[1].x, vertices[1].y, textureY[indices[1]] / vertices[1].w }, { vertices[2].x, vertices[2].y, textureY[indices[2]] / vertices[2].w });
 
     Interpolant oneOverW ({ vertices[0].x, vertices[0].y, 1.0f / vertices[0].w }, { vertices[1].x, vertices[1].y, 1.0f / vertices[1].w }, { vertices[2].x, vertices[2].y, 1.0f / vertices[2].w });
 
@@ -451,6 +476,16 @@ void DrawTriangle(Vec a, Vec b, Vec c)
 
     DrawTrianglePart(minMax, minMiddle);
     DrawTrianglePart(minMax, middleMax);
+}
+
+void LoadOBJ()
+{
+    vertices_obj = { Vec{ -20, 0, 0, 1 }, Vec{ 20, 0, 0, 1 }, Vec{ 0, -50, 0, 1 } };
+    indices_obj = { 0, 1, 2 };
+    triangles_count = indices_obj.size() / 3;
+
+    textureX = { 0.0f, 1.0f, 0.0f };
+    textureY = { 0.0f, 0.0f, 1.0f };
 }
 
 LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
@@ -520,7 +555,9 @@ int CALLBACK WinMain(
         NOT_FAILED(Texture = stbi_load("test.bmp", &TextureWidth, &TextureHeight, &channels, 3), 0);
 
         auto frameExpectedTime = chrono::milliseconds(1000 / FPS);
-        float multiplier = 0.0f;
+
+        // init model
+        LoadOBJ();
 
         while (isRunning)
         {
@@ -541,26 +578,17 @@ int CALLBACK WinMain(
                 }
             }
 
-            float zCoord = 100.f;
-            std::array<Vec, 3> vertices{ Vec{ -20, 0, zCoord, 1 }, Vec{ 20, 0, zCoord, 1 }, Vec{ 0, -50, zCoord, 1 } };
-            multiplier += 0.01f;
-            if (multiplier > 2.0f)
+            angle += 0.01f;
+            if (angle > 2.0f)
             {
-                multiplier = 0.0f;
-            }
-            for (Vec& v : vertices)
-            {
-                v = translate(0.0f, 0.0f, -zCoord) * v;
-                v = rotateY(static_cast<float>(M_PI) * multiplier) * v;
-                v = translate(0.0f, 0.0f, zCoord) * v;
-                v = perspective() * v;
-                v.x /= v.w;
-                v.y /= v.w;
-                v.z /= v.w;
+                angle = 0.0f;
             }
 
             ClearScreen(Color::Black);
-            DrawTriangle(vertices[0], vertices[1], vertices[2]);
+            for (uint32_t i = 0; i < triangles_count; i += 3)
+            {
+                DrawTriangle(indices_obj[i], indices_obj[i + 1], indices_obj[i + 2], vertices_obj);
+            }
 
             //swap buffers
             StretchDIBits(
