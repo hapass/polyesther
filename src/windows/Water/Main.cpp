@@ -10,6 +10,9 @@
 #include <array>
 #include <cmath>
 #include <wincodec.h>
+#include <iostream>
+#include <fstream>
+#include <sstream>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
@@ -50,10 +53,16 @@ struct Vec
     float w = 0.0f;
 };
 
-static std::vector<Vec> vertices_obj;
+struct VertIndex
+{
+    uint32_t vert;
+    uint32_t text;
+};
+
+static std::vector<Vec> verticesObj;
 static std::vector<float> textureX;
 static std::vector<float> textureY;
-static std::vector<uint32_t> indices_obj;
+static std::vector<VertIndex> indicesObj;
 static uint32_t triangles_count = 0;
 
 #define NOT_FAILED(call, failureCode) \
@@ -430,9 +439,9 @@ void DrawTrianglePart(Edge& minMax, Edge& other)
     }
 }
 
-void DrawTriangle(uint32_t a, uint32_t b, uint32_t c, const std::vector<Vec>& v)
+void DrawTriangle(VertIndex a, VertIndex b, VertIndex c)
 {
-    std::array<Vec, 3> vertices { v[a], v[b], v[c] };
+    std::array<Vec, 3> vertices { verticesObj[a.vert], verticesObj[b.vert], verticesObj[c.vert] };
 
     for (Vec& v : vertices)
     {
@@ -444,8 +453,8 @@ void DrawTriangle(uint32_t a, uint32_t b, uint32_t c, const std::vector<Vec>& v)
         v.z /= v.w;
     }
 
-    std::array<uint32_t, 3> indices { a, b, c };
-    std::sort(std::begin(indices), std::end(indices), [&v](const uint32_t lhs, const uint32_t rhs) { return v[lhs].y < v[rhs].y; });
+    std::array<VertIndex, 3> indices { a, b, c };
+    std::sort(std::begin(indices), std::end(indices), [](const VertIndex& lhs, const VertIndex& rhs) { return verticesObj[lhs.vert].y < verticesObj[rhs.vert].y; });
     std::sort(std::begin(vertices), std::end(vertices), [](const Vec& lhs, const Vec& rhs) { return lhs.y < rhs.y; });
 
     for (Vec& v : vertices)
@@ -463,8 +472,8 @@ void DrawTriangle(uint32_t a, uint32_t b, uint32_t c, const std::vector<Vec>& v)
     Interpolant green    ({ vertices[0].x, vertices[0].y, 0.0f / vertices[0].w }, { vertices[1].x, vertices[1].y, 1.0f / vertices[1].w }, { vertices[2].x, vertices[2].y, 0.0f / vertices[2].w });
     Interpolant blue     ({ vertices[0].x, vertices[0].y, 0.0f / vertices[0].w }, { vertices[1].x, vertices[1].y, 0.0f / vertices[1].w }, { vertices[2].x, vertices[2].y, 1.0f / vertices[2].w });
 
-    Interpolant xTexture ({ vertices[0].x, vertices[0].y, textureX[indices[0]] / vertices[0].w }, { vertices[1].x, vertices[1].y, textureX[indices[1]] / vertices[1].w }, { vertices[2].x, vertices[2].y, textureX[indices[2]] / vertices[2].w });
-    Interpolant yTexture ({ vertices[0].x, vertices[0].y, textureY[indices[0]] / vertices[0].w }, { vertices[1].x, vertices[1].y, textureY[indices[1]] / vertices[1].w }, { vertices[2].x, vertices[2].y, textureY[indices[2]] / vertices[2].w });
+    Interpolant xTexture ({ vertices[0].x, vertices[0].y, textureX[indices[0].text] / vertices[0].w }, { vertices[1].x, vertices[1].y, textureX[indices[1].text] / vertices[1].w }, { vertices[2].x, vertices[2].y, textureX[indices[2].text] / vertices[2].w });
+    Interpolant yTexture ({ vertices[0].x, vertices[0].y, textureY[indices[0].text] / vertices[0].w }, { vertices[1].x, vertices[1].y, textureY[indices[1].text] / vertices[1].w }, { vertices[2].x, vertices[2].y, textureY[indices[2].text] / vertices[2].w });
 
     Interpolant oneOverW ({ vertices[0].x, vertices[0].y, 1.0f / vertices[0].w }, { vertices[1].x, vertices[1].y, 1.0f / vertices[1].w }, { vertices[2].x, vertices[2].y, 1.0f / vertices[2].w });
 
@@ -480,12 +489,82 @@ void DrawTriangle(uint32_t a, uint32_t b, uint32_t c, const std::vector<Vec>& v)
 
 void LoadOBJ()
 {
-    vertices_obj = { Vec{ -20, 0, 0, 1 }, Vec{ 20, 0, 0, 1 }, Vec{ 0, -50, 0, 1 } };
-    indices_obj = { 0, 1, 2 };
-    triangles_count = indices_obj.size() / 3;
+    fstream file("monkey0.obj");
+    string line;
+    while (getline(file, line))
+    {
+        stringstream ss(line);
+        string primitive_type;
+        if (ss >> primitive_type) 
+        {
+            if (primitive_type == "v") 
+            {
+                float x = 0.0f;
+                float y = 0.0f;
+                float z = 0.0f;
 
-    textureX = { 0.0f, 1.0f, 0.0f };
-    textureY = { 0.0f, 0.0f, 1.0f };
+                if (ss >> x >> y >> z) {
+                    verticesObj.push_back({ x, y, z });
+                }
+            }
+            else if (primitive_type == "vt") 
+            {
+                float u = 0.0f;
+                float v = 0.0f;
+
+                if (ss >> u >> v) {
+                    textureX.push_back(u);
+                    textureY.push_back(v);
+                }
+            }
+            else if (primitive_type == "f") 
+            {
+                vector<VertIndex> vertIndices;
+                string nextStr;
+                while (ss >> nextStr)
+                {
+                    stringstream v(nextStr);
+
+                    uint32_t vert_index;
+                    v >> vert_index;
+
+                    v.ignore(1);
+
+                    uint32_t texture_index;
+                    v >> texture_index;
+
+                    v.ignore(1);
+
+                    uint32_t normal_index;
+                    v >> normal_index;
+
+                    vertIndices.push_back({ vert_index, texture_index });
+                }
+
+                if (vertIndices.size() == 3)
+                {
+                    indicesObj.push_back(vertIndices[0]);
+                    indicesObj.push_back(vertIndices[1]);
+                    indicesObj.push_back(vertIndices[2]);
+                }
+                else if (vertIndices.size() == 4)
+                {
+                    indicesObj.push_back(vertIndices[0]);
+                    indicesObj.push_back(vertIndices[1]);
+                    indicesObj.push_back(vertIndices[2]);
+                    indicesObj.push_back(vertIndices[0]);
+                    indicesObj.push_back(vertIndices[2]);
+                    indicesObj.push_back(vertIndices[3]);
+                }
+                else
+                {
+                    assert(false);
+                }
+            }
+        }
+    }
+
+    triangles_count = indicesObj.size() / 3;
 }
 
 LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
@@ -587,7 +666,7 @@ int CALLBACK WinMain(
             ClearScreen(Color::Black);
             for (uint32_t i = 0; i < triangles_count; i += 3)
             {
-                DrawTriangle(indices_obj[i], indices_obj[i + 1], indices_obj[i + 2], vertices_obj);
+                DrawTriangle(indicesObj[i], indicesObj[i + 1], indicesObj[i + 2]);
             }
 
             //swap buffers
