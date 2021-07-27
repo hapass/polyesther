@@ -489,7 +489,7 @@ void DrawTriangle(VertIndex a, VertIndex b, VertIndex c)
 
 void LoadOBJ()
 {
-    fstream file("monkey0.obj");
+    fstream file("cube.obj");
     string line;
     while (getline(file, line))
     {
@@ -504,7 +504,8 @@ void LoadOBJ()
                 float z = 0.0f;
 
                 if (ss >> x >> y >> z) {
-                    verticesObj.push_back({ x, y, z });
+                    //scale by 20
+                    verticesObj.push_back({ x * 20, y * 20, z * 20, 1.0f });
                 }
             }
             else if (primitive_type == "vt") 
@@ -538,7 +539,7 @@ void LoadOBJ()
                     uint32_t normal_index;
                     v >> normal_index;
 
-                    vertIndices.push_back({ vert_index, texture_index });
+                    vertIndices.push_back({ vert_index - 1, texture_index - 1 });
                 }
 
                 if (vertIndices.size() == 3)
