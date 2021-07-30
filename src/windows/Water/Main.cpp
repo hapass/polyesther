@@ -13,6 +13,7 @@
 #include <iostream>
 #include <fstream>
 #include <sstream>
+#include <algorithm>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
@@ -20,9 +21,9 @@
 /*
 * World coordinates.
 * Refactoring.
-* Load mesh.
 * Do z-buffer.
 * Do clipping.
+* Fix artifacts.
 * Optimization.
 */
 
@@ -36,6 +37,8 @@ static int32_t WindowWidth;
 static int32_t WindowHeight;
 static BITMAPINFO BackBufferInfo;
 static uint32_t* BackBuffer;
+
+static float* ZBuffer;
 
 static int32_t TextureWidth;
 static int32_t TextureHeight;
@@ -119,6 +122,7 @@ void ClearScreen(Color color)
     for (uint32_t i = 0; i < GameWidth * GameHeight; i++)
     {
         BackBuffer[i] = color.rgb;
+        ZBuffer[i] = 2.0f;
     }
 }
 
@@ -365,15 +369,14 @@ struct Edge
         }
     }
 
-    void Step()
+    void Step(int32_t y)
     {
-        currentX += stepX;
         for (Interpolant& i : interpolants)
         {
             //should do a prestep each time?
             i.Step(stepX, edge_type);
         }
-        pixelX = static_cast<int32_t>(ceil(currentX));
+        pixelX = static_cast<int32_t>(ceil(currentX + (y - pixelYBegin) * stepX));
     }
 
     int32_t pixelYBegin;
@@ -392,36 +395,45 @@ void DrawTrianglePart(Edge& minMax, Edge& other)
 {
     for (int32_t y = other.pixelYBegin; y < other.pixelYEnd; y++)
     {
-        minMax.Step();
-        other.Step();
+        minMax.Step(y);
+        other.Step(y);
 
-        Edge left = minMax;
-        Edge right = other;
+        Edge* left = &minMax;
+        Edge* right = &other;
 
-        if (left.currentX > right.currentX)
+        if (left->currentX > right->currentX)
         {
-            Edge temp = left;
+            Edge* temp = left;
             left = right;
             right = temp;
         }
 
-        int32_t pixelXBegin = left.pixelX;
-        int32_t pixelXEnd = right.pixelX;
+        int32_t pixelXBegin = left->pixelX;
+        int32_t pixelXEnd = right->pixelX;
 
         std::vector<float> interpolants_raw;
-        interpolants_raw.resize(left.interpolants.size());
+        interpolants_raw.resize(left->interpolants.size());
         for (uint32_t i = 0; i < interpolants_raw.size(); i++)
         {
-            interpolants_raw[i] = left.interpolants[i].currentC;
+            interpolants_raw[i] = left->interpolants[i].currentC;
         }
 
         for (int32_t x = pixelXBegin; x < pixelXEnd; x++)
         {
-            for (uint32_t i = 0; i < left.interpolants.size(); i++)
+            for (uint32_t i = 0; i < left->interpolants.size(); i++)
             {
-                interpolants_raw[i] += (right.interpolants[i].currentC - left.interpolants[i].currentC) / ((float)pixelXEnd - (float)pixelXBegin);
+                interpolants_raw[i] += (right->interpolants[i].currentC - left->interpolants[i].currentC) / ((float)pixelXEnd - (float)pixelXBegin);
             }
             
+            if (interpolants_raw[6] < ZBuffer[y * GameWidth + x])
+            {
+                ZBuffer[y * GameWidth + x] = interpolants_raw[6];
+            }
+            else
+            {
+                continue;
+            }
+
             //colored
             //DrawPixel(x, y, Color(
             //    static_cast<uint8_t>(interpolants_raw[0] * (1.0f / interpolants_raw[5]) * 255.0f),
@@ -429,9 +441,18 @@ void DrawTrianglePart(Edge& minMax, Edge& other)
             //    static_cast<uint8_t>(interpolants_raw[2] * (1.0f / interpolants_raw[5]) * 255.0f)
             //));
 
+            //DrawPixel(x, y, Color(
+            //    static_cast<uint8_t>(255),
+            //    static_cast<uint8_t>(255),
+            //    static_cast<uint8_t>(255)
+            //));
+
             //textured
             int32_t textureX = static_cast<int32_t>(interpolants_raw[3] * (1.0f / interpolants_raw[5]) * TextureWidth);
             int32_t textureY = static_cast<int32_t>(interpolants_raw[4] * (1.0f / interpolants_raw[5]) * TextureHeight);
+
+            textureX = std::clamp(textureX, 0, (TextureWidth - 1));
+            textureY = std::clamp(textureX, 0, (TextureHeight - 1));
 
             int32_t texelBase = textureY * TextureWidth * 3 + textureX * 3;
             DrawPixel(x, y, Color(Texture[texelBase], Texture[texelBase + 1], Texture[texelBase + 2]));
@@ -467,7 +488,6 @@ void DrawTriangle(VertIndex a, VertIndex b, VertIndex c)
         v.y = (GameHeight - 1) * ((v.y + 1) / 2.0f);
     }
 
-
     Interpolant red      ({ vertices[0].x, vertices[0].y, 1.0f / vertices[0].w }, { vertices[1].x, vertices[1].y, 0.0f / vertices[1].w }, { vertices[2].x, vertices[2].y, 0.0f / vertices[2].w });
     Interpolant green    ({ vertices[0].x, vertices[0].y, 0.0f / vertices[0].w }, { vertices[1].x, vertices[1].y, 1.0f / vertices[1].w }, { vertices[2].x, vertices[2].y, 0.0f / vertices[2].w });
     Interpolant blue     ({ vertices[0].x, vertices[0].y, 0.0f / vertices[0].w }, { vertices[1].x, vertices[1].y, 0.0f / vertices[1].w }, { vertices[2].x, vertices[2].y, 1.0f / vertices[2].w });
@@ -476,8 +496,9 @@ void DrawTriangle(VertIndex a, VertIndex b, VertIndex c)
     Interpolant yTexture ({ vertices[0].x, vertices[0].y, textureY[indices[0].text] / vertices[0].w }, { vertices[1].x, vertices[1].y, textureY[indices[1].text] / vertices[1].w }, { vertices[2].x, vertices[2].y, textureY[indices[2].text] / vertices[2].w });
 
     Interpolant oneOverW ({ vertices[0].x, vertices[0].y, 1.0f / vertices[0].w }, { vertices[1].x, vertices[1].y, 1.0f / vertices[1].w }, { vertices[2].x, vertices[2].y, 1.0f / vertices[2].w });
+    Interpolant z        ({ vertices[0].x, vertices[0].y, vertices[0].z }, { vertices[1].x, vertices[1].y, vertices[1].z }, { vertices[2].x, vertices[2].y, vertices[2].z });
 
-    std::vector<Interpolant> interpolants { red, green, blue, xTexture, yTexture, oneOverW };
+    std::vector<Interpolant> interpolants { red, green, blue, xTexture, yTexture, oneOverW, z };
 
     Edge minMax(vertices[0], vertices[2], interpolants, 0);
     Edge minMiddle(vertices[0], vertices[1], interpolants, 1);
@@ -630,6 +651,7 @@ int CALLBACK WinMain(
         BackBufferInfo.bmiHeader.biBitCount = sizeof(uint32_t) * CHAR_BIT;
         BackBufferInfo.bmiHeader.biCompression = BI_RGB;
         NOT_FAILED(BackBuffer = (uint32_t*)VirtualAlloc(0, GameWidth * GameHeight * sizeof(uint32_t), MEM_COMMIT, PAGE_READWRITE), 0);
+        NOT_FAILED(ZBuffer = (float*)VirtualAlloc(0, GameWidth * GameHeight * sizeof(float), MEM_COMMIT, PAGE_READWRITE), 0);
 
         int32_t channels;
         NOT_FAILED(Texture = stbi_load("test.bmp", &TextureWidth, &TextureHeight, &channels, 3), 0);
@@ -665,10 +687,27 @@ int CALLBACK WinMain(
             }
 
             ClearScreen(Color::Black);
-            for (uint32_t i = 0; i < triangles_count; i += 3)
+            for (uint32_t i = 0; i < indicesObj.size(); i += 3)
             {
                 DrawTriangle(indicesObj[i], indicesObj[i + 1], indicesObj[i + 2]);
+
             }
+
+            //DebugOut(L"Angle: %f\n", angle);
+            //DrawTriangle(indicesObj[0], indicesObj[1], indicesObj[2]);
+            //DrawTriangle(indicesObj[3], indicesObj[4], indicesObj[5]);
+            //DrawTriangle(indicesObj[6], indicesObj[7], indicesObj[8]);
+            //DrawTriangle(indicesObj[9], indicesObj[10], indicesObj[11]);
+            //DrawTriangle(indicesObj[12], indicesObj[13], indicesObj[14]);
+            //DrawTriangle(indicesObj[15], indicesObj[16], indicesObj[17]);
+
+            //DrawTriangle(indicesObj[18], indicesObj[19], indicesObj[20]);
+            //DrawTriangle(indicesObj[21], indicesObj[22], indicesObj[23]);
+            //DrawTriangle(indicesObj[24], indicesObj[25], indicesObj[26]);
+            //DrawTriangle(indicesObj[27], indicesObj[28], indicesObj[29]);
+            //DrawTriangle(indicesObj[30], indicesObj[31], indicesObj[32]);
+            //DrawTriangle(indicesObj[33], indicesObj[34], indicesObj[35]);
+
 
             //swap buffers
             StretchDIBits(
