@@ -398,6 +398,7 @@ struct Interpolant
 
     void CalculateC(float dx, float dy, bool isMin)
     {
+        // can't do isMin? will change colors?
         currentC = (isMin ? minC : midC) + dy * stepY + dx * stepX;
     }
 };
@@ -449,48 +450,44 @@ void DrawTrianglePart(Edge& minMax, Edge& other)
         minMax.CalculateX(y);
         other.CalculateX(y);
 
-        Edge* left = &minMax;
-        Edge* right = &other;
+        int32_t pixelXBegin = minMax.pixelX;
+        int32_t pixelXEnd = other.pixelX;
 
-        if (left->pixelX > right->pixelX)
+        if (pixelXEnd < pixelXBegin)
         {
-            Edge* temp = left;
-            left = right;
-            right = temp;
+            int32_t temp = pixelXBegin;
+            pixelXBegin = pixelXEnd;
+            pixelXEnd = temp;
         }
-
-        int32_t pixelXBegin = left->pixelX;
-        int32_t pixelXEnd = right->pixelX;
 
         std::vector<float> interpolants_raw;
-        interpolants_raw.resize(left->interpolants.size());
-        for (uint32_t i = 0; i < interpolants_raw.size(); i++)
-        {
-            interpolants_raw[i] = left->interpolants[i].currentC;
-        }
+        interpolants_raw.resize(other.interpolants.size());
 
         for (int32_t x = pixelXBegin; x < pixelXEnd; x++)
         {
-            for (uint32_t i = 0; i < left->interpolants.size(); i++)
+            for (uint32_t i = 0; i < interpolants_raw.size(); i++)
             {
-                interpolants_raw[i] += (right->interpolants[i].currentC - left->interpolants[i].currentC) / ((float)pixelXEnd - (float)pixelXBegin);
+                float beginC = minMax.interpolants[i].currentC;
+                float endC = other.interpolants[i].currentC;
+                float percent = static_cast<float>(x - pixelXBegin) / static_cast<float>(pixelXEnd - pixelXBegin);
+                interpolants_raw[i] = beginC + (endC - beginC) * percent;
             }
             
-            if (interpolants_raw[6] < ZBuffer[y * GameWidth + x])
-            {
-                ZBuffer[y * GameWidth + x] = interpolants_raw[6];
-            }
-            else
-            {
-                continue;
-            }
+            //if (interpolants_raw[6] < ZBuffer[y * GameWidth + x])
+            //{
+            //    ZBuffer[y * GameWidth + x] = interpolants_raw[6];
+            //}
+            //else
+            //{
+            //    continue;
+            //}
 
             //colored
-            //DrawPixel(x, y, Color(
-            //    static_cast<uint8_t>(interpolants_raw[0] * (1.0f / interpolants_raw[5]) * 255.0f),
-            //    static_cast<uint8_t>(interpolants_raw[1] * (1.0f / interpolants_raw[5]) * 255.0f),
-            //    static_cast<uint8_t>(interpolants_raw[2] * (1.0f / interpolants_raw[5]) * 255.0f)
-            //));
+            DrawPixel(x, y, Color(
+                static_cast<uint8_t>(interpolants_raw[0] * (1.0f / interpolants_raw[5]) * 255.0f),
+                static_cast<uint8_t>(interpolants_raw[1] * (1.0f / interpolants_raw[5]) * 255.0f),
+                static_cast<uint8_t>(interpolants_raw[2] * (1.0f / interpolants_raw[5]) * 255.0f)
+            ));
 
             //DrawPixel(x, y, Color(
             //    static_cast<uint8_t>(255),
@@ -505,8 +502,8 @@ void DrawTrianglePart(Edge& minMax, Edge& other)
             //textureX = std::clamp(textureX, 0, (TextureWidth - 1));
             //textureY = std::clamp(textureY, 0, (TextureHeight - 1));
 
-            int32_t texelBase = textureY * TextureWidth * 3 + textureX * 3;
-            DrawPixel(x, y, Color(Texture[texelBase], Texture[texelBase + 1], Texture[texelBase + 2]));
+            //int32_t texelBase = textureY * TextureWidth * 3 + textureX * 3;
+            //DrawPixel(x, y, Color(Texture[texelBase], Texture[texelBase + 1], Texture[texelBase + 2]));
         }
     }
 }
