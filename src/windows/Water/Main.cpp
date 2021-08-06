@@ -271,33 +271,101 @@ Matrix perspective()
     return m;
 }
 
-float dot(Vec a, Vec b)
+Matrix scale(float x)
+{
+    Matrix m;
+
+    //col 1
+    m.m[0] = x;
+    m.m[4] = 0.0f;
+    m.m[8] = 0.0f;
+    m.m[12] = 0.0f;
+
+    //col 2
+    m.m[1] = 0.0f;
+    m.m[5] = x;
+    m.m[9] = 0.0f;
+    m.m[13] = 0.0f;
+
+    //col 3
+    m.m[2] = 0.0f;
+    m.m[6] = 0.0f;
+    m.m[10] = x;
+    m.m[14] = 0.0f;
+
+    //col 4
+    m.m[3] = 0.0f;
+    m.m[7] = 0.0f;
+    m.m[11] = 0.0f;
+    m.m[15] = 1.0f;
+
+    return m;
+}
+
+float dot(const Vec& a, const Vec& b)
 {
     return a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w;
 }
 
-Vec operator+(Vec a, Vec b)
+Vec operator+(const Vec& a, const Vec& b)
 {
     return Vec { a.x + b.x, a.y + b.y, a.z + b.z, a.w + b.w };
 }
 
-Vec operator-(Vec b)
+Vec operator-(const Vec& b)
 {
     return Vec { -b.x, -b.y, -b.z, -b.w };
 }
 
-Vec operator-(Vec a, Vec b)
+Vec operator-(const Vec& a, const Vec& b)
 {
     return a + (-b);
 }
 
-Vec operator*(Matrix m, Vec v)
+Vec operator*(const Matrix& m, const Vec& v)
 {
     float x = dot(Vec { m.m[0],  m.m[1],  m.m[2],  m.m[3] }, v);
     float y = dot(Vec { m.m[4],  m.m[5],  m.m[6],  m.m[7] }, v);
     float z = dot(Vec { m.m[8],  m.m[9],  m.m[10], m.m[11] }, v);
     float w = dot(Vec { m.m[12], m.m[13], m.m[14], m.m[15] }, v);
     return Vec { x, y, z, w };
+}
+
+Matrix operator*(const Matrix& a, const Matrix& b)
+{
+    Matrix res;
+
+    Vec r0 = Vec{ a.m[0],  a.m[1],  a.m[2],  a.m[3] };
+    Vec r1 = Vec{ a.m[4],  a.m[5],  a.m[6],  a.m[7] };
+    Vec r2 = Vec{ a.m[8],  a.m[9],  a.m[10], a.m[11] };
+    Vec r3 = Vec{ a.m[12], a.m[13], a.m[14], a.m[15] };
+
+    Vec c0 = Vec{ b.m[0], b.m[4], b.m[8],  b.m[12] };
+    Vec c1 = Vec{ b.m[1], b.m[5], b.m[9],  b.m[13] };
+    Vec c2 = Vec{ b.m[2], b.m[6], b.m[9],  b.m[14] };
+    Vec c3 = Vec{ b.m[3], b.m[7], b.m[11], b.m[15] };
+
+    res.m[0] = dot(r0, c0);
+    res.m[1] = dot(r0, c1);
+    res.m[2] = dot(r0, c2);
+    res.m[3] = dot(r0, c3);
+
+    res.m[4] = dot(r1, c0);
+    res.m[5] = dot(r1, c1);
+    res.m[6] = dot(r1, c2);
+    res.m[7] = dot(r1, c3);
+
+    res.m[8] = dot(r2, c0);
+    res.m[9] = dot(r2, c1);
+    res.m[10] = dot(r2, c2);
+    res.m[11] = dot(r2, c3);
+
+    res.m[12] = dot(r3, c0);
+    res.m[13] = dot(r3, c1);
+    res.m[14] = dot(r3, c2);
+    res.m[15] = dot(r3, c3);
+
+    return res;
 }
 
 struct Vert
@@ -319,34 +387,24 @@ struct Interpolant
 
         minC = a.c;
         midC = b.c;
-        maxC = c.c;
     }
-
-    float minC;
-    float midC;
-    float maxC;
 
     float stepX;
     float stepY;
     float currentC;
 
-    void PreStep(Vert a, float currentX)
-    {
-        currentC = a.c;
-        currentC += (ceil(a.y) - a.y) * stepY;
-        currentC += (currentX - a.x) * stepX;
-    }
+    float minC;
+    float midC;
 
-    void Step(float dx, int edge_type)
+    void CalculateC(float dx, float dy, bool isMin)
     {
-        currentC += stepY;
-        currentC += dx * stepX;
+        currentC = (isMin ? minC : midC) + dy * stepY + dx * stepX;
     }
 };
 
 struct Edge
 {
-    Edge(Vec b, Vec e, std::vector<Interpolant>& inter, int a): interpolants(inter), edge_type(a)
+    Edge(Vec b, Vec e, std::vector<Interpolant>& inter, bool isMin = true): interpolants(inter), begin(b), isBeginMin(isMin)
     {
         pixelYBegin = static_cast<int32_t>(ceil(b.y));
         pixelYEnd = static_cast<int32_t>(ceil(e.y));
@@ -354,54 +412,47 @@ struct Edge
         float distanceX = e.x - b.x;
         float distanceY = e.y - b.y;
         stepX = distanceY > 0.0f ? distanceX / distanceY : 0.0f;
-        currentX = b.x + (ceil(b.y) - b.y) * stepX;
-
-        for (Interpolant& i : interpolants)
-        {
-            if (a == 0 || a == 1)
-            {
-                i.PreStep({ b.x, b.y, i.minC }, currentX);
-            }
-            else if (a == 2)
-            {
-                i.PreStep({ b.x, b.y, i.midC }, currentX);
-            }
-        }
     }
 
-    void Step(int32_t y)
+    void CalculateX(int32_t y)
     {
+        pixelX = static_cast<int32_t>(ceil(begin.x + (y - begin.y) * stepX));
         for (Interpolant& i : interpolants)
         {
-            //should do a prestep each time?
-            i.Step(stepX, edge_type);
+            i.CalculateC(pixelX - begin.x, y - begin.y, isBeginMin);
         }
-        pixelX = static_cast<int32_t>(ceil(currentX + (y - pixelYBegin) * stepX));
     }
 
     int32_t pixelYBegin;
     int32_t pixelYEnd;
-
     int32_t pixelX;
 
     float stepX;
-    float currentX;
+    bool isBeginMin;
+    Vec begin;
 
     std::vector<Interpolant> interpolants;
-    int32_t edge_type;
 };
 
 void DrawTrianglePart(Edge& minMax, Edge& other)
 {
+    static uint64_t frame = 0;
+
+    frame++;
+    if (other.pixelYEnd - other.pixelYBegin > 2)
+    {
+        DebugOut(L"Can you stop? %d in %u\n", other.pixelYEnd - other.pixelYBegin, frame);
+    }
+
     for (int32_t y = other.pixelYBegin; y < other.pixelYEnd; y++)
     {
-        minMax.Step(y);
-        other.Step(y);
+        minMax.CalculateX(y);
+        other.CalculateX(y);
 
         Edge* left = &minMax;
         Edge* right = &other;
 
-        if (left->currentX > right->currentX)
+        if (left->pixelX > right->pixelX)
         {
             Edge* temp = left;
             left = right;
@@ -451,8 +502,8 @@ void DrawTrianglePart(Edge& minMax, Edge& other)
             int32_t textureX = static_cast<int32_t>(interpolants_raw[3] * (1.0f / interpolants_raw[5]) * TextureWidth);
             int32_t textureY = static_cast<int32_t>(interpolants_raw[4] * (1.0f / interpolants_raw[5]) * TextureHeight);
 
-            textureX = std::clamp(textureX, 0, (TextureWidth - 1));
-            textureY = std::clamp(textureX, 0, (TextureHeight - 1));
+            //textureX = std::clamp(textureX, 0, (TextureWidth - 1));
+            //textureY = std::clamp(textureY, 0, (TextureHeight - 1));
 
             int32_t texelBase = textureY * TextureWidth * 3 + textureX * 3;
             DrawPixel(x, y, Color(Texture[texelBase], Texture[texelBase + 1], Texture[texelBase + 2]));
@@ -460,15 +511,15 @@ void DrawTrianglePart(Edge& minMax, Edge& other)
     }
 }
 
+Matrix t;
+
 void DrawTriangle(VertIndex a, VertIndex b, VertIndex c)
 {
     std::array<Vec, 3> vertices { verticesObj[a.vert], verticesObj[b.vert], verticesObj[c.vert] };
 
     for (Vec& v : vertices)
     {
-        v = rotateY(static_cast<float>(M_PI) * angle) * v;
-        v = translate(0.0f, 0.0f, zCoord) * v;
-        v = perspective() * v;
+        v = t * v;
         v.x /= v.w;
         v.y /= v.w;
         v.z /= v.w;
@@ -500,9 +551,9 @@ void DrawTriangle(VertIndex a, VertIndex b, VertIndex c)
 
     std::vector<Interpolant> interpolants { red, green, blue, xTexture, yTexture, oneOverW, z };
 
-    Edge minMax(vertices[0], vertices[2], interpolants, 0);
-    Edge minMiddle(vertices[0], vertices[1], interpolants, 1);
-    Edge middleMax(vertices[1], vertices[2], interpolants, 2);
+    Edge minMax(vertices[0], vertices[2], interpolants);
+    Edge minMiddle(vertices[0], vertices[1], interpolants);
+    Edge middleMax(vertices[1], vertices[2], interpolants);
 
     DrawTrianglePart(minMax, minMiddle);
     DrawTrianglePart(minMax, middleMax);
@@ -686,15 +737,16 @@ int CALLBACK WinMain(
                 angle = 0.0f;
             }
 
-            ClearScreen(Color::Black);
-            for (uint32_t i = 0; i < indicesObj.size(); i += 3)
-            {
-                DrawTriangle(indicesObj[i], indicesObj[i + 1], indicesObj[i + 2]);
+            t = perspective() * (translate(0.0f, 0.0f, zCoord) * rotateY(static_cast<float>(M_PI) * angle));
 
-            }
+            ClearScreen(Color::Black);
+            //for (uint32_t i = 0; i < indicesObj.size(); i += 3)
+            //{
+            //    DrawTriangle(indicesObj[i], indicesObj[i + 1], indicesObj[i + 2]);
+            //}
 
             //DebugOut(L"Angle: %f\n", angle);
-            //DrawTriangle(indicesObj[0], indicesObj[1], indicesObj[2]);
+            DrawTriangle(indicesObj[0], indicesObj[1], indicesObj[2]);
             //DrawTriangle(indicesObj[3], indicesObj[4], indicesObj[5]);
             //DrawTriangle(indicesObj[6], indicesObj[7], indicesObj[8]);
             //DrawTriangle(indicesObj[9], indicesObj[10], indicesObj[11]);
