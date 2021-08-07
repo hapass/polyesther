@@ -33,8 +33,8 @@ static const uint32_t GameWidth = 800;
 static const uint32_t GameHeight = 600;
 static const uint32_t FPS = 30;
 
-static int32_t WindowWidth;
-static int32_t WindowHeight;
+static int32_t WindowWidth = 800;
+static int32_t WindowHeight = 600;
 static BITMAPINFO BackBufferInfo;
 static uint32_t* BackBuffer;
 
@@ -66,6 +66,7 @@ static std::vector<Vec> verticesObj;
 static std::vector<float> textureX;
 static std::vector<float> textureY;
 static std::vector<VertIndex> indicesObj;
+static std::vector<Vec> colorsObj;
 static uint32_t triangles_count = 0;
 
 #define NOT_FAILED(call, failureCode) \
@@ -435,16 +436,11 @@ struct Edge
     std::vector<Interpolant> interpolants;
 };
 
-void DrawTrianglePart(Edge& minMax, Edge& other)
+static int32_t total_pixels = 0;
+static int32_t max_pixels = 0;
+
+bool DrawTrianglePart(Edge& minMax, Edge& other, bool isSecondPart = false)
 {
-    static uint64_t frame = 0;
-
-    frame++;
-    if (other.pixelYEnd - other.pixelYBegin > 2)
-    {
-        DebugOut(L"Can you stop? %d in %u\n", other.pixelYEnd - other.pixelYBegin, frame);
-    }
-
     for (int32_t y = other.pixelYBegin; y < other.pixelYEnd; y++)
     {
         minMax.CalculateX(y);
@@ -469,10 +465,10 @@ void DrawTrianglePart(Edge& minMax, Edge& other)
             {
                 float beginC = minMax.interpolants[i].currentC;
                 float endC = other.interpolants[i].currentC;
-                float percent = static_cast<float>(x - pixelXBegin) / static_cast<float>(pixelXEnd - pixelXBegin);
-                interpolants_raw[i] = beginC + (endC - beginC) * percent;
+                float percent = static_cast<float>(x - pixelXBegin) / static_cast<float>(pixelXEnd - pixelXBegin - 1);
+                interpolants_raw[i] = endC + (beginC - endC) * percent;
             }
-            
+
             //if (interpolants_raw[6] < ZBuffer[y * GameWidth + x])
             //{
             //    ZBuffer[y * GameWidth + x] = interpolants_raw[6];
@@ -483,11 +479,26 @@ void DrawTrianglePart(Edge& minMax, Edge& other)
             //}
 
             //colored
-            DrawPixel(x, y, Color(
-                static_cast<uint8_t>(interpolants_raw[0] * (1.0f / interpolants_raw[5]) * 255.0f),
-                static_cast<uint8_t>(interpolants_raw[1] * (1.0f / interpolants_raw[5]) * 255.0f),
-                static_cast<uint8_t>(interpolants_raw[2] * (1.0f / interpolants_raw[5]) * 255.0f)
-            ));
+            uint8_t red = static_cast<uint8_t>(interpolants_raw[0] * (1.0f / interpolants_raw[5]) * 255.0f);
+            uint8_t green = static_cast<uint8_t>(interpolants_raw[1] * (1.0f / interpolants_raw[5]) * 255.0f);
+            uint8_t blue = static_cast<uint8_t>(interpolants_raw[2] * (1.0f / interpolants_raw[5]) * 255.0f);
+
+            DebugOut(L"Draw pixel: %d, %d. Color: %u %u %u\n", x, y, red, green, blue);
+            DrawPixel(x, y, Color(red, green, blue));
+
+            total_pixels++;
+            if (isSecondPart && x == pixelXEnd - 1 && y == other.pixelYEnd - 1)
+            {
+                max_pixels = 0;
+                return false;
+            }
+
+            //DebugOut(L"Current: %d. Max: %d\n", total_pixels, max_pixels);
+            if (total_pixels > max_pixels)
+            {
+                max_pixels = total_pixels;
+                return true;
+            }
 
             //DrawPixel(x, y, Color(
             //    static_cast<uint8_t>(255),
@@ -496,8 +507,8 @@ void DrawTrianglePart(Edge& minMax, Edge& other)
             //));
 
             //textured
-            int32_t textureX = static_cast<int32_t>(interpolants_raw[3] * (1.0f / interpolants_raw[5]) * TextureWidth);
-            int32_t textureY = static_cast<int32_t>(interpolants_raw[4] * (1.0f / interpolants_raw[5]) * TextureHeight);
+            //int32_t textureX = static_cast<int32_t>(interpolants_raw[3] * (1.0f / interpolants_raw[5]) * TextureWidth);
+            //int32_t textureY = static_cast<int32_t>(interpolants_raw[4] * (1.0f / interpolants_raw[5]) * TextureHeight);
 
             //textureX = std::clamp(textureX, 0, (TextureWidth - 1));
             //textureY = std::clamp(textureY, 0, (TextureHeight - 1));
@@ -506,6 +517,7 @@ void DrawTrianglePart(Edge& minMax, Edge& other)
             //DrawPixel(x, y, Color(Texture[texelBase], Texture[texelBase + 1], Texture[texelBase + 2]));
         }
     }
+    return false;
 }
 
 Matrix t;
@@ -536,9 +548,9 @@ void DrawTriangle(VertIndex a, VertIndex b, VertIndex c)
         v.y = (GameHeight - 1) * ((v.y + 1) / 2.0f);
     }
 
-    Interpolant red      ({ vertices[0].x, vertices[0].y, 1.0f / vertices[0].w }, { vertices[1].x, vertices[1].y, 0.0f / vertices[1].w }, { vertices[2].x, vertices[2].y, 0.0f / vertices[2].w });
-    Interpolant green    ({ vertices[0].x, vertices[0].y, 0.0f / vertices[0].w }, { vertices[1].x, vertices[1].y, 1.0f / vertices[1].w }, { vertices[2].x, vertices[2].y, 0.0f / vertices[2].w });
-    Interpolant blue     ({ vertices[0].x, vertices[0].y, 0.0f / vertices[0].w }, { vertices[1].x, vertices[1].y, 0.0f / vertices[1].w }, { vertices[2].x, vertices[2].y, 1.0f / vertices[2].w });
+    Interpolant red      ({ vertices[0].x, vertices[0].y, colorsObj[indices[0].vert].x / vertices[0].w }, { vertices[1].x, vertices[1].y, colorsObj[indices[1].vert].x / vertices[1].w }, { vertices[2].x, vertices[2].y, colorsObj[indices[2].vert].x / vertices[2].w });
+    Interpolant green    ({ vertices[0].x, vertices[0].y, colorsObj[indices[0].vert].y / vertices[0].w }, { vertices[1].x, vertices[1].y, colorsObj[indices[1].vert].y / vertices[1].w }, { vertices[2].x, vertices[2].y, colorsObj[indices[2].vert].y / vertices[2].w });
+    Interpolant blue     ({ vertices[0].x, vertices[0].y, colorsObj[indices[0].vert].z / vertices[0].w }, { vertices[1].x, vertices[1].y, colorsObj[indices[1].vert].z / vertices[1].w }, { vertices[2].x, vertices[2].y, colorsObj[indices[2].vert].z / vertices[2].w });
 
     Interpolant xTexture ({ vertices[0].x, vertices[0].y, textureX[indices[0].text] / vertices[0].w }, { vertices[1].x, vertices[1].y, textureX[indices[1].text] / vertices[1].w }, { vertices[2].x, vertices[2].y, textureX[indices[2].text] / vertices[2].w });
     Interpolant yTexture ({ vertices[0].x, vertices[0].y, textureY[indices[0].text] / vertices[0].w }, { vertices[1].x, vertices[1].y, textureY[indices[1].text] / vertices[1].w }, { vertices[2].x, vertices[2].y, textureY[indices[2].text] / vertices[2].w });
@@ -548,18 +560,24 @@ void DrawTriangle(VertIndex a, VertIndex b, VertIndex c)
 
     std::vector<Interpolant> interpolants { red, green, blue, xTexture, yTexture, oneOverW, z };
 
-    Edge minMax(vertices[0], vertices[2], interpolants);
-    Edge minMiddle(vertices[0], vertices[1], interpolants);
-    Edge middleMax(vertices[1], vertices[2], interpolants);
+    Edge minMax(vertices[0], vertices[2], interpolants, true);
+    Edge minMiddle(vertices[0], vertices[1], interpolants, true);
+    Edge middleMax(vertices[1], vertices[2], interpolants, false);
 
-    DrawTrianglePart(minMax, minMiddle);
-    DrawTrianglePart(minMax, middleMax);
+    total_pixels = 0;
+    if (DrawTrianglePart(minMax, minMiddle))
+    {
+        return;
+    }
+    DrawTrianglePart(minMax, middleMax, true);
 }
 
 void LoadOBJ()
 {
     fstream file("cube.obj");
     string line;
+
+    int currentColor = 0;
     while (getline(file, line))
     {
         stringstream ss(line);
@@ -575,6 +593,16 @@ void LoadOBJ()
                 if (ss >> x >> y >> z) {
                     //scale by 20
                     verticesObj.push_back({ x * 20, y * 20, z * 20, 1.0f });
+
+                    switch (currentColor)
+                    {
+                    case 0: colorsObj.push_back({ 1.0f, 0.0f, 0.0f }); break;
+                    case 1: colorsObj.push_back({ 0.0f, 1.0f, 0.0f }); break;
+                    case 2: colorsObj.push_back({ 0.0f, 0.0f, 1.0f }); break;
+                    }
+
+                    currentColor++;
+                    currentColor %= 3;
                 }
             }
             else if (primitive_type == "vt") 
@@ -681,8 +709,8 @@ int CALLBACK WinMain(
             WS_OVERLAPPEDWINDOW | WS_VISIBLE,
             CW_USEDEFAULT,
             CW_USEDEFAULT,
-            GameWidth,
-            GameHeight,
+            WindowWidth,
+            WindowHeight,
             0,
             0,
             hInstance,
@@ -728,12 +756,13 @@ int CALLBACK WinMain(
                 }
             }
 
-            angle += 0.01f;
+            angle = 0.2f;
             if (angle > 2.0f)
             {
                 angle = 0.0f;
             }
 
+            //DebugOut(L"Angle: %f\n", angle);
             t = perspective() * (translate(0.0f, 0.0f, zCoord) * rotateY(static_cast<float>(M_PI) * angle));
 
             ClearScreen(Color::Black);
