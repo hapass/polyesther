@@ -443,30 +443,30 @@ bool DrawTrianglePart(Edge& minMax, Edge& other, bool isSecondPart = false)
 {
     for (int32_t y = other.pixelYBegin; y < other.pixelYEnd; y++)
     {
-        minMax.CalculateX(y);
-        other.CalculateX(y);
+        Edge* left = &minMax;
+        Edge* right = &other;
 
-        int32_t pixelXBegin = minMax.pixelX;
-        int32_t pixelXEnd = other.pixelX;
+        left->CalculateX(y);
+        right->CalculateX(y);
 
-        if (pixelXEnd < pixelXBegin)
+        if (left->pixelX > right->pixelX)
         {
-            int32_t temp = pixelXBegin;
-            pixelXBegin = pixelXEnd;
-            pixelXEnd = temp;
+            Edge* temp = left;
+            left = right;
+            right = temp;
         }
 
         std::vector<float> interpolants_raw;
-        interpolants_raw.resize(other.interpolants.size());
+        interpolants_raw.resize(left->interpolants.size());
 
-        for (int32_t x = pixelXBegin; x < pixelXEnd; x++)
+        for (int32_t x = left->pixelX; x < right->pixelX; x++)
         {
             for (uint32_t i = 0; i < interpolants_raw.size(); i++)
             {
-                float beginC = minMax.interpolants[i].currentC;
-                float endC = other.interpolants[i].currentC;
-                float percent = static_cast<float>(x - pixelXBegin) / static_cast<float>(pixelXEnd - pixelXBegin - 1);
-                interpolants_raw[i] = endC + (beginC - endC) * percent;
+                float beginC = left->interpolants[i].currentC;
+                float endC = right->interpolants[i].currentC;
+                float percent = static_cast<float>(x - left->pixelX) / static_cast<float>(right->pixelX - left->pixelX - 1);
+                interpolants_raw[i] = beginC + (endC - beginC) * percent;
             }
 
             //if (interpolants_raw[6] < ZBuffer[y * GameWidth + x])
@@ -495,10 +495,12 @@ bool DrawTrianglePart(Edge& minMax, Edge& other, bool isSecondPart = false)
             //    return false;
             //}
 
-            //DebugOut(L"Current: %d. Max: %d\n", total_pixels, max_pixels);
             //if (total_pixels > max_pixels)
             //{
-            //    DebugOut(L"Pixel id: %d. Draw pixel: %d, %d. Color: %u %u %u. Is second part: %d\n", total_pixels, x, y, red, green, blue, isSecondPart);
+            //    if (isSecondPart && x == pixelXBegin)
+            //    {
+            //        DebugOut(L"Pixel id: %d. Draw pixel: %d, %d. Color: %u %u %u. Is second part: %d\n", total_pixels, x, y, red, green, blue, isSecondPart);
+            //    }
             //    max_pixels = total_pixels;
             //    return true;
             //}
@@ -776,7 +778,7 @@ int CALLBACK WinMain(
                 }
             }
 
-            angle = 0.2f;
+            angle += 0.01f;
             if (angle > 2.0f)
             {
                 angle = 0.0f;
