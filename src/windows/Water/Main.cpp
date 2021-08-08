@@ -437,7 +437,7 @@ struct Edge
 };
 
 static int32_t total_pixels = 0;
-static int32_t max_pixels = 0;
+static int32_t max_pixels = 1100;
 
 bool DrawTrianglePart(Edge& minMax, Edge& other, bool isSecondPart = false)
 {
@@ -479,26 +479,29 @@ bool DrawTrianglePart(Edge& minMax, Edge& other, bool isSecondPart = false)
             //}
 
             //colored
-            uint8_t red = static_cast<uint8_t>(interpolants_raw[0] * (1.0f / interpolants_raw[5]) * 255.0f);
-            uint8_t green = static_cast<uint8_t>(interpolants_raw[1] * (1.0f / interpolants_raw[5]) * 255.0f);
-            uint8_t blue = static_cast<uint8_t>(interpolants_raw[2] * (1.0f / interpolants_raw[5]) * 255.0f);
+            uint8_t red = static_cast<uint8_t>(interpolants_raw[0] /** (1.0f / interpolants_raw[5])*/ * 255.0f);
+            uint8_t green = static_cast<uint8_t>(interpolants_raw[1] /** (1.0f / interpolants_raw[5])*/ * 255.0f);
+            uint8_t blue = static_cast<uint8_t>(interpolants_raw[2] /** (1.0f / interpolants_raw[5])*/ * 255.0f);
 
-            DebugOut(L"Draw pixel: %d, %d. Color: %u %u %u\n", x, y, red, green, blue);
-            DrawPixel(x, y, Color(red, green, blue));
+            //if (isSecondPart)
+            //{
+                DrawPixel(x, y, Color(red, green, blue));
+            //}
 
-            total_pixels++;
-            if (isSecondPart && x == pixelXEnd - 1 && y == other.pixelYEnd - 1)
-            {
-                max_pixels = 0;
-                return false;
-            }
+            //total_pixels++;
+            //if (isSecondPart && x == pixelXEnd - 1 && y == other.pixelYEnd - 1)
+            //{
+            //    max_pixels = 0;
+            //    return false;
+            //}
 
             //DebugOut(L"Current: %d. Max: %d\n", total_pixels, max_pixels);
-            if (total_pixels > max_pixels)
-            {
-                max_pixels = total_pixels;
-                return true;
-            }
+            //if (total_pixels > max_pixels)
+            //{
+            //    DebugOut(L"Pixel id: %d. Draw pixel: %d, %d. Color: %u %u %u. Is second part: %d\n", total_pixels, x, y, red, green, blue, isSecondPart);
+            //    max_pixels = total_pixels;
+            //    return true;
+            //}
 
             //DrawPixel(x, y, Color(
             //    static_cast<uint8_t>(255),
@@ -522,47 +525,64 @@ bool DrawTrianglePart(Edge& minMax, Edge& other, bool isSecondPart = false)
 
 Matrix t;
 
+static int32_t v0 = -1;
+static int32_t v1 = -1;
+static int32_t v2 = -1;
+
+struct Vector
+{
+    Vec v;
+    float textureX;
+    float textureY;
+    float red;
+    float green;
+    float blue;
+};
+
 void DrawTriangle(VertIndex a, VertIndex b, VertIndex c)
 {
-    std::array<Vec, 3> vertices { verticesObj[a.vert], verticesObj[b.vert], verticesObj[c.vert] };
-
-    for (Vec& v : vertices)
+    std::array<Vector, 3> vertices 
     {
-        v = t * v;
-        v.x /= v.w;
-        v.y /= v.w;
-        v.z /= v.w;
+      Vector { Vec { verticesObj[a.vert].x, verticesObj[a.vert].y, verticesObj[a.vert].z, verticesObj[a.vert].w }, textureX[a.text], textureY[a.text], colorsObj[a.vert].x, colorsObj[a.vert].y, colorsObj[a.vert].z },
+      Vector { Vec { verticesObj[b.vert].x, verticesObj[b.vert].y, verticesObj[b.vert].z, verticesObj[b.vert].w }, textureX[b.text], textureY[b.text], colorsObj[b.vert].x, colorsObj[b.vert].y, colorsObj[b.vert].z },
+      Vector { Vec { verticesObj[c.vert].x, verticesObj[c.vert].y, verticesObj[c.vert].z, verticesObj[c.vert].w }, textureX[c.text], textureY[c.text], colorsObj[c.vert].x, colorsObj[c.vert].y, colorsObj[c.vert].z }
+    };
+
+    for (Vector& v : vertices)
+    {
+        v.v = t * v.v;
+        v.v.x /= v.v.w;
+        v.v.y /= v.v.w;
+        v.v.z /= v.v.w;
     }
 
-    std::array<VertIndex, 3> indices { a, b, c };
-    std::sort(std::begin(indices), std::end(indices), [](const VertIndex& lhs, const VertIndex& rhs) { return verticesObj[lhs.vert].y < verticesObj[rhs.vert].y; });
-    std::sort(std::begin(vertices), std::end(vertices), [](const Vec& lhs, const Vec& rhs) { return lhs.y < rhs.y; });
+    std::sort(std::begin(vertices), std::end(vertices), [](const Vector& lhs, const Vector& rhs) { return lhs.v.y < rhs.v.y; });
 
-    for (Vec& v : vertices)
+    for (Vector& v : vertices)
     {
         // TODO.PAVELZA: Need to clip coordinates before scanline buffer phaze.
-        assert(-1.0f <= v.x && v.x <= 1.0f);
-        assert(-1.0f <= v.y && v.y <= 1.0f);
-        assert(-1.0f <= v.z && v.z <= 1.0f);
-        v.x = (GameWidth - 1) * ((v.x + 1) / 2.0f);
-        v.y = (GameHeight - 1) * ((v.y + 1) / 2.0f);
+        assert(-1.0f <= v.v.x && v.v.x <= 1.0f);
+        assert(-1.0f <= v.v.y && v.v.y <= 1.0f);
+        assert(-1.0f <= v.v.z && v.v.z <= 1.0f);
+        v.v.x = (GameWidth - 1) * ((v.v.x + 1) / 2.0f);
+        v.v.y = (GameHeight - 1) * ((v.v.y + 1) / 2.0f);
     }
 
-    Interpolant red      ({ vertices[0].x, vertices[0].y, colorsObj[indices[0].vert].x / vertices[0].w }, { vertices[1].x, vertices[1].y, colorsObj[indices[1].vert].x / vertices[1].w }, { vertices[2].x, vertices[2].y, colorsObj[indices[2].vert].x / vertices[2].w });
-    Interpolant green    ({ vertices[0].x, vertices[0].y, colorsObj[indices[0].vert].y / vertices[0].w }, { vertices[1].x, vertices[1].y, colorsObj[indices[1].vert].y / vertices[1].w }, { vertices[2].x, vertices[2].y, colorsObj[indices[2].vert].y / vertices[2].w });
-    Interpolant blue     ({ vertices[0].x, vertices[0].y, colorsObj[indices[0].vert].z / vertices[0].w }, { vertices[1].x, vertices[1].y, colorsObj[indices[1].vert].z / vertices[1].w }, { vertices[2].x, vertices[2].y, colorsObj[indices[2].vert].z / vertices[2].w });
+    Interpolant red      ({ vertices[0].v.x, vertices[0].v.y, vertices[0].red /*/ vertices[0].v.w*/ }, { vertices[1].v.x, vertices[1].v.y, vertices[1].red /*/ vertices[1].v.w*/ }, { vertices[2].v.x, vertices[2].v.y, vertices[2].red /*/ vertices[2].v.w*/ });
+    Interpolant green    ({ vertices[0].v.x, vertices[0].v.y, vertices[0].green /*/ vertices[0].v.w*/ }, { vertices[1].v.x, vertices[1].v.y, vertices[1].green /*/ vertices[1].v.w*/ }, { vertices[2].v.x, vertices[2].v.y, vertices[2].green /*/ vertices[2].v.w*/ });
+    Interpolant blue     ({ vertices[0].v.x, vertices[0].v.y, vertices[0].blue /*/ vertices[0].v.w*/ }, { vertices[1].v.x, vertices[1].v.y, vertices[1].blue /*/ vertices[1].v.w*/ }, { vertices[2].v.x, vertices[2].v.y, vertices[2].blue /*/ vertices[2].v.w*/ });
 
-    Interpolant xTexture ({ vertices[0].x, vertices[0].y, textureX[indices[0].text] / vertices[0].w }, { vertices[1].x, vertices[1].y, textureX[indices[1].text] / vertices[1].w }, { vertices[2].x, vertices[2].y, textureX[indices[2].text] / vertices[2].w });
-    Interpolant yTexture ({ vertices[0].x, vertices[0].y, textureY[indices[0].text] / vertices[0].w }, { vertices[1].x, vertices[1].y, textureY[indices[1].text] / vertices[1].w }, { vertices[2].x, vertices[2].y, textureY[indices[2].text] / vertices[2].w });
+    Interpolant xTexture ({ vertices[0].v.x, vertices[0].v.y, vertices[0].textureX / vertices[0].v.w }, { vertices[1].v.x, vertices[1].v.y, vertices[1].textureX / vertices[1].v.w }, { vertices[2].v.x, vertices[2].v.y, vertices[2].textureX / vertices[2].v.w });
+    Interpolant yTexture ({ vertices[0].v.x, vertices[0].v.y, vertices[0].textureY / vertices[0].v.w }, { vertices[1].v.x, vertices[1].v.y, vertices[1].textureY / vertices[1].v.w }, { vertices[2].v.x, vertices[2].v.y, vertices[2].textureY / vertices[2].v.w });
 
-    Interpolant oneOverW ({ vertices[0].x, vertices[0].y, 1.0f / vertices[0].w }, { vertices[1].x, vertices[1].y, 1.0f / vertices[1].w }, { vertices[2].x, vertices[2].y, 1.0f / vertices[2].w });
-    Interpolant z        ({ vertices[0].x, vertices[0].y, vertices[0].z }, { vertices[1].x, vertices[1].y, vertices[1].z }, { vertices[2].x, vertices[2].y, vertices[2].z });
+    Interpolant oneOverW ({ vertices[0].v.x, vertices[0].v.y, 1.0f / vertices[0].v.w }, { vertices[1].v.x, vertices[1].v.y, 1.0f / vertices[1].v.w }, { vertices[2].v.x, vertices[2].v.y, 1.0f / vertices[2].v.w });
+    Interpolant z        ({ vertices[0].v.x, vertices[0].v.y, vertices[0].v.z }, { vertices[1].v.x, vertices[1].v.y, vertices[1].v.z }, { vertices[2].v.x, vertices[2].v.y, vertices[2].v.z });
 
     std::vector<Interpolant> interpolants { red, green, blue, xTexture, yTexture, oneOverW, z };
 
-    Edge minMax(vertices[0], vertices[2], interpolants, true);
-    Edge minMiddle(vertices[0], vertices[1], interpolants, true);
-    Edge middleMax(vertices[1], vertices[2], interpolants, false);
+    Edge minMax(vertices[0].v, vertices[2].v, interpolants, true);
+    Edge minMiddle(vertices[0].v, vertices[1].v, interpolants, true);
+    Edge middleMax(vertices[1].v, vertices[2].v, interpolants, false);
 
     total_pixels = 0;
     if (DrawTrianglePart(minMax, minMiddle))
