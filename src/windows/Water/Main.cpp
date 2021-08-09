@@ -240,7 +240,7 @@ Matrix perspective()
 {
     float farPlane = Far;
     float nearPlane = Near;
-    float halfFieldOfView = 45 * (static_cast<float>(M_PI) / 180);
+    float halfFieldOfView = 30 * (static_cast<float>(M_PI) / 180);
     float aspect = static_cast<float>(WindowWidth) / static_cast<float>(WindowHeight);
 
     Matrix m;
@@ -436,7 +436,7 @@ struct Edge
 };
 
 static int32_t total_pixels = 0;
-static int32_t max_pixels = 1100;
+static int32_t max_pixels = 0;
 
 bool DrawTrianglePart(Edge& minMax, Edge& other, bool isSecondPart = false)
 {
@@ -464,7 +464,7 @@ bool DrawTrianglePart(Edge& minMax, Edge& other, bool isSecondPart = false)
             {
                 float beginC = left->interpolants[i].currentC;
                 float endC = right->interpolants[i].currentC;
-                float percent = static_cast<float>(x - left->pixelX) / static_cast<float>(right->pixelX - left->pixelX - 1);
+                float percent = static_cast<float>(x - left->pixelX) / static_cast<float>(right->pixelX - left->pixelX);
                 interpolants_raw[i] = beginC + (endC - beginC) * percent;
             }
 
@@ -488,7 +488,7 @@ bool DrawTrianglePart(Edge& minMax, Edge& other, bool isSecondPart = false)
             //}
 
             //total_pixels++;
-            //if (isSecondPart && x == pixelXEnd - 1 && y == other.pixelYEnd - 1)
+            //if (isSecondPart && x == right->pixelX - 1 && y == other.pixelYEnd - 1)
             //{
             //    max_pixels = 0;
             //    return false;
@@ -496,7 +496,7 @@ bool DrawTrianglePart(Edge& minMax, Edge& other, bool isSecondPart = false)
 
             //if (total_pixels > max_pixels)
             //{
-            //    if (isSecondPart && x == pixelXBegin)
+            //    if (x == right->pixelX - 1 && red != 0)
             //    {
             //        DebugOut(L"Pixel id: %d. Draw pixel: %d, %d. Color: %u %u %u. Is second part: %d\n", total_pixels, x, y, red, green, blue, isSecondPart);
             //    }
@@ -514,8 +514,8 @@ bool DrawTrianglePart(Edge& minMax, Edge& other, bool isSecondPart = false)
             int32_t textureX = static_cast<int32_t>(interpolants_raw[3] * (1.0f / interpolants_raw[5]) * TextureWidth);
             int32_t textureY = static_cast<int32_t>(interpolants_raw[4] * (1.0f / interpolants_raw[5]) * TextureHeight);
 
-            textureX = std::clamp(textureX, 0, (TextureWidth - 1));
-            textureY = std::clamp(textureY, 0, (TextureHeight - 1));
+            //textureX = std::clamp(textureX, 0, (TextureWidth - 1));
+            //textureY = std::clamp(textureY, 0, (TextureHeight - 1));
 
             int32_t texelBase = textureY * TextureWidth * 3 + textureX * 3;
             DrawPixel(x, y, Color(Texture[texelBase], Texture[texelBase + 1], Texture[texelBase + 2]));
@@ -613,7 +613,7 @@ void LoadOBJ()
 
                 if (ss >> x >> y >> z) {
                     //scale by 20
-                    verticesObj.push_back({ x * 50, y * 50, z * 50, 1.0f });
+                    verticesObj.push_back({ x * 20, y * 20, z * 20, 1.0f });
 
                     switch (currentColor)
                     {
