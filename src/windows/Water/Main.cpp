@@ -21,10 +21,11 @@
 /*
 * World coordinates.
 * Refactoring.
-* Do z-buffer.
 * Do clipping.
 * Fix artifacts.
 * Optimization.
+* Lighting.
+* Free camera flight.
 */
 
 using namespace std;
@@ -343,7 +344,7 @@ Matrix operator*(const Matrix& a, const Matrix& b)
 
     Vec c0 = Vec{ b.m[0], b.m[4], b.m[8],  b.m[12] };
     Vec c1 = Vec{ b.m[1], b.m[5], b.m[9],  b.m[13] };
-    Vec c2 = Vec{ b.m[2], b.m[6], b.m[9],  b.m[14] };
+    Vec c2 = Vec{ b.m[2], b.m[6], b.m[10], b.m[14] };
     Vec c3 = Vec{ b.m[3], b.m[7], b.m[11], b.m[15] };
 
     res.m[0] = dot(r0, c0);
@@ -435,10 +436,7 @@ struct Edge
     std::vector<Interpolant> interpolants;
 };
 
-static int32_t total_pixels = 0;
-static int32_t max_pixels = 0;
-
-bool DrawTrianglePart(Edge& minMax, Edge& other, bool isSecondPart = false)
+void DrawTrianglePart(Edge& minMax, Edge& other, bool isSecondPart = false)
 {
     for (int32_t y = other.pixelYBegin; y < other.pixelYEnd; y++)
     {
@@ -482,27 +480,7 @@ bool DrawTrianglePart(Edge& minMax, Edge& other, bool isSecondPart = false)
             uint8_t green = static_cast<uint8_t>(interpolants_raw[1] * (1.0f / interpolants_raw[5]) * 255.0f);
             uint8_t blue = static_cast<uint8_t>(interpolants_raw[2] * (1.0f / interpolants_raw[5]) * 255.0f);
 
-            //if (isSecondPart)
-            //{
-            //DrawPixel(x, y, Color(red, green, blue));
-            //}
-
-            //total_pixels++;
-            //if (isSecondPart && x == right->pixelX - 1 && y == other.pixelYEnd - 1)
-            //{
-            //    max_pixels = 0;
-            //    return false;
-            //}
-
-            //if (total_pixels > max_pixels)
-            //{
-            //    if (x == right->pixelX - 1 && red != 0)
-            //    {
-            //        DebugOut(L"Pixel id: %d. Draw pixel: %d, %d. Color: %u %u %u. Is second part: %d\n", total_pixels, x, y, red, green, blue, isSecondPart);
-            //    }
-            //    max_pixels = total_pixels;
-            //    return true;
-            //}
+            DrawPixel(x, y, Color(red, green, blue));
 
             //DrawPixel(x, y, Color(
             //    static_cast<uint8_t>(255),
@@ -511,17 +489,16 @@ bool DrawTrianglePart(Edge& minMax, Edge& other, bool isSecondPart = false)
             //));
 
             //textured
-            int32_t textureX = static_cast<int32_t>(interpolants_raw[3] * (1.0f / interpolants_raw[5]) * TextureWidth);
-            int32_t textureY = static_cast<int32_t>(interpolants_raw[4] * (1.0f / interpolants_raw[5]) * TextureHeight);
+            //int32_t textureX = static_cast<int32_t>(interpolants_raw[3] * (1.0f / interpolants_raw[5]) * TextureWidth);
+            //int32_t textureY = static_cast<int32_t>(interpolants_raw[4] * (1.0f / interpolants_raw[5]) * TextureHeight);
 
             //textureX = std::clamp(textureX, 0, (TextureWidth - 1));
             //textureY = std::clamp(textureY, 0, (TextureHeight - 1));
 
-            int32_t texelBase = textureY * TextureWidth * 3 + textureX * 3;
-            DrawPixel(x, y, Color(Texture[texelBase], Texture[texelBase + 1], Texture[texelBase + 2]));
+            //int32_t texelBase = textureY * TextureWidth * 3 + textureX * 3;
+            //DrawPixel(x, y, Color(Texture[texelBase], Texture[texelBase + 1], Texture[texelBase + 2]));
         }
     }
-    return false;
 }
 
 Matrix t;
@@ -585,11 +562,7 @@ void DrawTriangle(VertIndex a, VertIndex b, VertIndex c)
     Edge minMiddle(vertices[0].v, vertices[1].v, interpolants, true);
     Edge middleMax(vertices[1].v, vertices[2].v, interpolants, false);
 
-    total_pixels = 0;
-    if (DrawTrianglePart(minMax, minMiddle))
-    {
-        return;
-    }
+    DrawTrianglePart(minMax, minMiddle);
     DrawTrianglePart(minMax, middleMax, true);
 }
 
@@ -613,7 +586,7 @@ void LoadOBJ()
 
                 if (ss >> x >> y >> z) {
                     //scale by 20
-                    verticesObj.push_back({ x * 20, y * 20, z * 20, 1.0f });
+                    verticesObj.push_back({ x * 10, y * 10, z * 10, 1.0f });
 
                     switch (currentColor)
                     {
@@ -784,7 +757,7 @@ int CALLBACK WinMain(
             }
 
             //DebugOut(L"Angle: %f\n", angle);
-            t = perspective() * (translate(0.0f, 0.0f, zCoord) * rotateY(static_cast<float>(M_PI) * angle));
+            t = perspective() * translate(0.0f, 0.0f, zCoord) * rotateY(static_cast<float>(M_PI) * angle);
 
             ClearScreen(Color::Black);
             for (uint32_t i = 0; i < indicesObj.size(); i += 3)
