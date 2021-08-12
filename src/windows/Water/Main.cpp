@@ -475,28 +475,28 @@ void DrawTrianglePart(Edge& minMax, Edge& other, bool isSecondPart = false)
                 continue;
             }
 
-            //colored
-            uint8_t red = static_cast<uint8_t>(interpolants_raw[0] * (1.0f / interpolants_raw[5]) * 255.0f);
-            uint8_t green = static_cast<uint8_t>(interpolants_raw[1] * (1.0f / interpolants_raw[5]) * 255.0f);
-            uint8_t blue = static_cast<uint8_t>(interpolants_raw[2] * (1.0f / interpolants_raw[5]) * 255.0f);
+            float tintRed = interpolants_raw[0] * (1.0f / interpolants_raw[5]);
+            float tintGreen = interpolants_raw[1] * (1.0f / interpolants_raw[5]);
+            float tintBlue = interpolants_raw[2] * (1.0f / interpolants_raw[5]);
 
-            DrawPixel(x, y, Color(red, green, blue));
+            int32_t textureX = static_cast<int32_t>(interpolants_raw[3] * (1.0f / interpolants_raw[5]) * TextureWidth);
+            int32_t textureY = static_cast<int32_t>(interpolants_raw[4] * (1.0f / interpolants_raw[5]) * TextureHeight);
 
-            //DrawPixel(x, y, Color(
-            //    static_cast<uint8_t>(255),
-            //    static_cast<uint8_t>(255),
-            //    static_cast<uint8_t>(255)
-            //));
+            int32_t texelBase = textureY * TextureWidth * 3 + textureX * 3;
 
-            //textured
-            //int32_t textureX = static_cast<int32_t>(interpolants_raw[3] * (1.0f / interpolants_raw[5]) * TextureWidth);
-            //int32_t textureY = static_cast<int32_t>(interpolants_raw[4] * (1.0f / interpolants_raw[5]) * TextureHeight);
+            uint8_t textureRed = Texture[texelBase];
+            uint8_t textureGreen = Texture[texelBase + 1];
+            uint8_t textureBlue = Texture[texelBase + 2];
 
-            //textureX = std::clamp(textureX, 0, (TextureWidth - 1));
-            //textureY = std::clamp(textureY, 0, (TextureHeight - 1));
+            float red = tintRed * textureRed;
+            float green = tintGreen * textureGreen;
+            float blue = tintBlue * textureBlue;
 
-            //int32_t texelBase = textureY * TextureWidth * 3 + textureX * 3;
-            //DrawPixel(x, y, Color(Texture[texelBase], Texture[texelBase + 1], Texture[texelBase + 2]));
+            DrawPixel(x, y, Color(
+                static_cast<uint8_t>(red), 
+                static_cast<uint8_t>(green), 
+                static_cast<uint8_t>(blue)
+            ));
         }
     }
 }
@@ -724,7 +724,7 @@ int CALLBACK WinMain(
         NOT_FAILED(ZBuffer = (float*)VirtualAlloc(0, GameWidth * GameHeight * sizeof(float), MEM_COMMIT, PAGE_READWRITE), 0);
 
         int32_t channels;
-        NOT_FAILED(Texture = stbi_load("test.bmp", &TextureWidth, &TextureHeight, &channels, 3), 0);
+        NOT_FAILED(Texture = stbi_load("texture.jpg", &TextureWidth, &TextureHeight, &channels, 3), 0);
 
         auto frameExpectedTime = chrono::milliseconds(1000 / FPS);
 
