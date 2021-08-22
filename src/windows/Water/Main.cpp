@@ -20,12 +20,10 @@
 
 /*
 * World coordinates.
-* Refactoring.
-* Do clipping.
-* Fix artifacts.
-* Optimization.
-* Lighting.
 * Free camera flight.
+* Lighting.
+* Refactoring.
+* Optimization.
 */
 
 using namespace std;
@@ -55,6 +53,19 @@ struct Vec
     float y = 0.0f;
     float z = 0.0f;
     float w = 0.0f;
+
+    float Get(int32_t index)
+    {
+        assert(0 <= index && index <= 3);
+
+        switch (index)
+        {
+        case 0: return x;
+        case 1: return y;
+        case 2: return z;
+        }
+        return w;
+    }
 };
 
 struct VertIndex
@@ -503,10 +514,6 @@ void DrawTrianglePart(Edge& minMax, Edge& other, bool isSecondPart = false)
 
 Matrix t;
 
-static int32_t v0 = -1;
-static int32_t v1 = -1;
-static int32_t v2 = -1;
-
 struct Vector
 {
     Vec v;
@@ -517,18 +524,32 @@ struct Vector
     float blue;
 };
 
-void DrawTriangle(VertIndex a, VertIndex b, VertIndex c)
+float Lerp(float begin, float end, float lerpAmount)
 {
-    std::array<Vector, 3> vertices 
-    {
-      Vector { Vec { verticesObj[a.vert].x, verticesObj[a.vert].y, verticesObj[a.vert].z, verticesObj[a.vert].w }, textureX[a.text], textureY[a.text], colorsObj[a.vert].x, colorsObj[a.vert].y, colorsObj[a.vert].z },
-      Vector { Vec { verticesObj[b.vert].x, verticesObj[b.vert].y, verticesObj[b.vert].z, verticesObj[b.vert].w }, textureX[b.text], textureY[b.text], colorsObj[b.vert].x, colorsObj[b.vert].y, colorsObj[b.vert].z },
-      Vector { Vec { verticesObj[c.vert].x, verticesObj[c.vert].y, verticesObj[c.vert].z, verticesObj[c.vert].w }, textureX[c.text], textureY[c.text], colorsObj[c.vert].x, colorsObj[c.vert].y, colorsObj[c.vert].z }
-    };
+    return begin + (end - begin) * lerpAmount;
+}
+
+Vector Lerp(const Vector& begin, const Vector& end, float lerpAmount)
+{
+    Vector result;
+    result.v.x = Lerp(begin.v.x, end.v.x, lerpAmount);
+    result.v.y = Lerp(begin.v.y, end.v.y, lerpAmount);
+    result.v.z = Lerp(begin.v.z, end.v.z, lerpAmount);
+    result.v.w = Lerp(begin.v.w, end.v.w, lerpAmount);
+    result.textureX = Lerp(begin.textureX, end.textureX, lerpAmount);
+    result.textureY = Lerp(begin.textureY, end.textureY, lerpAmount);
+    result.red = Lerp(begin.red, end.red, lerpAmount);
+    result.green = Lerp(begin.green, end.green, lerpAmount);
+    result.blue = Lerp(begin.blue, end.blue, lerpAmount);
+    return result;
+}
+
+void DrawRawTriangle(std::vector<Vector>& vertices)
+{
+    assert(vertices.size() == 3);
 
     for (Vector& v : vertices)
     {
-        v.v = t * v.v;
         v.v.x /= v.v.w;
         v.v.y /= v.v.w;
         v.v.z /= v.v.w;
@@ -546,17 +567,17 @@ void DrawTriangle(VertIndex a, VertIndex b, VertIndex c)
         v.v.y = (GameHeight - 1) * ((v.v.y + 1) / 2.0f);
     }
 
-    Interpolant red      ({ vertices[0].v.x, vertices[0].v.y, vertices[0].red / vertices[0].v.w }, { vertices[1].v.x, vertices[1].v.y, vertices[1].red / vertices[1].v.w }, { vertices[2].v.x, vertices[2].v.y, vertices[2].red / vertices[2].v.w });
-    Interpolant green    ({ vertices[0].v.x, vertices[0].v.y, vertices[0].green / vertices[0].v.w }, { vertices[1].v.x, vertices[1].v.y, vertices[1].green / vertices[1].v.w }, { vertices[2].v.x, vertices[2].v.y, vertices[2].green / vertices[2].v.w });
-    Interpolant blue     ({ vertices[0].v.x, vertices[0].v.y, vertices[0].blue / vertices[0].v.w }, { vertices[1].v.x, vertices[1].v.y, vertices[1].blue / vertices[1].v.w }, { vertices[2].v.x, vertices[2].v.y, vertices[2].blue / vertices[2].v.w });
+    Interpolant red({ vertices[0].v.x, vertices[0].v.y, vertices[0].red / vertices[0].v.w }, { vertices[1].v.x, vertices[1].v.y, vertices[1].red / vertices[1].v.w }, { vertices[2].v.x, vertices[2].v.y, vertices[2].red / vertices[2].v.w });
+    Interpolant green({ vertices[0].v.x, vertices[0].v.y, vertices[0].green / vertices[0].v.w }, { vertices[1].v.x, vertices[1].v.y, vertices[1].green / vertices[1].v.w }, { vertices[2].v.x, vertices[2].v.y, vertices[2].green / vertices[2].v.w });
+    Interpolant blue({ vertices[0].v.x, vertices[0].v.y, vertices[0].blue / vertices[0].v.w }, { vertices[1].v.x, vertices[1].v.y, vertices[1].blue / vertices[1].v.w }, { vertices[2].v.x, vertices[2].v.y, vertices[2].blue / vertices[2].v.w });
 
-    Interpolant xTexture ({ vertices[0].v.x, vertices[0].v.y, vertices[0].textureX / vertices[0].v.w }, { vertices[1].v.x, vertices[1].v.y, vertices[1].textureX / vertices[1].v.w }, { vertices[2].v.x, vertices[2].v.y, vertices[2].textureX / vertices[2].v.w });
-    Interpolant yTexture ({ vertices[0].v.x, vertices[0].v.y, vertices[0].textureY / vertices[0].v.w }, { vertices[1].v.x, vertices[1].v.y, vertices[1].textureY / vertices[1].v.w }, { vertices[2].v.x, vertices[2].v.y, vertices[2].textureY / vertices[2].v.w });
+    Interpolant xTexture({ vertices[0].v.x, vertices[0].v.y, vertices[0].textureX / vertices[0].v.w }, { vertices[1].v.x, vertices[1].v.y, vertices[1].textureX / vertices[1].v.w }, { vertices[2].v.x, vertices[2].v.y, vertices[2].textureX / vertices[2].v.w });
+    Interpolant yTexture({ vertices[0].v.x, vertices[0].v.y, vertices[0].textureY / vertices[0].v.w }, { vertices[1].v.x, vertices[1].v.y, vertices[1].textureY / vertices[1].v.w }, { vertices[2].v.x, vertices[2].v.y, vertices[2].textureY / vertices[2].v.w });
 
-    Interpolant oneOverW ({ vertices[0].v.x, vertices[0].v.y, 1.0f / vertices[0].v.w }, { vertices[1].v.x, vertices[1].v.y, 1.0f / vertices[1].v.w }, { vertices[2].v.x, vertices[2].v.y, 1.0f / vertices[2].v.w });
-    Interpolant z        ({ vertices[0].v.x, vertices[0].v.y, vertices[0].v.z }, { vertices[1].v.x, vertices[1].v.y, vertices[1].v.z }, { vertices[2].v.x, vertices[2].v.y, vertices[2].v.z });
+    Interpolant oneOverW({ vertices[0].v.x, vertices[0].v.y, 1.0f / vertices[0].v.w }, { vertices[1].v.x, vertices[1].v.y, 1.0f / vertices[1].v.w }, { vertices[2].v.x, vertices[2].v.y, 1.0f / vertices[2].v.w });
+    Interpolant z({ vertices[0].v.x, vertices[0].v.y, vertices[0].v.z }, { vertices[1].v.x, vertices[1].v.y, vertices[1].v.z }, { vertices[2].v.x, vertices[2].v.y, vertices[2].v.z });
 
-    std::vector<Interpolant> interpolants { red, green, blue, xTexture, yTexture, oneOverW, z };
+    std::vector<Interpolant> interpolants{ red, green, blue, xTexture, yTexture, oneOverW, z };
 
     Edge minMax(vertices[0].v, vertices[2].v, interpolants, true);
     Edge minMiddle(vertices[0].v, vertices[1].v, interpolants, true);
@@ -564,6 +585,56 @@ void DrawTriangle(VertIndex a, VertIndex b, VertIndex c)
 
     DrawTrianglePart(minMax, minMiddle);
     DrawTrianglePart(minMax, middleMax, true);
+}
+
+void ClipTrianglePlane(std::vector<Vector>& vertices, int32_t axis, int32_t plane)
+{
+    // go through each side of triangle and if points on the ends of the side are from different sides of the clipping plane - interpolate and add point that is intersection betwee plane and a line
+}
+
+bool ClipTriangleAxis(std::vector<Vector>& vertices, int32_t axis)
+{
+    bool hasAnyVertices = true;
+
+    ClipTrianglePlane(vertices, axis, 1);
+    ClipTrianglePlane(vertices, axis, -1);
+
+    return hasAnyVertices;
+}
+
+void DrawTriangle(VertIndex a, VertIndex b, VertIndex c)
+{
+    std::vector<Vector> vertices 
+    {
+      Vector { Vec { verticesObj[a.vert].x, verticesObj[a.vert].y, verticesObj[a.vert].z, verticesObj[a.vert].w }, textureX[a.text], textureY[a.text], colorsObj[a.vert].x, colorsObj[a.vert].y, colorsObj[a.vert].z },
+      Vector { Vec { verticesObj[b.vert].x, verticesObj[b.vert].y, verticesObj[b.vert].z, verticesObj[b.vert].w }, textureX[b.text], textureY[b.text], colorsObj[b.vert].x, colorsObj[b.vert].y, colorsObj[b.vert].z },
+      Vector { Vec { verticesObj[c.vert].x, verticesObj[c.vert].y, verticesObj[c.vert].z, verticesObj[c.vert].w }, textureX[c.text], textureY[c.text], colorsObj[c.vert].x, colorsObj[c.vert].y, colorsObj[c.vert].z }
+    };
+
+    for (Vector& v : vertices)
+    {
+        v.v = t * v.v;
+    }
+
+    // TODO.PAVELZA: if in all points not in view frustum - we can cull immediately
+    // TODO.PAVELZA: if all are inside - we can draw immediately
+
+    if (ClipTriangleAxis(vertices, 0) && ClipTriangleAxis(vertices, 1) && ClipTriangleAxis(vertices, 2))
+    {
+        assert(vertices.size() >= 3);
+
+        for (size_t i = 2; i < vertices.size(); i++)
+        {
+            std::vector<Vector> triangle;
+            triangle.resize(3);
+
+            triangle[0] = vertices[0];
+            triangle[1] = vertices[i - 1];
+            triangle[2] = vertices[i];
+
+            DrawRawTriangle(triangle);
+        }
+    }
 }
 
 void LoadOBJ()
