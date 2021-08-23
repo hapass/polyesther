@@ -272,13 +272,13 @@ Matrix perspective()
     //col 3
     m.m[2] = 0.0f;
     m.m[6] = 0.0f;
-    m.m[10] = -(farPlane + nearPlane) / (farPlane - nearPlane);
-    m.m[14] = -1.0f;
+    m.m[10] = -(farPlane + nearPlane) / (nearPlane - farPlane);
+    m.m[14] = 1.0f;
 
     //col 4
     m.m[3] = 0.0f;
     m.m[7] = 0.0f;
-    m.m[11] = 2 * farPlane * nearPlane / (farPlane - nearPlane);
+    m.m[11] = 2 * farPlane * nearPlane / (nearPlane - farPlane);
     m.m[15] = 0.0f;
 
     return m;
@@ -555,20 +555,13 @@ void DrawRawTriangle(std::vector<Vector>& vertices)
         v.v.z /= v.v.w;
     }
 
+    // TODO.PAVELZA: We can do backface culling here.
+
     std::sort(std::begin(vertices), std::end(vertices), [](const Vector& lhs, const Vector& rhs) { return lhs.v.y < rhs.v.y; });
 
     for (Vector& v : vertices)
     {
-        if (-1.0f > v.v.x || v.v.x > 1.0f)
-        {
-            //DebugOut(L"Can you see this shit?");
-        }
-
-        // TODO.PAVELZA: Need to clip coordinates before scanline buffer phaze.
-        //assert(-1.0f <= v.v.x && v.v.x <= 1.0f);
-        //assert(-1.0f <= v.v.y && v.v.y <= 1.0f);
-        //assert(-1.0f <= v.v.z && v.v.z <= 1.0f);
-
+        // TODO.PAVELZA: Clipping might result in some vertices being slightly outside of -1 to 1 range, so we clamp. Will need to think how to avoid this.
         v.v.x = clamp(v.v.x, -1.0f, 1.0f);
         v.v.y = clamp(v.v.y, -1.0f, 1.0f);
         v.v.z = clamp(v.v.z, -1.0f, 1.0f);
@@ -599,8 +592,7 @@ void DrawRawTriangle(std::vector<Vector>& vertices)
 
 bool IsPointInside(const Vector& point, int32_t axis, int32_t plane)
 {    
-    // why my comparisons are inverted?
-    return point.v.Get(axis) * plane >= point.v.w;
+    return point.v.Get(axis) * plane <= point.v.w;
 }
 
 void ClipTrianglePlane(std::vector<Vector>& vertices, int32_t axis, int32_t plane)
@@ -659,8 +651,8 @@ void DrawTriangle(VertIndex a, VertIndex b, VertIndex c)
         v.v = t * v.v;
     }
 
-    // TODO.PAVELZA: if in all points not in view frustum - we can cull immediately
-    // TODO.PAVELZA: if all are inside - we can draw immediately
+    // TODO.PAVELZA: If all the points are outside of the view frustum - we can cull immediately.
+    // TODO.PAVELZA: If all points are inside - we can draw immediately.
 
     if (ClipTriangleAxis(vertices, 0) && ClipTriangleAxis(vertices, 1) && ClipTriangleAxis(vertices, 2))
     {
