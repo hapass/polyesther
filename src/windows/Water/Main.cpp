@@ -54,7 +54,7 @@ struct Vec
     float z = 0.0f;
     float w = 0.0f;
 
-    float Get(int32_t index)
+    float Get(int32_t index) const
     {
         assert(0 <= index && index <= 3);
 
@@ -559,10 +559,20 @@ void DrawRawTriangle(std::vector<Vector>& vertices)
 
     for (Vector& v : vertices)
     {
+        if (-1.0f > v.v.x || v.v.x > 1.0f)
+        {
+            //DebugOut(L"Can you see this shit?");
+        }
+
         // TODO.PAVELZA: Need to clip coordinates before scanline buffer phaze.
-        assert(-1.0f <= v.v.x && v.v.x <= 1.0f);
-        assert(-1.0f <= v.v.y && v.v.y <= 1.0f);
-        assert(-1.0f <= v.v.z && v.v.z <= 1.0f);
+        //assert(-1.0f <= v.v.x && v.v.x <= 1.0f);
+        //assert(-1.0f <= v.v.y && v.v.y <= 1.0f);
+        //assert(-1.0f <= v.v.z && v.v.z <= 1.0f);
+
+        v.v.x = clamp(v.v.x, -1.0f, 1.0f);
+        v.v.y = clamp(v.v.y, -1.0f, 1.0f);
+        v.v.z = clamp(v.v.z, -1.0f, 1.0f);
+
         v.v.x = (GameWidth - 1) * ((v.v.x + 1) / 2.0f);
         v.v.y = (GameHeight - 1) * ((v.v.y + 1) / 2.0f);
     }
@@ -587,19 +597,52 @@ void DrawRawTriangle(std::vector<Vector>& vertices)
     DrawTrianglePart(minMax, middleMax, true);
 }
 
+bool IsPointInside(const Vector& point, int32_t axis, int32_t plane)
+{    
+    // why my comparisons are inverted?
+    return point.v.Get(axis) * plane >= point.v.w;
+}
+
 void ClipTrianglePlane(std::vector<Vector>& vertices, int32_t axis, int32_t plane)
 {
-    // go through each side of triangle and if points on the ends of the side are from different sides of the clipping plane - interpolate and add point that is intersection betwee plane and a line
+    std::vector<Vector> result;
+    size_t previousElement = vertices.size() - 1;
+
+    for (size_t currentElement = 0; currentElement < vertices.size(); currentElement++)
+    {
+        bool isPreviousInside = IsPointInside(vertices[previousElement], axis, plane);
+        bool isCurrentInside = IsPointInside(vertices[currentElement], axis, plane);
+
+        if (isPreviousInside != isCurrentInside)
+        {
+            float k = (vertices[previousElement].v.w - vertices[previousElement].v.Get(axis) * plane);
+            float lerpAmount = k / (k - vertices[currentElement].v.w + vertices[currentElement].v.Get(axis) * plane);
+            result.push_back(Lerp(vertices[previousElement], vertices[currentElement], lerpAmount));
+        }
+
+        if (isCurrentInside)
+        {
+            result.push_back(vertices[currentElement]);
+        }
+        
+        previousElement = currentElement;
+    }
+
+    swap(vertices, result);
 }
 
 bool ClipTriangleAxis(std::vector<Vector>& vertices, int32_t axis)
 {
-    bool hasAnyVertices = true;
-
     ClipTrianglePlane(vertices, axis, 1);
+
+    if (vertices.size() == 0)
+    {
+        return false;
+    }
+
     ClipTrianglePlane(vertices, axis, -1);
 
-    return hasAnyVertices;
+    return vertices.size() != 0;
 }
 
 void DrawTriangle(VertIndex a, VertIndex b, VertIndex c)
@@ -657,7 +700,7 @@ void LoadOBJ()
 
                 if (ss >> x >> y >> z) {
                     //scale by 20
-                    verticesObj.push_back({ x * 10, y * 10, z * 10, 1.0f });
+                    verticesObj.push_back({ x * 100, y * 100, z * 100, 1.0f });
 
                     switch (currentColor)
                     {
