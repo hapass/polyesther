@@ -47,6 +47,25 @@ static uint8_t* Texture;
 static float zCoord = -100.f;
 static float angle = 0.0f;
 
+struct Matrix
+{
+    Matrix()
+    {
+        for (uint32_t i = 0; i < 16U; i++)
+        {
+            m[i] = 0;
+        }
+    }
+
+    float m[16U];
+};
+
+struct Model {
+    uint32_t triangleCount;
+    int32_t offset;
+    Matrix transform;
+};
+
 struct Vec
 {
     float x = 0.0f;
@@ -79,7 +98,8 @@ static std::vector<float> textureX;
 static std::vector<float> textureY;
 static std::vector<VertIndex> indicesObj;
 static std::vector<Vec> colorsObj;
-static uint32_t triangles_count = 0;
+
+static std::vector<Model> models;
 
 #define NOT_FAILED(call, failureCode) \
     if ((call) == failureCode) \
@@ -138,19 +158,6 @@ void ClearScreen(Color color)
         ZBuffer[i] = 2.0f;
     }
 }
-
-struct Matrix
-{
-    Matrix()
-    {
-        for (uint32_t i = 0; i < 16U; i++)
-        {
-            m[i] = 0;
-        }
-    }
-
-    float m[16U];
-};
 
 Matrix rotateZ(float alpha)
 {
@@ -512,8 +519,6 @@ void DrawTrianglePart(Edge& minMax, Edge& other, bool isSecondPart = false)
     }
 }
 
-Matrix t;
-
 struct Vector
 {
     Vec v;
@@ -637,7 +642,7 @@ bool ClipTriangleAxis(std::vector<Vector>& vertices, int32_t axis)
     return vertices.size() != 0;
 }
 
-void DrawTriangle(VertIndex a, VertIndex b, VertIndex c)
+void DrawTriangle(VertIndex a, VertIndex b, VertIndex c, const Matrix& transform)
 {
     std::vector<Vector> vertices 
     {
@@ -648,7 +653,7 @@ void DrawTriangle(VertIndex a, VertIndex b, VertIndex c)
 
     for (Vector& v : vertices)
     {
-        v.v = t * v.v;
+        v.v = perspective() * transform * v.v;
     }
 
     // TODO.PAVELZA: If all the points are outside of the view frustum - we can cull immediately.
@@ -672,9 +677,9 @@ void DrawTriangle(VertIndex a, VertIndex b, VertIndex c)
     }
 }
 
-void LoadOBJ()
+Model LoadOBJ(const char* fileName)
 {
-    fstream file("triangle.obj");
+    fstream file(fileName);
     string line;
 
     int currentColor = 0;
@@ -691,8 +696,7 @@ void LoadOBJ()
                 float z = 0.0f;
 
                 if (ss >> x >> y >> z) {
-                    //scale by 50
-                    verticesObj.push_back({ x * 50, y * 50, z * 50, 1.0f });
+                    verticesObj.push_back({ x, y, z, 1.0f });
 
                     switch (currentColor)
                     {
@@ -762,7 +766,11 @@ void LoadOBJ()
         }
     }
 
-    triangles_count = indicesObj.size() / 3;
+    Model model;
+    model.triangleCount = indicesObj.size() / 3;
+    model.offset = 0;
+    model.transform = translate(0.0f, 0.0f, zCoord) * scale(50.0f);
+    return model;
 }
 
 LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
@@ -835,7 +843,7 @@ int CALLBACK WinMain(
         auto frameExpectedTime = chrono::milliseconds(1000 / FPS);
 
         // init model
-        LoadOBJ();
+        models.push_back(LoadOBJ("monkey.obj"));
 
         while (isRunning)
         {
@@ -856,36 +864,21 @@ int CALLBACK WinMain(
                 }
             }
 
+            ClearScreen(Color::Black);
+
             angle += 0.01f;
             if (angle > 2.0f)
             {
                 angle = 0.0f;
             }
 
-            //DebugOut(L"Angle: %f\n", angle);
-            t = perspective() * translate(0.0f, 0.0f, zCoord) * rotateY(static_cast<float>(M_PI) * angle);
-
-            ClearScreen(Color::Black);
-            for (uint32_t i = 0; i < indicesObj.size(); i += 3)
+            for (const Model& model : models)
             {
-                DrawTriangle(indicesObj[i], indicesObj[i + 1], indicesObj[i + 2]);
+                for (uint32_t i = 0; i < model.triangleCount; i++)
+                {
+                    DrawTriangle(indicesObj[model.offset + i * 3 + 0], indicesObj[model.offset + i * 3 + 1], indicesObj[model.offset + i * 3 + 2], model.transform * rotateY(static_cast<float>(M_PI) * angle));
+                }
             }
-
-            //DebugOut(L"Angle: %f\n", angle);
-            //DrawTriangle(indicesObj[0], indicesObj[1], indicesObj[2]);
-            //DrawTriangle(indicesObj[3], indicesObj[4], indicesObj[5]);
-            //DrawTriangle(indicesObj[6], indicesObj[7], indicesObj[8]);
-            //DrawTriangle(indicesObj[9], indicesObj[10], indicesObj[11]);
-            //DrawTriangle(indicesObj[12], indicesObj[13], indicesObj[14]);
-            //DrawTriangle(indicesObj[15], indicesObj[16], indicesObj[17]);
-
-            //DrawTriangle(indicesObj[18], indicesObj[19], indicesObj[20]);
-            //DrawTriangle(indicesObj[21], indicesObj[22], indicesObj[23]);
-            //DrawTriangle(indicesObj[24], indicesObj[25], indicesObj[26]);
-            //DrawTriangle(indicesObj[27], indicesObj[28], indicesObj[29]);
-            //DrawTriangle(indicesObj[30], indicesObj[31], indicesObj[32]);
-            //DrawTriangle(indicesObj[33], indicesObj[34], indicesObj[35]);
-
 
             //swap buffers
             StretchDIBits(
