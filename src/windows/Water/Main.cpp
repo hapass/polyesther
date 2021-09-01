@@ -44,7 +44,7 @@ static int32_t TextureHeight;
 static uint8_t* Texture;
 
 // move all vertices 100 pixels away from camera
-static float zCoord = 100.f;
+static float zCoord = -100.f;
 static float angle = 0.0f;
 
 struct Vec
@@ -272,13 +272,13 @@ Matrix perspective()
     //col 3
     m.m[2] = 0.0f;
     m.m[6] = 0.0f;
-    m.m[10] = -(farPlane + nearPlane) / (nearPlane - farPlane);
-    m.m[14] = 1.0f;
+    m.m[10] = -(farPlane + nearPlane) / (farPlane - nearPlane);
+    m.m[14] = -1.0f;
 
     //col 4
     m.m[3] = 0.0f;
     m.m[7] = 0.0f;
-    m.m[11] = 2 * farPlane * nearPlane / (nearPlane - farPlane);
+    m.m[11] = -2 * farPlane * nearPlane / (farPlane - nearPlane);
     m.m[15] = 0.0f;
 
     return m;
@@ -674,7 +674,7 @@ void DrawTriangle(VertIndex a, VertIndex b, VertIndex c)
 
 void LoadOBJ()
 {
-    fstream file("cube.obj");
+    fstream file("triangle.obj");
     string line;
 
     int currentColor = 0;
@@ -691,8 +691,8 @@ void LoadOBJ()
                 float z = 0.0f;
 
                 if (ss >> x >> y >> z) {
-                    //scale by 20
-                    verticesObj.push_back({ x * 100, y * 100, z * 100, 1.0f });
+                    //scale by 50
+                    verticesObj.push_back({ x * 50, y * 50, z * 50, 1.0f });
 
                     switch (currentColor)
                     {
