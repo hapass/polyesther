@@ -19,7 +19,6 @@
 #include "stb_image.h"
 
 /*
-* World coordinates.
 * Free camera flight.
 * Lighting.
 * Refactoring.
@@ -42,10 +41,6 @@ static float* ZBuffer;
 static int32_t TextureWidth;
 static int32_t TextureHeight;
 static uint8_t* Texture;
-
-// move all vertices 100 pixels away from camera
-static float zCoord = -100.f;
-static float angle = 0.0f;
 
 struct Matrix
 {
@@ -85,6 +80,25 @@ struct Vec
         }
         return w;
     }
+};
+
+struct Camera
+{
+    Vec position;
+    float pitch;
+    float yaw;
+
+    // transpose pitch yaw * x - first yaw, then pitch, then trnaspose
+    // yaw^-1 pitch^-1 transpose^-1 - inverse, this is if world is to be transformed instead of camera within world
+    // yaw transpose pitch transpose position (just -x -y -z)
+
+    // write transpose
+    // compose Camera matrix
+    // do left and right vectors which will get transformed with rotation - we start aligned with world axis looking down -z coordinate
+    // += left to position
+
+    Vec up;
+    Vec left;
 };
 
 struct VertIndex
@@ -768,8 +782,6 @@ Model LoadOBJ(const char* fileName)
 
     Model model;
     model.triangleCount = indicesObj.size() / 3;
-    model.offset = 0;
-    model.transform = translate(0.0f, 0.0f, zCoord) * scale(50.0f);
     return model;
 }
 
@@ -844,6 +856,8 @@ int CALLBACK WinMain(
 
         // init model
         models.push_back(LoadOBJ("monkey.obj"));
+        models[0].transform = translate(0.0f, 0.0f, 0.0f) * scale(50.0f);
+        models[0].offset = 0;
 
         while (isRunning)
         {
@@ -866,17 +880,11 @@ int CALLBACK WinMain(
 
             ClearScreen(Color::Black);
 
-            angle += 0.01f;
-            if (angle > 2.0f)
-            {
-                angle = 0.0f;
-            }
-
             for (const Model& model : models)
             {
                 for (uint32_t i = 0; i < model.triangleCount; i++)
                 {
-                    DrawTriangle(indicesObj[model.offset + i * 3 + 0], indicesObj[model.offset + i * 3 + 1], indicesObj[model.offset + i * 3 + 2], model.transform * rotateY(static_cast<float>(M_PI) * angle));
+                    DrawTriangle(indicesObj[model.offset + i * 3 + 0], indicesObj[model.offset + i * 3 + 1], indicesObj[model.offset + i * 3 + 2], model.transform * rotateY(static_cast<float>(M_PI)));
                 }
             }
 
