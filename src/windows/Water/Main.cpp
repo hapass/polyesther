@@ -85,17 +85,8 @@ struct Vec
 struct Camera
 {
     Vec position;
-    float pitch;
-    float yaw;
-
-    // transpose pitch yaw * x - first yaw, then pitch, then trnaspose
-    // yaw^-1 pitch^-1 transpose^-1 - inverse, this is if world is to be transformed instead of camera within world
-    // yaw transpose pitch transpose position (just -x -y -z)
-
-    // write transpose
-    // compose Camera matrix
-    // do left and right vectors which will get transformed with rotation - we start aligned with world axis looking down -z coordinate
-    // += left to position
+    float pitch = 0.0f; // around x while at 0
+    float yaw = 0.0f; // around z while at 0
 
     Vec up;
     Vec left;
@@ -235,6 +226,37 @@ Matrix rotateY(float alpha)
     return m;
 }
 
+Matrix rotateX(float alpha)
+{
+    Matrix m;
+
+    //col 1
+    m.m[0] = 1.0f;
+    m.m[4] = 0.0f;
+    m.m[8] = 0.0f;
+    m.m[12] = 0.0f;
+
+    //col 2
+    m.m[1] = 0.0f;
+    m.m[5] = cosf(alpha);
+    m.m[9] = -sinf(alpha);
+    m.m[13] = 0.0f;
+
+    //col 3
+    m.m[2] = 0.0f;
+    m.m[6] = sinf(alpha);
+    m.m[10] = cosf(alpha);
+    m.m[14] = 0.0f;
+
+    //col 4
+    m.m[3] = 0.0f;
+    m.m[7] = 0.0f;
+    m.m[11] = 0.0f;
+    m.m[15] = 1.0f;
+
+    return m;
+}
+
 Matrix translate(float x, float y, float z)
 {
     Matrix m;
@@ -336,6 +358,37 @@ Matrix scale(float x)
     return m;
 }
 
+Matrix transpose(const Matrix& m)
+{
+    Matrix r;
+
+    //col 1
+    r.m[0] = m.m[0];
+    r.m[4] = m.m[1];
+    r.m[8] = m.m[2];
+    r.m[12] = m.m[3];
+
+    //col 2
+    r.m[1] = m.m[4];
+    r.m[5] = m.m[5];
+    r.m[9] = m.m[6];
+    r.m[13] = m.m[7];
+
+    //col 3
+    r.m[2] = m.m[8];
+    r.m[6] = m.m[9];
+    r.m[10] = m.m[10];
+    r.m[14] = m.m[11];
+
+    //col 4
+    r.m[3] = m.m[12];
+    r.m[7] = m.m[13];
+    r.m[11] = m.m[14];
+    r.m[15] = m.m[15];
+
+    return r;
+}
+
 float dot(const Vec& a, const Vec& b)
 {
     return a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w;
@@ -400,6 +453,15 @@ Matrix operator*(const Matrix& a, const Matrix& b)
     res.m[15] = dot(r3, c3);
 
     return res;
+}
+
+Matrix view(const Camera& camera)
+{
+    Matrix rTranslate = translate(-camera.position.x, -camera.position.y, -camera.position.z);
+    Matrix rYaw = transpose(rotateY(camera.yaw));
+    Matrix rPitch = transpose(rotateX(camera.pitch));
+
+    return rYaw * rPitch * rTranslate;
 }
 
 struct Vert
@@ -856,8 +918,14 @@ int CALLBACK WinMain(
 
         // init model
         models.push_back(LoadOBJ("monkey.obj"));
-        models[0].transform = translate(0.0f, 0.0f, 0.0f) * scale(50.0f);
+        models[0].transform = scale(50.0f);
         models[0].offset = 0;
+
+        Camera camera;
+        camera.position.z = 200;
+        camera.position.x = 10;
+        camera.position.y = 0;
+        camera.pitch = 0.1f;
 
         while (isRunning)
         {
@@ -884,7 +952,7 @@ int CALLBACK WinMain(
             {
                 for (uint32_t i = 0; i < model.triangleCount; i++)
                 {
-                    DrawTriangle(indicesObj[model.offset + i * 3 + 0], indicesObj[model.offset + i * 3 + 1], indicesObj[model.offset + i * 3 + 2], model.transform * rotateY(static_cast<float>(M_PI)));
+                    DrawTriangle(indicesObj[model.offset + i * 3 + 0], indicesObj[model.offset + i * 3 + 1], indicesObj[model.offset + i * 3 + 2], view(camera) * model.transform);
                 }
             }
 
