@@ -88,7 +88,7 @@ struct Camera
     float pitch = 0.0f; // around x while at 0
     float yaw = 0.0f; // around z while at 0
 
-    Vec up;
+    Vec forward;
     Vec left;
 };
 
@@ -462,6 +462,14 @@ Matrix view(const Camera& camera)
     Matrix rPitch = transpose(rotateX(camera.pitch));
 
     return rYaw * rPitch * rTranslate;
+}
+
+Matrix cam(const Camera& camera)
+{
+    Matrix rYaw = rotateY(camera.yaw);
+    Matrix rPitch = rotateX(camera.pitch);
+
+    return rPitch * rYaw;
 }
 
 struct Vert
@@ -847,6 +855,18 @@ Model LoadOBJ(const char* fileName)
     return model;
 }
 
+static bool KeyDown[256];
+
+static uint8_t WKey = 87;
+static uint8_t AKey = 65;
+static uint8_t SKey = 83;
+static uint8_t DKey = 68;
+
+static uint8_t UpKey = 38;
+static uint8_t LeftKey = 37;
+static uint8_t DownKey = 40;
+static uint8_t RightKey = 39;
+
 LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
     switch (uMsg)
@@ -862,6 +882,18 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
     case WM_DESTROY:
     {
         PostQuitMessage(0);
+        break;
+    }
+    case WM_KEYDOWN:
+    {
+        uint8_t code = static_cast<uint8_t>(wParam);
+        KeyDown[code] = true;
+        break;
+    }
+    case WM_KEYUP:
+    {
+        uint8_t code = static_cast<uint8_t>(wParam);
+        KeyDown[code] = false;
         break;
     }
     }
@@ -925,7 +957,12 @@ int CALLBACK WinMain(
         camera.position.z = 200;
         camera.position.x = 10;
         camera.position.y = 0;
-        camera.pitch = 0.1f;
+
+        camera.pitch = 0.0f;
+        camera.yaw = 0.0f;
+
+        camera.forward = Vec{ 0.0f, 0.0f, -10.0f, 0.0f };
+        camera.left = Vec{ -10.0f, 0.0f, 0.0f, 0.0f };
 
         while (isRunning)
         {
@@ -944,6 +981,65 @@ int CALLBACK WinMain(
                     TranslateMessage(&message);
                     DispatchMessageW(&message);
                 }
+            }
+
+            Vec forward = cam(camera) * camera.forward;
+            Vec left = cam(camera) * camera.left;
+
+            if (KeyDown[UpKey])
+            {
+                camera.pitch -= 0.1f;
+                if (camera.pitch < 0)
+                {
+                    camera.pitch += static_cast<float>(M_PI) * 2;
+                }
+            }
+
+            if (KeyDown[DownKey])
+            {
+                camera.pitch += 0.1f;
+                if (camera.pitch > static_cast<float>(M_PI) * 2)
+                {
+                    camera.pitch -= static_cast<float>(M_PI) * 2;
+                }
+            }
+
+            if (KeyDown[RightKey])
+            {
+                camera.yaw -= 0.1f;
+                if (camera.yaw < 0)
+                {
+                    camera.yaw += static_cast<float>(M_PI) * 2;
+                }
+            }
+
+            if (KeyDown[LeftKey])
+            {
+                camera.yaw += 0.1f;
+                if (camera.yaw > static_cast<float>(M_PI) * 2)
+                {
+                    camera.yaw -= static_cast<float>(M_PI) * 2;
+                }
+            }
+
+            if (KeyDown[WKey]) 
+            {
+                camera.position = camera.position + forward;
+            }
+
+            if (KeyDown[AKey])
+            {
+                camera.position = camera.position + left;
+            }
+
+            if (KeyDown[SKey])
+            {
+                camera.position = camera.position - forward;
+            }
+
+            if (KeyDown[DKey])
+            {
+                camera.position = camera.position - left;
             }
 
             ClearScreen(Color::Black);
