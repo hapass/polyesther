@@ -19,7 +19,6 @@
 #include "stb_image.h"
 
 /*
-* Free camera flight.
 * Lighting.
 * Refactoring.
 * Optimization.
@@ -461,7 +460,7 @@ Matrix view(const Camera& camera)
     Matrix rYaw = transpose(rotateY(camera.yaw));
     Matrix rPitch = transpose(rotateX(camera.pitch));
 
-    return rYaw * rPitch * rTranslate;
+    return rPitch * rYaw * rTranslate;
 }
 
 Matrix cam(const Camera& camera)
@@ -469,7 +468,7 @@ Matrix cam(const Camera& camera)
     Matrix rYaw = rotateY(camera.yaw);
     Matrix rPitch = rotateX(camera.pitch);
 
-    return rPitch * rYaw;
+    return rYaw * rPitch;
 }
 
 struct Vert
