@@ -55,8 +55,10 @@ struct Matrix
 };
 
 struct Model {
-    uint32_t triangleCount;
-    int32_t offset;
+    uint32_t indices_count;
+    uint32_t vertices_count;
+    uint32_t texture_count;
+
     Matrix transform;
 };
 
@@ -760,12 +762,22 @@ void DrawTriangle(VertIndex a, VertIndex b, VertIndex c, const Matrix& transform
     }
 }
 
-Model LoadOBJ(const char* fileName)
+struct LoadContext
 {
+    uint32_t vertices_offset = 0;
+    uint32_t texture_offset = 0;
+};
+
+Model LoadOBJ(const char* fileName, LoadContext& context)
+{
+    Model model;
+    model.indices_count = 0;
+    model.vertices_count = 0;
+    model.texture_count = 0;
+
     fstream file(fileName);
     string line;
 
-    int currentColor = 0;
     while (getline(file, line))
     {
         stringstream ss(line);
@@ -780,16 +792,10 @@ Model LoadOBJ(const char* fileName)
 
                 if (ss >> x >> y >> z) {
                     verticesObj.push_back({ x, y, z, 1.0f });
+                    colorsObj.push_back({ 1.0f, 1.0f, 1.0f });
 
-                    switch (currentColor)
-                    {
-                    case 0: colorsObj.push_back({ 1.0f, 0.0f, 0.0f }); break;
-                    case 1: colorsObj.push_back({ 0.0f, 1.0f, 0.0f }); break;
-                    case 2: colorsObj.push_back({ 0.0f, 0.0f, 1.0f }); break;
-                    }
-
-                    currentColor++;
-                    currentColor %= 3;
+                    // colors and vertices are assumed to have the same count
+                    model.vertices_count++;
                 }
             }
             else if (primitive_type == "vt") 
@@ -800,6 +806,7 @@ Model LoadOBJ(const char* fileName)
                 if (ss >> u >> v) {
                     textureX.push_back(u);
                     textureY.push_back(v);
+                    model.texture_count++;
                 }
             }
             else if (primitive_type == "f") 
@@ -823,7 +830,7 @@ Model LoadOBJ(const char* fileName)
                     uint32_t normal_index;
                     v >> normal_index;
 
-                    vertIndices.push_back({ vert_index - 1, texture_index - 1 });
+                    vertIndices.push_back({ context.vertices_offset + vert_index - 1, context.texture_offset + texture_index - 1 });
                 }
 
                 if (vertIndices.size() == 3)
@@ -831,6 +838,7 @@ Model LoadOBJ(const char* fileName)
                     indicesObj.push_back(vertIndices[0]);
                     indicesObj.push_back(vertIndices[1]);
                     indicesObj.push_back(vertIndices[2]);
+                    model.indices_count += 3;
                 }
                 else if (vertIndices.size() == 4)
                 {
@@ -840,6 +848,7 @@ Model LoadOBJ(const char* fileName)
                     indicesObj.push_back(vertIndices[0]);
                     indicesObj.push_back(vertIndices[2]);
                     indicesObj.push_back(vertIndices[3]);
+                    model.indices_count += 6;
                 }
                 else
                 {
@@ -849,8 +858,9 @@ Model LoadOBJ(const char* fileName)
         }
     }
 
-    Model model;
-    model.triangleCount = indicesObj.size() / 3;
+    context.texture_offset += model.texture_count;
+    context.vertices_offset += model.vertices_count;
+
     return model;
 }
 
@@ -947,10 +957,15 @@ int CALLBACK WinMain(
 
         auto frameExpectedTime = chrono::milliseconds(1000 / FPS);
 
+        LoadContext context;
+
         // init model
-        models.push_back(LoadOBJ("monkey.obj"));
+        models.push_back(LoadOBJ("monkey.obj", context));
         models[0].transform = scale(50.0f);
-        models[0].offset = 0;
+
+        // init light
+        models.push_back(LoadOBJ("cube.obj", context));
+        models[1].transform = translate(100.0f, 100.0f, 100.0f) * scale(10.0f);
 
         Camera camera;
         camera.position.z = 200;
@@ -1043,12 +1058,14 @@ int CALLBACK WinMain(
 
             ClearScreen(Color::Black);
 
+            int32_t indices_offset = 0;
             for (const Model& model : models)
             {
-                for (uint32_t i = 0; i < model.triangleCount; i++)
+                for (uint32_t i = 0; i < model.indices_count / 3; i++)
                 {
-                    DrawTriangle(indicesObj[model.offset + i * 3 + 0], indicesObj[model.offset + i * 3 + 1], indicesObj[model.offset + i * 3 + 2], view(camera) * model.transform);
+                    DrawTriangle(indicesObj[indices_offset + i * 3 + 0], indicesObj[indices_offset + i * 3 + 1], indicesObj[indices_offset + i * 3 + 2], view(camera) * model.transform);
                 }
+                indices_offset += model.indices_count;
             }
 
             //swap buffers
