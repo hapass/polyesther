@@ -127,14 +127,17 @@ void DebugOut(const wchar_t* fmt, ...)
 
 struct Color
 {
-    Color(uint8_t r, uint8_t g, uint8_t b): rgb(0u)
+    Color(uint8_t r, uint8_t g, uint8_t b) : rgb(0u), rgb_vec { r / 255.0f, g / 255.0f, b / 255.0f, 0.0f }
     {
         rgb |= r << 16;
         rgb |= g << 8;
         rgb |= b << 0;
     }
 
+    const Vec& GetVec() { return rgb_vec; }
+
     uint32_t rgb;
+    Vec rgb_vec;
 
     static Color Black;
     static Color White;
@@ -146,8 +149,12 @@ Color Color::White = Color(255u, 255u, 255u);
 struct Light
 {
     Vec position;
+
+    float ambientStrength = 0.1f;
     Color color = Color::White;
 };
+
+static Light light;
 
 void DrawPixel(int32_t x, int32_t y, Color color)
 {
@@ -599,13 +606,20 @@ void DrawTrianglePart(Edge& minMax, Edge& other, bool isSecondPart = false)
 
             int32_t texelBase = textureY * TextureWidth * 3 + textureX * 3;
 
+            // Can still crash if we fly into light cube. Out of bounds: textureY - 867. Need to investigate :(
             uint8_t textureRed = Texture[texelBase];
             uint8_t textureGreen = Texture[texelBase + 1];
             uint8_t textureBlue = Texture[texelBase + 2];
 
-            float red = tintRed * textureRed;
-            float green = tintGreen * textureGreen;
-            float blue = tintBlue * textureBlue;
+            Vec ambient = Vec {
+                light.ambientStrength * light.color.GetVec().x,
+                light.ambientStrength * light.color.GetVec().y, 
+                light.ambientStrength * light.color.GetVec().z
+            };
+
+            float red = tintRed * textureRed * ambient.x;
+            float green = tintGreen * textureGreen * ambient.y;
+            float blue = tintBlue * textureBlue * ambient.z;
 
             DrawPixel(x, y, Color(
                 static_cast<uint8_t>(red), 
@@ -979,7 +993,6 @@ int CALLBACK WinMain(
         // init light
         models.push_back(LoadOBJ("cube.obj", context));
         models[1].scale = 10.0f;
-        models[1].position = Vec{ 100.0f, 100.0f, 100.0f, 1.0f };
 
         Camera camera;
         camera.position.z = 200;
@@ -991,6 +1004,8 @@ int CALLBACK WinMain(
 
         camera.forward = Vec{ 0.0f, 0.0f, -10.0f, 0.0f };
         camera.left = Vec{ -10.0f, 0.0f, 0.0f, 0.0f };
+
+        light.position = Vec{ 100.0f, 100.0f, 100.0f, 1.0f };
 
         while (isRunning)
         {
@@ -1070,6 +1085,9 @@ int CALLBACK WinMain(
                 camera.position = camera.position - left;
             }
 
+            // visualize light at the right position
+            models[1].position = light.position;
+
             ClearScreen(Color::Black);
 
             int32_t indices_offset = 0;
@@ -1082,7 +1100,7 @@ int CALLBACK WinMain(
                 indices_offset += model.indices_count;
             }
 
-            //swap buffers
+            // swap buffers
             StretchDIBits(
                 screenContext,
                 0,
