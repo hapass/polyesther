@@ -54,14 +54,6 @@ struct Matrix
     float m[16U];
 };
 
-struct Model {
-    uint32_t indices_count;
-    uint32_t vertices_count;
-    uint32_t texture_count;
-
-    Matrix transform;
-};
-
 struct Vec
 {
     float x = 0.0f;
@@ -81,6 +73,15 @@ struct Vec
         }
         return w;
     }
+};
+
+struct Model {
+    uint32_t indices_count;
+    uint32_t vertices_count;
+    uint32_t texture_count;
+
+    Vec position;
+    float scale;
 };
 
 struct Camera
@@ -141,6 +142,12 @@ struct Color
 
 Color Color::Black = Color(0u, 0u, 0u);
 Color Color::White = Color(255u, 255u, 255u);
+
+struct Light
+{
+    Vec position;
+    Color color = Color::White;
+};
 
 void DrawPixel(int32_t x, int32_t y, Color color)
 {
@@ -463,6 +470,11 @@ Matrix view(const Camera& camera)
     Matrix rPitch = transpose(rotateX(camera.pitch));
 
     return rPitch * rYaw * rTranslate;
+}
+
+Matrix modelMat(const Model& model)
+{
+    return translate(model.position.x, model.position.y, model.position.z) * scale(model.scale);
 }
 
 Matrix cam(const Camera& camera)
@@ -961,11 +973,13 @@ int CALLBACK WinMain(
 
         // init model
         models.push_back(LoadOBJ("monkey.obj", context));
-        models[0].transform = scale(50.0f);
+        models[0].scale = 50.0f;
+        models[0].position = Vec { 0.0f, 0.0f, 0.0f, 1.0f };
 
         // init light
         models.push_back(LoadOBJ("cube.obj", context));
-        models[1].transform = translate(100.0f, 100.0f, 100.0f) * scale(10.0f);
+        models[1].scale = 10.0f;
+        models[1].position = Vec{ 100.0f, 100.0f, 100.0f, 1.0f };
 
         Camera camera;
         camera.position.z = 200;
@@ -1063,7 +1077,7 @@ int CALLBACK WinMain(
             {
                 for (uint32_t i = 0; i < model.indices_count / 3; i++)
                 {
-                    DrawTriangle(indicesObj[indices_offset + i * 3 + 0], indicesObj[indices_offset + i * 3 + 1], indicesObj[indices_offset + i * 3 + 2], view(camera) * model.transform);
+                    DrawTriangle(indicesObj[indices_offset + i * 3 + 0], indicesObj[indices_offset + i * 3 + 1], indicesObj[indices_offset + i * 3 + 2], view(camera) * modelMat(model));
                 }
                 indices_offset += model.indices_count;
             }
