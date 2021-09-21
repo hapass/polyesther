@@ -79,6 +79,7 @@ struct Model {
     uint32_t indices_count;
     uint32_t vertices_count;
     uint32_t texture_count;
+    uint32_t normal_count;
 
     Vec position;
     float scale;
@@ -98,9 +99,11 @@ struct VertIndex
 {
     uint32_t vert;
     uint32_t text;
+    uint32_t norm;
 };
 
 static std::vector<Vec> verticesObj;
+static std::vector<Vec> normalsObj;
 static std::vector<float> textureX;
 static std::vector<float> textureY;
 static std::vector<VertIndex> indicesObj;
@@ -310,7 +313,7 @@ Matrix perspective()
 {
     float farPlane = Far;
     float nearPlane = Near;
-    float halfFieldOfView = 30 * (static_cast<float>(M_PI) / 180);
+    float halfFieldOfView = 25 * (static_cast<float>(M_PI) / 180);
     float aspect = static_cast<float>(WindowWidth) / static_cast<float>(WindowHeight);
 
     Matrix m;
@@ -597,9 +600,15 @@ void DrawTrianglePart(Edge& minMax, Edge& other, bool isSecondPart = false)
                 continue;
             }
 
+
+
             float tintRed = interpolants_raw[0] * (1.0f / interpolants_raw[5]);
             float tintGreen = interpolants_raw[1] * (1.0f / interpolants_raw[5]);
             float tintBlue = interpolants_raw[2] * (1.0f / interpolants_raw[5]);
+
+            float normalX = interpolants_raw[7] * (1.0f / interpolants_raw[5]);
+            float normalY = interpolants_raw[8] * (1.0f / interpolants_raw[5]);
+            float normalZ = interpolants_raw[9] * (1.0f / interpolants_raw[5]);
 
             int32_t textureX = static_cast<int32_t>(interpolants_raw[3] * (1.0f / interpolants_raw[5]) * TextureWidth);
             int32_t textureY = static_cast<int32_t>(interpolants_raw[4] * (1.0f / interpolants_raw[5]) * TextureHeight);
@@ -633,6 +642,7 @@ void DrawTrianglePart(Edge& minMax, Edge& other, bool isSecondPart = false)
 struct Vector
 {
     Vec v;
+    Vec normal;
     float textureX;
     float textureY;
     float red;
@@ -657,7 +667,16 @@ Vector Lerp(const Vector& begin, const Vector& end, float lerpAmount)
     result.red = Lerp(begin.red, end.red, lerpAmount);
     result.green = Lerp(begin.green, end.green, lerpAmount);
     result.blue = Lerp(begin.blue, end.blue, lerpAmount);
+    result.normal.x = Lerp(begin.normal.x, end.normal.x, lerpAmount);
+    result.normal.y = Lerp(begin.normal.y, end.normal.y, lerpAmount);
+    result.normal.z = Lerp(begin.normal.z, end.normal.z, lerpAmount);
+    result.normal.w = Lerp(begin.normal.w, end.normal.w, lerpAmount);
     return result;
+}
+
+Interpolant GetInterpolant(std::vector<Vector>& vertices, float c1, float c2, float c3)
+{
+    return Interpolant({ vertices[0].v.x, vertices[0].v.y, c1 / vertices[0].v.w }, { vertices[1].v.x, vertices[1].v.y, c2 / vertices[1].v.w }, { vertices[2].v.x, vertices[2].v.y, c3 / vertices[2].v.w });
 }
 
 void DrawRawTriangle(std::vector<Vector>& vertices)
@@ -686,17 +705,25 @@ void DrawRawTriangle(std::vector<Vector>& vertices)
         v.v.y = (GameHeight - 1) * ((v.v.y + 1) / 2.0f);
     }
 
-    Interpolant red({ vertices[0].v.x, vertices[0].v.y, vertices[0].red / vertices[0].v.w }, { vertices[1].v.x, vertices[1].v.y, vertices[1].red / vertices[1].v.w }, { vertices[2].v.x, vertices[2].v.y, vertices[2].red / vertices[2].v.w });
-    Interpolant green({ vertices[0].v.x, vertices[0].v.y, vertices[0].green / vertices[0].v.w }, { vertices[1].v.x, vertices[1].v.y, vertices[1].green / vertices[1].v.w }, { vertices[2].v.x, vertices[2].v.y, vertices[2].green / vertices[2].v.w });
-    Interpolant blue({ vertices[0].v.x, vertices[0].v.y, vertices[0].blue / vertices[0].v.w }, { vertices[1].v.x, vertices[1].v.y, vertices[1].blue / vertices[1].v.w }, { vertices[2].v.x, vertices[2].v.y, vertices[2].blue / vertices[2].v.w });
-
-    Interpolant xTexture({ vertices[0].v.x, vertices[0].v.y, vertices[0].textureX / vertices[0].v.w }, { vertices[1].v.x, vertices[1].v.y, vertices[1].textureX / vertices[1].v.w }, { vertices[2].v.x, vertices[2].v.y, vertices[2].textureX / vertices[2].v.w });
-    Interpolant yTexture({ vertices[0].v.x, vertices[0].v.y, vertices[0].textureY / vertices[0].v.w }, { vertices[1].v.x, vertices[1].v.y, vertices[1].textureY / vertices[1].v.w }, { vertices[2].v.x, vertices[2].v.y, vertices[2].textureY / vertices[2].v.w });
-
-    Interpolant oneOverW({ vertices[0].v.x, vertices[0].v.y, 1.0f / vertices[0].v.w }, { vertices[1].v.x, vertices[1].v.y, 1.0f / vertices[1].v.w }, { vertices[2].v.x, vertices[2].v.y, 1.0f / vertices[2].v.w });
+    // No division by w, because it is already divided by w.
     Interpolant z({ vertices[0].v.x, vertices[0].v.y, vertices[0].v.z }, { vertices[1].v.x, vertices[1].v.y, vertices[1].v.z }, { vertices[2].v.x, vertices[2].v.y, vertices[2].v.z });
 
-    std::vector<Interpolant> interpolants{ red, green, blue, xTexture, yTexture, oneOverW, z };
+    Interpolant red = GetInterpolant(vertices, vertices[0].red, vertices[1].red, vertices[2].red);
+    Interpolant green = GetInterpolant(vertices, vertices[0].green, vertices[1].green, vertices[2].green);
+    Interpolant blue = GetInterpolant(vertices, vertices[0].blue, vertices[1].blue, vertices[2].blue);
+
+    Interpolant xTexture = GetInterpolant(vertices, vertices[0].textureX, vertices[1].textureX, vertices[2].textureX);
+    Interpolant yTexture = GetInterpolant(vertices, vertices[0].textureY, vertices[1].textureY, vertices[2].textureY);
+
+    Interpolant oneOverW = GetInterpolant(vertices, 1.0f, 1.0f, 1.0f);
+
+    Interpolant xNormal = GetInterpolant(vertices, vertices[0].normal.x, vertices[1].normal.x, vertices[2].normal.x);
+    Interpolant yNormal = GetInterpolant(vertices, vertices[0].normal.y, vertices[1].normal.y, vertices[2].normal.y);
+    Interpolant zNormal = GetInterpolant(vertices, vertices[0].normal.z, vertices[1].normal.z, vertices[2].normal.z);
+
+    //TODO.PAVELZA: interpolate viewspace coords?
+
+    std::vector<Interpolant> interpolants{ red, green, blue, xTexture, yTexture, oneOverW, z, xNormal, yNormal, zNormal };
 
     Edge minMax(vertices[0].v, vertices[2].v, interpolants, true);
     Edge minMiddle(vertices[0].v, vertices[1].v, interpolants, true);
@@ -757,14 +784,43 @@ void DrawTriangle(VertIndex a, VertIndex b, VertIndex c, const Matrix& transform
 {
     std::vector<Vector> vertices 
     {
-      Vector { Vec { verticesObj[a.vert].x, verticesObj[a.vert].y, verticesObj[a.vert].z, verticesObj[a.vert].w }, textureX[a.text], textureY[a.text], colorsObj[a.vert].x, colorsObj[a.vert].y, colorsObj[a.vert].z },
-      Vector { Vec { verticesObj[b.vert].x, verticesObj[b.vert].y, verticesObj[b.vert].z, verticesObj[b.vert].w }, textureX[b.text], textureY[b.text], colorsObj[b.vert].x, colorsObj[b.vert].y, colorsObj[b.vert].z },
-      Vector { Vec { verticesObj[c.vert].x, verticesObj[c.vert].y, verticesObj[c.vert].z, verticesObj[c.vert].w }, textureX[c.text], textureY[c.text], colorsObj[c.vert].x, colorsObj[c.vert].y, colorsObj[c.vert].z }
+        Vector 
+        {
+            Vec { verticesObj[a.vert].x, verticesObj[a.vert].y, verticesObj[a.vert].z, verticesObj[a.vert].w },
+            Vec {  normalsObj[a.norm].x,  normalsObj[a.norm].y,  normalsObj[a.norm].z,  normalsObj[a.norm].w },
+            textureX[a.text],
+            textureY[a.text],
+            colorsObj[a.vert].x,
+            colorsObj[a.vert].y,
+            colorsObj[a.vert].z 
+        },
+        Vector 
+        {
+            Vec { verticesObj[b.vert].x, verticesObj[b.vert].y, verticesObj[b.vert].z, verticesObj[b.vert].w },
+            Vec {  normalsObj[b.norm].x,  normalsObj[b.norm].y,  normalsObj[b.norm].z,  normalsObj[b.norm].w },
+            textureX[b.text],
+            textureY[b.text],
+            colorsObj[b.vert].x,
+            colorsObj[b.vert].y,
+            colorsObj[b.vert].z
+        },
+        Vector 
+        {
+            Vec { verticesObj[c.vert].x, verticesObj[c.vert].y, verticesObj[c.vert].z, verticesObj[c.vert].w },
+            Vec {  normalsObj[c.norm].x,  normalsObj[c.norm].y,  normalsObj[c.norm].z,  normalsObj[c.norm].w },
+            textureX[c.text],
+            textureY[c.text],
+            colorsObj[c.vert].x,
+            colorsObj[c.vert].y,
+            colorsObj[c.vert].z
+        }
     };
 
     for (Vector& v : vertices)
     {
         v.v = perspective() * transform * v.v;
+        // This is possible because we do not do non-uniform scale in transform.
+        v.normal = transform * v.normal;
     }
 
     // TODO.PAVELZA: If all the points are outside of the view frustum - we can cull immediately.
@@ -792,6 +848,7 @@ struct LoadContext
 {
     uint32_t vertices_offset = 0;
     uint32_t texture_offset = 0;
+    uint32_t normal_offset = 0;
 };
 
 Model LoadOBJ(const char* fileName, LoadContext& context)
@@ -810,21 +867,30 @@ Model LoadOBJ(const char* fileName, LoadContext& context)
         string primitive_type;
         if (ss >> primitive_type) 
         {
-            if (primitive_type == "v") 
+            if (primitive_type == "v" || primitive_type == "vn")
             {
                 float x = 0.0f;
                 float y = 0.0f;
                 float z = 0.0f;
 
                 if (ss >> x >> y >> z) {
-                    verticesObj.push_back({ x, y, z, 1.0f });
-                    colorsObj.push_back({ 1.0f, 1.0f, 1.0f });
 
-                    // colors and vertices are assumed to have the same count
-                    model.vertices_count++;
+                    if (primitive_type == "v")
+                    {
+                        verticesObj.push_back({ x, y, z, 1.0f });
+                        colorsObj.push_back({ 1.0f, 1.0f, 1.0f });
+
+                        // colors and vertices are assumed to have the same count
+                        model.vertices_count++;
+                    }
+                    else
+                    {
+                        normalsObj.push_back({ x, y, z, 0.0f });
+                        model.normal_count++;
+                    }
                 }
             }
-            else if (primitive_type == "vt") 
+            else if (primitive_type == "vt")
             {
                 float u = 0.0f;
                 float v = 0.0f;
@@ -856,7 +922,7 @@ Model LoadOBJ(const char* fileName, LoadContext& context)
                     uint32_t normal_index;
                     v >> normal_index;
 
-                    vertIndices.push_back({ context.vertices_offset + vert_index - 1, context.texture_offset + texture_index - 1 });
+                    vertIndices.push_back({ context.vertices_offset + vert_index - 1, context.texture_offset + texture_index - 1, context.normal_offset + normal_index - 1 });
                 }
 
                 if (vertIndices.size() == 3)
@@ -886,6 +952,7 @@ Model LoadOBJ(const char* fileName, LoadContext& context)
 
     context.texture_offset += model.texture_count;
     context.vertices_offset += model.vertices_count;
+    context.normal_offset += model.normal_count;
 
     return model;
 }
