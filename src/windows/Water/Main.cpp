@@ -857,6 +857,7 @@ Model LoadOBJ(const char* fileName, LoadContext& context)
     model.indices_count = 0;
     model.vertices_count = 0;
     model.texture_count = 0;
+    model.normal_count = 0;
 
     fstream file(fileName);
     string line;
