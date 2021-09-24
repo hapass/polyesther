@@ -19,7 +19,10 @@
 #include "stb_image.h"
 
 /*
-* Lighting.
+* TODO:
+* Add specular.
+* Fix crash described in comments.
+* Fix artifacts from light.
 * Refactoring.
 * Optimization.
 */
@@ -152,6 +155,7 @@ Color Color::White = Color(255u, 255u, 255u);
 struct Light
 {
     Vec position;
+    Vec position_view;
 
     float ambientStrength = 0.1f;
     Color color = Color::White;
@@ -412,6 +416,11 @@ float dot(const Vec& a, const Vec& b)
     return a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w;
 }
 
+Vec operator*(const Vec& a, const Vec& b)
+{
+    return Vec { a.x * b.x, a.y * b.y, a.z * b.z, a.w * b.w };
+}
+
 Vec operator+(const Vec& a, const Vec& b)
 {
     return Vec { a.x + b.x, a.y + b.y, a.z + b.z, a.w + b.w };
@@ -434,6 +443,17 @@ Vec operator*(const Matrix& m, const Vec& v)
     float z = dot(Vec { m.m[8],  m.m[9],  m.m[10], m.m[11] }, v);
     float w = dot(Vec { m.m[12], m.m[13], m.m[14], m.m[15] }, v);
     return Vec { x, y, z, w };
+}
+
+Vec operator*(const Vec& a, float b)
+{
+    return Vec { a.x * b, a.y * b, a.z * b, a.w * b };
+}
+
+Vec normalize(const Vec& v)
+{
+    float norm = sqrt(v.x * v.x + v.y * v.y + v.z * v.z + v.w * v.w);
+    return Vec { v.x / norm, v.y / norm, v.z / norm, v.w / norm };
 }
 
 Matrix operator*(const Matrix& a, const Matrix& b)
@@ -612,6 +632,13 @@ void DrawTrianglePart(Edge& minMax, Edge& other, bool isSecondPart = false)
             float viewY = interpolants_raw[11] * (1.0f / interpolants_raw[5]);
             float viewZ = interpolants_raw[12] * (1.0f / interpolants_raw[5]);
 
+            Vec pos_view{ viewX, viewY, viewZ, 1.0f };
+            Vec normal_vec = normalize({ normalX, normalY, normalZ, 0.0f });
+            Vec light_vec = normalize(light.position_view - pos_view);
+
+            Vec diffuse = light.color.GetVec() * static_cast<float>(max(dot(normal_vec, light_vec), 0.0));
+            Vec ambient = light.color.GetVec() * light.ambientStrength;
+
             int32_t textureX = static_cast<int32_t>(interpolants_raw[3] * (1.0f / interpolants_raw[5]) * TextureWidth);
             int32_t textureY = static_cast<int32_t>(interpolants_raw[4] * (1.0f / interpolants_raw[5]) * TextureHeight);
 
@@ -622,20 +649,13 @@ void DrawTrianglePart(Edge& minMax, Edge& other, bool isSecondPart = false)
             uint8_t textureGreen = Texture[texelBase + 1];
             uint8_t textureBlue = Texture[texelBase + 2];
 
-            Vec ambient = Vec {
-                light.ambientStrength * light.color.GetVec().x,
-                light.ambientStrength * light.color.GetVec().y, 
-                light.ambientStrength * light.color.GetVec().z
-            };
-
-            float red = tintRed * textureRed * ambient.x;
-            float green = tintGreen * textureGreen * ambient.y;
-            float blue = tintBlue * textureBlue * ambient.z;
+            Vec frag_color { tintRed * textureRed, tintGreen * textureGreen, tintBlue * textureBlue, 0.0f };
+            Vec final_color = (diffuse + ambient) * frag_color;
 
             DrawPixel(x, y, Color(
-                static_cast<uint8_t>(red), 
-                static_cast<uint8_t>(green), 
-                static_cast<uint8_t>(blue)
+                static_cast<uint8_t>(final_color.x),
+                static_cast<uint8_t>(final_color.y),
+                static_cast<uint8_t>(final_color.z)
             ));
         }
     }
@@ -1168,6 +1188,9 @@ int CALLBACK WinMain(
 
             // visualize light at the right position
             models[1].position = light.position;
+
+            // calculate light's position in view space
+            light.position_view = view(camera) * modelMat(models[1]) * models[1].position;
 
             ClearScreen(Color::Black);
 
