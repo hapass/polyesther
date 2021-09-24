@@ -600,8 +600,6 @@ void DrawTrianglePart(Edge& minMax, Edge& other, bool isSecondPart = false)
                 continue;
             }
 
-
-
             float tintRed = interpolants_raw[0] * (1.0f / interpolants_raw[5]);
             float tintGreen = interpolants_raw[1] * (1.0f / interpolants_raw[5]);
             float tintBlue = interpolants_raw[2] * (1.0f / interpolants_raw[5]);
@@ -609,6 +607,10 @@ void DrawTrianglePart(Edge& minMax, Edge& other, bool isSecondPart = false)
             float normalX = interpolants_raw[7] * (1.0f / interpolants_raw[5]);
             float normalY = interpolants_raw[8] * (1.0f / interpolants_raw[5]);
             float normalZ = interpolants_raw[9] * (1.0f / interpolants_raw[5]);
+
+            float viewX = interpolants_raw[10] * (1.0f / interpolants_raw[5]);
+            float viewY = interpolants_raw[11] * (1.0f / interpolants_raw[5]);
+            float viewZ = interpolants_raw[12] * (1.0f / interpolants_raw[5]);
 
             int32_t textureX = static_cast<int32_t>(interpolants_raw[3] * (1.0f / interpolants_raw[5]) * TextureWidth);
             int32_t textureY = static_cast<int32_t>(interpolants_raw[4] * (1.0f / interpolants_raw[5]) * TextureHeight);
@@ -641,7 +643,8 @@ void DrawTrianglePart(Edge& minMax, Edge& other, bool isSecondPart = false)
 
 struct Vector
 {
-    Vec v;
+    Vec pos;
+    Vec pos_view;
     Vec normal;
     float textureX;
     float textureY;
@@ -658,10 +661,14 @@ float Lerp(float begin, float end, float lerpAmount)
 Vector Lerp(const Vector& begin, const Vector& end, float lerpAmount)
 {
     Vector result;
-    result.v.x = Lerp(begin.v.x, end.v.x, lerpAmount);
-    result.v.y = Lerp(begin.v.y, end.v.y, lerpAmount);
-    result.v.z = Lerp(begin.v.z, end.v.z, lerpAmount);
-    result.v.w = Lerp(begin.v.w, end.v.w, lerpAmount);
+    result.pos.x = Lerp(begin.pos.x, end.pos.x, lerpAmount);
+    result.pos.y = Lerp(begin.pos.y, end.pos.y, lerpAmount);
+    result.pos.z = Lerp(begin.pos.z, end.pos.z, lerpAmount);
+    result.pos.w = Lerp(begin.pos.w, end.pos.w, lerpAmount);
+    result.pos_view.x = Lerp(begin.pos_view.x, end.pos_view.x, lerpAmount);
+    result.pos_view.y = Lerp(begin.pos_view.y, end.pos_view.y, lerpAmount);
+    result.pos_view.z = Lerp(begin.pos_view.z, end.pos_view.z, lerpAmount);
+    result.pos_view.w = Lerp(begin.pos_view.w, end.pos_view.w, lerpAmount);
     result.textureX = Lerp(begin.textureX, end.textureX, lerpAmount);
     result.textureY = Lerp(begin.textureY, end.textureY, lerpAmount);
     result.red = Lerp(begin.red, end.red, lerpAmount);
@@ -676,7 +683,7 @@ Vector Lerp(const Vector& begin, const Vector& end, float lerpAmount)
 
 Interpolant GetInterpolant(std::vector<Vector>& vertices, float c1, float c2, float c3)
 {
-    return Interpolant({ vertices[0].v.x, vertices[0].v.y, c1 / vertices[0].v.w }, { vertices[1].v.x, vertices[1].v.y, c2 / vertices[1].v.w }, { vertices[2].v.x, vertices[2].v.y, c3 / vertices[2].v.w });
+    return Interpolant({ vertices[0].pos.x, vertices[0].pos.y, c1 / vertices[0].pos.w }, { vertices[1].pos.x, vertices[1].pos.y, c2 / vertices[1].pos.w }, { vertices[2].pos.x, vertices[2].pos.y, c3 / vertices[2].pos.w });
 }
 
 void DrawRawTriangle(std::vector<Vector>& vertices)
@@ -685,28 +692,28 @@ void DrawRawTriangle(std::vector<Vector>& vertices)
 
     for (Vector& v : vertices)
     {
-        v.v.x /= v.v.w;
-        v.v.y /= v.v.w;
-        v.v.z /= v.v.w;
+        v.pos.x /= v.pos.w;
+        v.pos.y /= v.pos.w;
+        v.pos.z /= v.pos.w;
     }
 
     // TODO.PAVELZA: We can do backface culling here.
 
-    std::sort(std::begin(vertices), std::end(vertices), [](const Vector& lhs, const Vector& rhs) { return lhs.v.y < rhs.v.y; });
+    std::sort(std::begin(vertices), std::end(vertices), [](const Vector& lhs, const Vector& rhs) { return lhs.pos.y < rhs.pos.y; });
 
     for (Vector& v : vertices)
     {
         // TODO.PAVELZA: Clipping might result in some vertices being slightly outside of -1 to 1 range, so we clamp. Will need to think how to avoid this.
-        v.v.x = clamp(v.v.x, -1.0f, 1.0f);
-        v.v.y = clamp(v.v.y, -1.0f, 1.0f);
-        v.v.z = clamp(v.v.z, -1.0f, 1.0f);
+        v.pos.x = clamp(v.pos.x, -1.0f, 1.0f);
+        v.pos.y = clamp(v.pos.y, -1.0f, 1.0f);
+        v.pos.z = clamp(v.pos.z, -1.0f, 1.0f);
 
-        v.v.x = (GameWidth - 1) * ((v.v.x + 1) / 2.0f);
-        v.v.y = (GameHeight - 1) * ((v.v.y + 1) / 2.0f);
+        v.pos.x = (GameWidth - 1) * ((v.pos.x + 1) / 2.0f);
+        v.pos.y = (GameHeight - 1) * ((v.pos.y + 1) / 2.0f);
     }
 
     // No division by w, because it is already divided by w.
-    Interpolant z({ vertices[0].v.x, vertices[0].v.y, vertices[0].v.z }, { vertices[1].v.x, vertices[1].v.y, vertices[1].v.z }, { vertices[2].v.x, vertices[2].v.y, vertices[2].v.z });
+    Interpolant z({ vertices[0].pos.x, vertices[0].pos.y, vertices[0].pos.z }, { vertices[1].pos.x, vertices[1].pos.y, vertices[1].pos.z }, { vertices[2].pos.x, vertices[2].pos.y, vertices[2].pos.z });
 
     Interpolant red = GetInterpolant(vertices, vertices[0].red, vertices[1].red, vertices[2].red);
     Interpolant green = GetInterpolant(vertices, vertices[0].green, vertices[1].green, vertices[2].green);
@@ -721,13 +728,15 @@ void DrawRawTriangle(std::vector<Vector>& vertices)
     Interpolant yNormal = GetInterpolant(vertices, vertices[0].normal.y, vertices[1].normal.y, vertices[2].normal.y);
     Interpolant zNormal = GetInterpolant(vertices, vertices[0].normal.z, vertices[1].normal.z, vertices[2].normal.z);
 
-    //TODO.PAVELZA: interpolate viewspace coords?
+    Interpolant xView = GetInterpolant(vertices, vertices[0].pos_view.x, vertices[1].pos_view.x, vertices[2].pos_view.x);
+    Interpolant yView = GetInterpolant(vertices, vertices[0].pos_view.y, vertices[1].pos_view.y, vertices[2].pos_view.y);
+    Interpolant zView = GetInterpolant(vertices, vertices[0].pos_view.z, vertices[1].pos_view.z, vertices[2].pos_view.z);
 
-    std::vector<Interpolant> interpolants{ red, green, blue, xTexture, yTexture, oneOverW, z, xNormal, yNormal, zNormal };
+    std::vector<Interpolant> interpolants { red, green, blue, xTexture, yTexture, oneOverW, z, xNormal, yNormal, zNormal, xView, yView, zView };
 
-    Edge minMax(vertices[0].v, vertices[2].v, interpolants, true);
-    Edge minMiddle(vertices[0].v, vertices[1].v, interpolants, true);
-    Edge middleMax(vertices[1].v, vertices[2].v, interpolants, false);
+    Edge minMax(vertices[0].pos, vertices[2].pos, interpolants, true);
+    Edge minMiddle(vertices[0].pos, vertices[1].pos, interpolants, true);
+    Edge middleMax(vertices[1].pos, vertices[2].pos, interpolants, false);
 
     DrawTrianglePart(minMax, minMiddle);
     DrawTrianglePart(minMax, middleMax, true);
@@ -735,7 +744,7 @@ void DrawRawTriangle(std::vector<Vector>& vertices)
 
 bool IsPointInside(const Vector& point, int32_t axis, int32_t plane)
 {    
-    return point.v.Get(axis) * plane <= point.v.w;
+    return point.pos.Get(axis) * plane <= point.pos.w;
 }
 
 void ClipTrianglePlane(std::vector<Vector>& vertices, int32_t axis, int32_t plane)
@@ -750,8 +759,8 @@ void ClipTrianglePlane(std::vector<Vector>& vertices, int32_t axis, int32_t plan
 
         if (isPreviousInside != isCurrentInside)
         {
-            float k = (vertices[previousElement].v.w - vertices[previousElement].v.Get(axis) * plane);
-            float lerpAmount = k / (k - vertices[currentElement].v.w + vertices[currentElement].v.Get(axis) * plane);
+            float k = (vertices[previousElement].pos.w - vertices[previousElement].pos.Get(axis) * plane);
+            float lerpAmount = k / (k - vertices[currentElement].pos.w + vertices[currentElement].pos.Get(axis) * plane);
             result.push_back(Lerp(vertices[previousElement], vertices[currentElement], lerpAmount));
         }
 
@@ -787,6 +796,7 @@ void DrawTriangle(VertIndex a, VertIndex b, VertIndex c, const Matrix& transform
         Vector 
         {
             Vec { verticesObj[a.vert].x, verticesObj[a.vert].y, verticesObj[a.vert].z, verticesObj[a.vert].w },
+            Vec { verticesObj[a.vert].x, verticesObj[a.vert].y, verticesObj[a.vert].z, verticesObj[a.vert].w },
             Vec {  normalsObj[a.norm].x,  normalsObj[a.norm].y,  normalsObj[a.norm].z,  normalsObj[a.norm].w },
             textureX[a.text],
             textureY[a.text],
@@ -797,6 +807,7 @@ void DrawTriangle(VertIndex a, VertIndex b, VertIndex c, const Matrix& transform
         Vector 
         {
             Vec { verticesObj[b.vert].x, verticesObj[b.vert].y, verticesObj[b.vert].z, verticesObj[b.vert].w },
+            Vec { verticesObj[b.vert].x, verticesObj[b.vert].y, verticesObj[b.vert].z, verticesObj[b.vert].w },
             Vec {  normalsObj[b.norm].x,  normalsObj[b.norm].y,  normalsObj[b.norm].z,  normalsObj[b.norm].w },
             textureX[b.text],
             textureY[b.text],
@@ -806,6 +817,7 @@ void DrawTriangle(VertIndex a, VertIndex b, VertIndex c, const Matrix& transform
         },
         Vector 
         {
+            Vec { verticesObj[c.vert].x, verticesObj[c.vert].y, verticesObj[c.vert].z, verticesObj[c.vert].w },
             Vec { verticesObj[c.vert].x, verticesObj[c.vert].y, verticesObj[c.vert].z, verticesObj[c.vert].w },
             Vec {  normalsObj[c.norm].x,  normalsObj[c.norm].y,  normalsObj[c.norm].z,  normalsObj[c.norm].w },
             textureX[c.text],
@@ -818,7 +830,8 @@ void DrawTriangle(VertIndex a, VertIndex b, VertIndex c, const Matrix& transform
 
     for (Vector& v : vertices)
     {
-        v.v = perspective() * transform * v.v;
+        v.pos = perspective() * transform * v.pos;
+        v.pos_view = transform * v.pos_view;
         // This is possible because we do not do non-uniform scale in transform.
         v.normal = transform * v.normal;
     }
