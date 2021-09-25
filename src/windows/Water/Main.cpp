@@ -21,8 +21,6 @@
 /*
 * TODO:
 * Add specular.
-* Fix crash described in comments.
-* Fix artifacts from light.
 * Refactoring.
 * Optimization.
 */
@@ -43,6 +41,8 @@ static float* ZBuffer;
 static int32_t TextureWidth;
 static int32_t TextureHeight;
 static uint8_t* Texture;
+
+static uint32_t CurrentModelIndex = 0;
 
 struct Matrix
 {
@@ -147,10 +147,16 @@ struct Color
 
     static Color Black;
     static Color White;
+    static Color Red;
+    static Color Green;
+    static Color Blue;
 };
 
 Color Color::Black = Color(0u, 0u, 0u);
 Color Color::White = Color(255u, 255u, 255u);
+Color Color::Red = Color(255u, 0u, 0u);
+Color Color::Green = Color(0u, 255u, 0u);
+Color Color::Blue = Color(0u, 0u, 255u);
 
 struct Light
 {
@@ -632,7 +638,7 @@ void DrawTrianglePart(Edge& minMax, Edge& other, bool isSecondPart = false)
             float viewY = interpolants_raw[11] * (1.0f / interpolants_raw[5]);
             float viewZ = interpolants_raw[12] * (1.0f / interpolants_raw[5]);
 
-            Vec pos_view{ viewX, viewY, viewZ, 1.0f };
+            Vec pos_view { viewX, viewY, viewZ, 1.0f };
             Vec normal_vec = normalize({ normalX, normalY, normalZ, 0.0f });
             Vec light_vec = normalize(light.position_view - pos_view);
 
@@ -647,17 +653,17 @@ void DrawTrianglePart(Edge& minMax, Edge& other, bool isSecondPart = false)
             assert(textureY < TextureHeight&& textureX < TextureWidth);
             int32_t texelBase = textureY * TextureWidth * 3 + textureX * 3;
 
-            uint8_t textureRed = Texture[texelBase];
-            uint8_t textureGreen = Texture[texelBase + 1];
-            uint8_t textureBlue = Texture[texelBase + 2];
-
-            Vec frag_color { tintRed * textureRed, tintGreen * textureGreen, tintBlue * textureBlue, 0.0f };
-            Vec final_color = (diffuse + ambient) * frag_color;
+            Color texture_color(Texture[texelBase], Texture[texelBase + 1], Texture[texelBase + 2]);
+            
+            // Assuming 1 is model for light.
+            Vec frag_color = CurrentModelIndex == 1 ? Vec{ tintRed, tintGreen, tintBlue } : texture_color.GetVec();
+            Vec final_color = CurrentModelIndex == 1 ? frag_color : (diffuse + ambient) * frag_color;
+            final_color = final_color * 255.0f;
 
             DrawPixel(x, y, Color(
-                static_cast<uint8_t>(final_color.x),
-                static_cast<uint8_t>(final_color.y),
-                static_cast<uint8_t>(final_color.z)
+                static_cast<uint8_t>(min(final_color.x, 255.0f)),
+                static_cast<uint8_t>(min(final_color.y, 255.0f)),
+                static_cast<uint8_t>(min(final_color.z, 255.0f))
             ));
         }
     }
@@ -886,6 +892,8 @@ struct LoadContext
     uint32_t normal_offset = 0;
 };
 
+static Color tint = Color::White;
+
 Model LoadOBJ(const char* fileName, LoadContext& context)
 {
     Model model;
@@ -914,7 +922,7 @@ Model LoadOBJ(const char* fileName, LoadContext& context)
                     if (primitive_type == "v")
                     {
                         verticesObj.push_back({ x, y, z, 1.0f });
-                        colorsObj.push_back({ 1.0f, 1.0f, 1.0f });
+                        colorsObj.push_back(tint.GetVec());
 
                         // colors and vertices are assumed to have the same count
                         model.vertices_count++;
@@ -1197,8 +1205,10 @@ int CALLBACK WinMain(
             ClearScreen(Color::Black);
 
             int32_t indices_offset = 0;
-            for (const Model& model : models)
+            for (size_t i = 0; i < models.size(); i++)
             {
+                CurrentModelIndex = i;
+                const Model& model = models.at(i);
                 for (uint32_t i = 0; i < model.indices_count / 3; i++)
                 {
                     DrawTriangle(indicesObj[indices_offset + i * 3 + 0], indicesObj[indices_offset + i * 3 + 1], indicesObj[indices_offset + i * 3 + 2], view(camera) * modelMat(model));
