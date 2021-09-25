@@ -639,12 +639,14 @@ void DrawTrianglePart(Edge& minMax, Edge& other, bool isSecondPart = false)
             Vec diffuse = light.color.GetVec() * static_cast<float>(max(dot(normal_vec, light_vec), 0.0));
             Vec ambient = light.color.GetVec() * light.ambientStrength;
 
-            int32_t textureX = static_cast<int32_t>(interpolants_raw[3] * (1.0f / interpolants_raw[5]) * TextureWidth);
-            int32_t textureY = static_cast<int32_t>(interpolants_raw[4] * (1.0f / interpolants_raw[5]) * TextureHeight);
+            // From 0 to TextureWidth - 1 (TextureWidth pixels in total)
+            int32_t textureX = static_cast<int32_t>(interpolants_raw[3] * (1.0f / interpolants_raw[5]) * (TextureWidth - 1));
+            // From 0 to TextureHeight - 1 (TextureHeight pixels in total)
+            int32_t textureY = static_cast<int32_t>(interpolants_raw[4] * (1.0f / interpolants_raw[5]) * (TextureHeight - 1));
 
+            assert(textureY < TextureHeight&& textureX < TextureWidth);
             int32_t texelBase = textureY * TextureWidth * 3 + textureX * 3;
 
-            // Can still crash if we fly into light cube. Out of bounds: textureY - 867. Need to investigate :(
             uint8_t textureRed = Texture[texelBase];
             uint8_t textureGreen = Texture[texelBase + 1];
             uint8_t textureBlue = Texture[texelBase + 2];
