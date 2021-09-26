@@ -20,7 +20,6 @@
 
 /*
 * TODO:
-* Fix crash on sphere.
 * Refactoring.
 * Optimization.
 */
@@ -651,17 +650,17 @@ void DrawTrianglePart(Edge& minMax, Edge& other, bool isSecondPart = false)
                 continue;
             }
 
-            float tintRed = interpolants_raw[0] * (1.0f / interpolants_raw[5]);
-            float tintGreen = interpolants_raw[1] * (1.0f / interpolants_raw[5]);
-            float tintBlue = interpolants_raw[2] * (1.0f / interpolants_raw[5]);
+            float tintRed = interpolants_raw[0] / interpolants_raw[5];
+            float tintGreen = interpolants_raw[1] / interpolants_raw[5];
+            float tintBlue = interpolants_raw[2] / interpolants_raw[5];
 
-            float normalX = interpolants_raw[7] * (1.0f / interpolants_raw[5]);
-            float normalY = interpolants_raw[8] * (1.0f / interpolants_raw[5]);
-            float normalZ = interpolants_raw[9] * (1.0f / interpolants_raw[5]);
+            float normalX = interpolants_raw[7] / interpolants_raw[5];
+            float normalY = interpolants_raw[8] / interpolants_raw[5];
+            float normalZ = interpolants_raw[9] / interpolants_raw[5];
 
-            float viewX = interpolants_raw[10] * (1.0f / interpolants_raw[5]);
-            float viewY = interpolants_raw[11] * (1.0f / interpolants_raw[5]);
-            float viewZ = interpolants_raw[12] * (1.0f / interpolants_raw[5]);
+            float viewX = interpolants_raw[10] / interpolants_raw[5];
+            float viewY = interpolants_raw[11] / interpolants_raw[5];
+            float viewZ = interpolants_raw[12] / interpolants_raw[5];
 
             Vec pos_view { viewX, viewY, viewZ, 1.0f };
             Vec normal_vec = normalize({ normalX, normalY, normalZ, 0.0f });
@@ -674,9 +673,9 @@ void DrawTrianglePart(Edge& minMax, Edge& other, bool isSecondPart = false)
             Vec specular = light.color.GetVec() * pow(specAmount, light.specularShininess) * light.specularStrength;
 
             // From 0 to TextureWidth - 1 (TextureWidth pixels in total)
-            int32_t textureX = static_cast<int32_t>(interpolants_raw[3] * (1.0f / interpolants_raw[5]) * (TextureWidth - 1));
+            int32_t textureX = static_cast<int32_t>((interpolants_raw[3] / interpolants_raw[5]) * (TextureWidth - 1));
             // From 0 to TextureHeight - 1 (TextureHeight pixels in total)
-            int32_t textureY = static_cast<int32_t>(interpolants_raw[4] * (1.0f / interpolants_raw[5]) * (TextureHeight - 1));
+            int32_t textureY = static_cast<int32_t>((interpolants_raw[4] / interpolants_raw[5]) * (TextureHeight - 1));
 
             assert(textureY < TextureHeight&& textureX < TextureWidth);
             int32_t texelBase = textureY * TextureWidth * 3 + textureX * 3;
@@ -1125,7 +1124,7 @@ int CALLBACK WinMain(
         LoadContext context;
 
         // init model
-        models.push_back(LoadOBJ("monkey.obj", context));
+        models.push_back(LoadOBJ("sphere.obj", context));
         models[0].scale = 50.0f;
         models[0].position = Vec { 0.0f, 0.0f, 0.0f, 1.0f };
 
