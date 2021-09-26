@@ -20,7 +20,7 @@
 
 /*
 * TODO:
-* Add specular.
+* Fix crash on sphere.
 * Refactoring.
 * Optimization.
 */
