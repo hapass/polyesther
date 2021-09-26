@@ -164,6 +164,8 @@ struct Light
     Vec position_view;
 
     float ambientStrength = 0.1f;
+    float specularStrength = 0.5f;
+    float specularShininess = 32.0f;
     Color color = Color::White;
 };
 
@@ -462,6 +464,29 @@ Vec normalize(const Vec& v)
     return Vec { v.x / norm, v.y / norm, v.z / norm, v.w / norm };
 }
 
+Vec cross(const Vec& a, const Vec& b)
+{
+    return Vec
+    {
+        a.y * b.z - b.y * a.z,
+        -a.x * b.z + b.x * a.z,
+        a.x * b.y - b.x * a.y,
+        0.0f
+    };
+}
+
+Vec reflect(const Vec& normal, const Vec& vec)
+{
+    const Vec& j = normalize(normal);
+    Vec k = normalize(cross(vec, j));
+    Vec i = normalize(cross(j, k));
+
+    float vecI = dot(vec, i);
+    float vecJ = dot(vec, j);
+
+    return -i * vecI + j * vecJ;
+}
+
 Matrix operator*(const Matrix& a, const Matrix& b)
 {
     Matrix res;
@@ -645,6 +670,9 @@ void DrawTrianglePart(Edge& minMax, Edge& other, bool isSecondPart = false)
             Vec diffuse = light.color.GetVec() * static_cast<float>(max(dot(normal_vec, light_vec), 0.0));
             Vec ambient = light.color.GetVec() * light.ambientStrength;
 
+            float specAmount = static_cast<float>(max(dot(normalize(pos_view), reflect(normal_vec, light_vec * -1.0f)), 0.0f));
+            Vec specular = light.color.GetVec() * pow(specAmount, light.specularShininess) * light.specularStrength;
+
             // From 0 to TextureWidth - 1 (TextureWidth pixels in total)
             int32_t textureX = static_cast<int32_t>(interpolants_raw[3] * (1.0f / interpolants_raw[5]) * (TextureWidth - 1));
             // From 0 to TextureHeight - 1 (TextureHeight pixels in total)
@@ -657,7 +685,7 @@ void DrawTrianglePart(Edge& minMax, Edge& other, bool isSecondPart = false)
             
             // Assuming 1 is model for light.
             Vec frag_color = CurrentModelIndex == 1 ? Vec{ tintRed, tintGreen, tintBlue } : texture_color.GetVec();
-            Vec final_color = CurrentModelIndex == 1 ? frag_color : (diffuse + ambient) * frag_color;
+            Vec final_color = CurrentModelIndex == 1 ? frag_color : (diffuse + ambient + specular) * frag_color;
             final_color = final_color * 255.0f;
 
             DrawPixel(x, y, Color(
@@ -860,7 +888,7 @@ void DrawTriangle(VertIndex a, VertIndex b, VertIndex c, const Matrix& transform
     {
         v.pos = perspective() * transform * v.pos;
         v.pos_view = transform * v.pos_view;
-        // This is possible because we do not do non-uniform scale in transform.
+        // This is possible because we do not do non-uniform scale in transform. If we are about to do non-uniform scale, we should calculate the normal matrix.
         v.normal = transform * v.normal;
     }
 
