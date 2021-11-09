@@ -17,6 +17,7 @@
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
+#include "profile.h"
 
 /*
 * TODO:
@@ -1124,7 +1125,7 @@ int CALLBACK WinMain(
         LoadContext context;
 
         // init model
-        models.push_back(LoadOBJ("sphere.obj", context));
+        models.push_back(LoadOBJ("monkey.obj", context));
         models[0].scale = 50.0f;
         models[0].position = Vec { 0.0f, 0.0f, 0.0f, 1.0f };
 
