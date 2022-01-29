@@ -1235,7 +1235,7 @@ int CALLBACK WinMain(
             int32_t indices_offset = 0;
             for (size_t i = 0; i < models.size(); i++)
             {
-                CurrentModelIndex = i;
+                CurrentModelIndex = static_cast<uint32_t>(i);
                 const Model& model = models.at(i);
                 for (uint32_t i = 0; i < model.indices_count / 3; i++)
                 {
