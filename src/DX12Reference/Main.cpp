@@ -16,8 +16,8 @@
 #include <algorithm>
 
 #define STB_IMAGE_IMPLEMENTATION
-#include "stb_image.h"
-#include "profile.h"
+#include "../common/stb_image.h"
+#include "../common/profile.h"
 
 /*
 * TODO:
@@ -1121,19 +1121,19 @@ int CALLBACK WinMain(
         NOT_FAILED(ZBuffer = (float*)VirtualAlloc(0, GameWidth * GameHeight * sizeof(float), MEM_COMMIT, PAGE_READWRITE), 0);
 
         int32_t channels;
-        NOT_FAILED(Texture = stbi_load("texture.jpg", &TextureWidth, &TextureHeight, &channels, 3), 0);
+        NOT_FAILED(Texture = stbi_load("../../assets/texture.jpg", &TextureWidth, &TextureHeight, &channels, 3), 0);
 
         auto frameExpectedTime = chrono::milliseconds(1000 / FPS);
 
         LoadContext context;
 
         // init model
-        models.push_back(LoadOBJ("monkey.obj", context));
+        models.push_back(LoadOBJ("../../assets/monkey.obj", context));
         models[0].scale = 50.0f;
         models[0].position = Vec { 0.0f, 0.0f, 0.0f, 1.0f };
 
         // init light
-        models.push_back(LoadOBJ("cube.obj", context));
+        models.push_back(LoadOBJ("../../assets/cube.obj", context));
         models[1].scale = 10.0f;
 
         Camera camera;
