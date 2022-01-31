@@ -23,6 +23,9 @@
 * TODO:
 * Refactoring.
 * Optimization.
+* Render to image.
+* One interface for rendering to image.
+* Write DX12 renderer that renders the same image.
 */
 
 using namespace std;
