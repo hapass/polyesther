@@ -101,7 +101,7 @@ struct Camera
     Vec left;
 };
 
-struct VertIndex
+struct Index
 {
     uint32_t vert;
     uint32_t text;
@@ -112,7 +112,7 @@ static std::vector<Vec> verticesObj;
 static std::vector<Vec> normalsObj;
 static std::vector<float> textureX;
 static std::vector<float> textureY;
-static std::vector<VertIndex> indicesObj;
+static std::vector<Index> indicesObj;
 static std::vector<Vec> colorsObj;
 
 static std::vector<Model> models;
@@ -549,7 +549,7 @@ Matrix cam(const Camera& camera)
     return rYaw * rPitch;
 }
 
-struct Vert
+struct InterpolationPoint
 {
     float x;
     float y;
@@ -558,7 +558,7 @@ struct Vert
 
 struct Interpolant
 {
-    Interpolant(Vert a, Vert b, Vert c)
+    Interpolant(const InterpolationPoint& a, const InterpolationPoint& b, const InterpolationPoint& c)
     {
         float dx = (b.x - c.x) * (a.y - c.y) - (a.x - c.x) * (b.y - c.y);
         float dy = -dx;
@@ -572,7 +572,7 @@ struct Interpolant
 
     float stepX;
     float stepY;
-    float currentC;
+    float currentC = 0.0f;
 
     float minC;
     float midC;
@@ -700,7 +700,7 @@ void DrawTrianglePart(Edge& minMax, Edge& other, bool isSecondPart = false)
     }
 }
 
-struct Vector
+struct Vertex
 {
     Vec pos;
     Vec pos_view;
@@ -717,9 +717,9 @@ float Lerp(float begin, float end, float lerpAmount)
     return begin + (end - begin) * lerpAmount;
 }
 
-Vector Lerp(const Vector& begin, const Vector& end, float lerpAmount)
+Vertex Lerp(const Vertex& begin, const Vertex& end, float lerpAmount)
 {
-    Vector result;
+    Vertex result;
     result.pos.x = Lerp(begin.pos.x, end.pos.x, lerpAmount);
     result.pos.y = Lerp(begin.pos.y, end.pos.y, lerpAmount);
     result.pos.z = Lerp(begin.pos.z, end.pos.z, lerpAmount);
@@ -740,16 +740,16 @@ Vector Lerp(const Vector& begin, const Vector& end, float lerpAmount)
     return result;
 }
 
-Interpolant GetInterpolant(std::vector<Vector>& vertices, float c1, float c2, float c3)
+Interpolant GetInterpolant(std::vector<Vertex>& vertices, float c1, float c2, float c3)
 {
     return Interpolant({ vertices[0].pos.x, vertices[0].pos.y, c1 / vertices[0].pos.w }, { vertices[1].pos.x, vertices[1].pos.y, c2 / vertices[1].pos.w }, { vertices[2].pos.x, vertices[2].pos.y, c3 / vertices[2].pos.w });
 }
 
-void DrawRawTriangle(std::vector<Vector>& vertices)
+void DrawRawTriangle(std::vector<Vertex>& vertices)
 {
     assert(vertices.size() == 3);
 
-    for (Vector& v : vertices)
+    for (Vertex& v : vertices)
     {
         v.pos.x /= v.pos.w;
         v.pos.y /= v.pos.w;
@@ -758,9 +758,9 @@ void DrawRawTriangle(std::vector<Vector>& vertices)
 
     // TODO.PAVELZA: We can do backface culling here.
 
-    std::sort(std::begin(vertices), std::end(vertices), [](const Vector& lhs, const Vector& rhs) { return lhs.pos.y < rhs.pos.y; });
+    std::sort(std::begin(vertices), std::end(vertices), [](const Vertex& lhs, const Vertex& rhs) { return lhs.pos.y < rhs.pos.y; });
 
-    for (Vector& v : vertices)
+    for (Vertex& v : vertices)
     {
         // TODO.PAVELZA: Clipping might result in some vertices being slightly outside of -1 to 1 range, so we clamp. Will need to think how to avoid this.
         v.pos.x = clamp(v.pos.x, -1.0f, 1.0f);
@@ -801,20 +801,20 @@ void DrawRawTriangle(std::vector<Vector>& vertices)
     DrawTrianglePart(minMax, middleMax, true);
 }
 
-bool IsPointInside(const Vector& point, int32_t axis, int32_t plane)
+bool IsVertexInside(const Vertex& point, int32_t axis, int32_t plane)
 {    
     return point.pos.Get(axis) * plane <= point.pos.w;
 }
 
-void ClipTrianglePlane(std::vector<Vector>& vertices, int32_t axis, int32_t plane)
+void ClipTrianglePlane(std::vector<Vertex>& vertices, int32_t axis, int32_t plane)
 {
-    std::vector<Vector> result;
+    std::vector<Vertex> result;
     size_t previousElement = vertices.size() - 1;
 
     for (size_t currentElement = 0; currentElement < vertices.size(); currentElement++)
     {
-        bool isPreviousInside = IsPointInside(vertices[previousElement], axis, plane);
-        bool isCurrentInside = IsPointInside(vertices[currentElement], axis, plane);
+        bool isPreviousInside = IsVertexInside(vertices[previousElement], axis, plane);
+        bool isCurrentInside = IsVertexInside(vertices[currentElement], axis, plane);
 
         if (isPreviousInside != isCurrentInside)
         {
@@ -834,7 +834,7 @@ void ClipTrianglePlane(std::vector<Vector>& vertices, int32_t axis, int32_t plan
     swap(vertices, result);
 }
 
-bool ClipTriangleAxis(std::vector<Vector>& vertices, int32_t axis)
+bool ClipTriangleAxis(std::vector<Vertex>& vertices, int32_t axis)
 {
     ClipTrianglePlane(vertices, axis, 1);
 
@@ -848,11 +848,11 @@ bool ClipTriangleAxis(std::vector<Vector>& vertices, int32_t axis)
     return vertices.size() != 0;
 }
 
-void DrawTriangle(VertIndex a, VertIndex b, VertIndex c, const Matrix& transform)
+void DrawTriangle(Index a, Index b, Index c, const Matrix& transform)
 {
-    std::vector<Vector> vertices 
+    std::vector<Vertex> vertices 
     {
-        Vector 
+        Vertex 
         {
             Vec { verticesObj[a.vert].x, verticesObj[a.vert].y, verticesObj[a.vert].z, verticesObj[a.vert].w },
             Vec { verticesObj[a.vert].x, verticesObj[a.vert].y, verticesObj[a.vert].z, verticesObj[a.vert].w },
@@ -863,7 +863,7 @@ void DrawTriangle(VertIndex a, VertIndex b, VertIndex c, const Matrix& transform
             colorsObj[a.vert].y,
             colorsObj[a.vert].z 
         },
-        Vector 
+        Vertex 
         {
             Vec { verticesObj[b.vert].x, verticesObj[b.vert].y, verticesObj[b.vert].z, verticesObj[b.vert].w },
             Vec { verticesObj[b.vert].x, verticesObj[b.vert].y, verticesObj[b.vert].z, verticesObj[b.vert].w },
@@ -874,7 +874,7 @@ void DrawTriangle(VertIndex a, VertIndex b, VertIndex c, const Matrix& transform
             colorsObj[b.vert].y,
             colorsObj[b.vert].z
         },
-        Vector 
+        Vertex 
         {
             Vec { verticesObj[c.vert].x, verticesObj[c.vert].y, verticesObj[c.vert].z, verticesObj[c.vert].w },
             Vec { verticesObj[c.vert].x, verticesObj[c.vert].y, verticesObj[c.vert].z, verticesObj[c.vert].w },
@@ -887,7 +887,7 @@ void DrawTriangle(VertIndex a, VertIndex b, VertIndex c, const Matrix& transform
         }
     };
 
-    for (Vector& v : vertices)
+    for (Vertex& v : vertices)
     {
         v.pos = perspective() * transform * v.pos;
         v.pos_view = transform * v.pos_view;
@@ -904,7 +904,7 @@ void DrawTriangle(VertIndex a, VertIndex b, VertIndex c, const Matrix& transform
 
         for (size_t i = 2; i < vertices.size(); i++)
         {
-            std::vector<Vector> triangle;
+            std::vector<Vertex> triangle;
             triangle.resize(3);
 
             triangle[0] = vertices[0];
@@ -978,7 +978,7 @@ Model LoadOBJ(const char* fileName, LoadContext& context)
             }
             else if (primitive_type == "f") 
             {
-                vector<VertIndex> vertIndices;
+                vector<Index> vertIndices;
                 string nextStr;
                 while (ss >> nextStr)
                 {
@@ -1235,7 +1235,7 @@ int CALLBACK WinMain(
 
             ClearScreen(Color::Black);
 
-            int32_t indices_offset = 0;
+            uint32_t indices_offset = 0;
             for (size_t i = 0; i < models.size(); i++)
             {
                 CurrentModelIndex = static_cast<uint32_t>(i);
