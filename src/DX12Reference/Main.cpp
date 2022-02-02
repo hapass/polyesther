@@ -1,6 +1,9 @@
 #define _USE_MATH_DEFINES
 
 #include <Windows.h>
+#include <dxgi.h>
+#include <d3d12.h>
+
 #include <stdint.h>
 #include <cassert>
 #include <thread>
@@ -122,6 +125,13 @@ static std::vector<Model> models;
     { \
          assert(false); \
          exit(1); \
+    } \
+
+#define D3D_NOT_FAILED(call) \
+    if ((call) != S_OK) \
+    { \
+        assert(false); \
+        exit(1); \
     } \
 
 void DebugOut(const wchar_t* fmt, ...)
@@ -759,6 +769,18 @@ int CALLBACK WinMain(
 
         light.position = Vec{ 100.0f, 100.0f, 100.0f, 1.0f };
 
+        ID3D12Device* device = nullptr;
+        D3D_NOT_FAILED(D3D12CreateDevice(nullptr, D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&device)));
+
+        ID3D12Debug* debugController = nullptr;
+        D3D_NOT_FAILED(D3D12GetDebugInterface(IID_PPV_ARGS(&debugController)));
+        debugController->EnableDebugLayer();
+        debugController->Release();
+
+        IDXGIFactory* factory = nullptr;
+        D3D_NOT_FAILED(CreateDXGIFactory(IID_PPV_ARGS(&factory)));
+        factory->Release();
+
         while (isRunning)
         {
             auto frameStart = chrono::steady_clock::now();
@@ -868,6 +890,7 @@ int CALLBACK WinMain(
             }
         }
 
+        device->Release();
         stbi_image_free(Texture);
     }
 
