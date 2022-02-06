@@ -120,20 +120,6 @@ static std::vector<Vec> colorsObj;
 
 static std::vector<Model> models;
 
-#define NOT_FAILED(call, failureCode) \
-    if ((call) == failureCode) \
-    { \
-         assert(false); \
-         exit(1); \
-    } \
-
-#define D3D_NOT_FAILED(call) \
-    if ((call) != S_OK) \
-    { \
-        assert(false); \
-        exit(1); \
-    } \
-
 void DebugOut(const wchar_t* fmt, ...)
 {
     va_list argp;
@@ -143,6 +129,30 @@ void DebugOut(const wchar_t* fmt, ...)
     va_end(argp);
     OutputDebugString(dbg_out);
 }
+
+void PrintError(HRESULT result)
+{
+    DebugOut(L"D3D Result: 0x%08X \n", result);
+}
+
+#define CONCAT(a, b) CONCAT_INNER(a, b)
+#define CONCAT_INNER(a, b) a ## b
+
+#define NOT_FAILED(call, failureCode) \
+    if ((call) == failureCode) \
+    { \
+         assert(false); \
+         exit(1); \
+    } \
+
+#define D3D_NOT_FAILED(call) \
+    HRESULT CONCAT(result, __LINE__) = (call); \
+    if (CONCAT(result, __LINE__) != S_OK) \
+    { \
+        PrintError(CONCAT(result, __LINE__)); \
+        assert(false); \
+        exit(1); \
+    } \
 
 struct Color
 {
@@ -769,17 +779,23 @@ int CALLBACK WinMain(
 
         light.position = Vec{ 100.0f, 100.0f, 100.0f, 1.0f };
 
-        ID3D12Device* device = nullptr;
-        D3D_NOT_FAILED(D3D12CreateDevice(nullptr, D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&device)));
-
         ID3D12Debug* debugController = nullptr;
         D3D_NOT_FAILED(D3D12GetDebugInterface(IID_PPV_ARGS(&debugController)));
         debugController->EnableDebugLayer();
         debugController->Release();
 
+        ID3D12Device* device = nullptr;
+        D3D_NOT_FAILED(D3D12CreateDevice(nullptr, D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&device)));
+
         IDXGIFactory* factory = nullptr;
         D3D_NOT_FAILED(CreateDXGIFactory(IID_PPV_ARGS(&factory)));
-        factory->Release();
+
+        ID3D12CommandQueue* queue = nullptr;
+        D3D12_COMMAND_QUEUE_DESC queueDesc = {};
+        queueDesc.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
+        queueDesc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
+        D3D_NOT_FAILED(device->CreateCommandQueue(&queueDesc, IID_PPV_ARGS(&queue)));
+        queue->Release();
 
         while (isRunning)
         {
