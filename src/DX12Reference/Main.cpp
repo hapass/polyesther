@@ -784,18 +784,49 @@ int CALLBACK WinMain(
         debugController->EnableDebugLayer();
         debugController->Release();
 
-        ID3D12Device* device = nullptr;
-        D3D_NOT_FAILED(D3D12CreateDevice(nullptr, D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&device)));
-
         IDXGIFactory* factory = nullptr;
         D3D_NOT_FAILED(CreateDXGIFactory(IID_PPV_ARGS(&factory)));
+
+        ID3D12Device* device = nullptr;
+        D3D_NOT_FAILED(D3D12CreateDevice(nullptr, D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&device)));
 
         ID3D12CommandQueue* queue = nullptr;
         D3D12_COMMAND_QUEUE_DESC queueDesc = {};
         queueDesc.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
         queueDesc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
         D3D_NOT_FAILED(device->CreateCommandQueue(&queueDesc, IID_PPV_ARGS(&queue)));
-        queue->Release();
+
+        DXGI_SWAP_CHAIN_DESC swapChainDescription;
+
+        swapChainDescription.BufferDesc.Width = GameWidth;
+        swapChainDescription.BufferDesc.Height = GameHeight;
+        swapChainDescription.BufferDesc.RefreshRate.Numerator = 60;
+        swapChainDescription.BufferDesc.RefreshRate.Denominator = 1;
+        swapChainDescription.BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        swapChainDescription.BufferDesc.ScanlineOrdering = DXGI_MODE_SCANLINE_ORDER_UNSPECIFIED;
+        swapChainDescription.BufferDesc.Scaling = DXGI_MODE_SCALING_UNSPECIFIED;
+
+        swapChainDescription.SampleDesc.Count = 1;
+        swapChainDescription.SampleDesc.Quality = 0;
+
+        swapChainDescription.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+        swapChainDescription.BufferCount = 2;
+
+        swapChainDescription.OutputWindow = window;
+        swapChainDescription.Windowed = true;
+
+        swapChainDescription.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
+        swapChainDescription.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
+
+        IDXGISwapChain* swapChain = nullptr;
+        D3D_NOT_FAILED(factory->CreateSwapChain(queue, &swapChainDescription, &swapChain));
+
+        ID3D12CommandAllocator* allocator = nullptr;
+        D3D_NOT_FAILED(device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&allocator)));
+
+        ID3D12CommandList* commandList = nullptr;
+        D3D_NOT_FAILED(device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, allocator, nullptr, IID_PPV_ARGS(&commandList)));
+        commandList->Release();
 
         while (isRunning)
         {
