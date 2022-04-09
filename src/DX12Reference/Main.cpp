@@ -4,6 +4,7 @@
 #include <dxgi.h>
 #include <d3d12.h>
 
+
 #include <stdint.h>
 #include <cassert>
 #include <thread>
@@ -779,6 +780,8 @@ int CALLBACK WinMain(
 
         light.position = Vec{ 100.0f, 100.0f, 100.0f, 1.0f };
 
+
+
         ID3D12Debug* debugController = nullptr;
         D3D_NOT_FAILED(D3D12GetDebugInterface(IID_PPV_ARGS(&debugController)));
         debugController->EnableDebugLayer();
@@ -821,11 +824,140 @@ int CALLBACK WinMain(
         IDXGISwapChain* swapChain = nullptr;
         D3D_NOT_FAILED(factory->CreateSwapChain(queue, &swapChainDescription, &swapChain));
 
+        D3D12_DESCRIPTOR_HEAP_DESC renderTargetViewHeapDescription;
+        renderTargetViewHeapDescription.Type = D3D12_DESCRIPTOR_HEAP_TYPE::D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
+        renderTargetViewHeapDescription.NumDescriptors = 2;
+        renderTargetViewHeapDescription.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+        renderTargetViewHeapDescription.NodeMask = 0;
+
+        ID3D12DescriptorHeap* renderTargetViewHeap = nullptr;
+        D3D_NOT_FAILED(device->CreateDescriptorHeap(&renderTargetViewHeapDescription, IID_PPV_ARGS(&renderTargetViewHeap)));
+
+        ID3D12Resource* frontBuffer = nullptr;
+        D3D_NOT_FAILED(swapChain->GetBuffer(0, IID_PPV_ARGS(&frontBuffer)));
+
+        D3D12_CPU_DESCRIPTOR_HANDLE frontBufferHandle{ SIZE_T(INT64(renderTargetViewHeap->GetCPUDescriptorHandleForHeapStart().ptr)) };
+        device->CreateRenderTargetView(frontBuffer, nullptr, frontBufferHandle);
+
+        ID3D12Resource* backBuffer = nullptr;
+        D3D_NOT_FAILED(swapChain->GetBuffer(1, IID_PPV_ARGS(&backBuffer)));
+
+        D3D12_CPU_DESCRIPTOR_HANDLE backBufferHandle{ SIZE_T(INT64(renderTargetViewHeap->GetCPUDescriptorHandleForHeapStart().ptr) + INT64(device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV))) };
+        device->CreateRenderTargetView(backBuffer, nullptr, backBufferHandle);
+
+        D3D12_RESOURCE_DESC depthBufferDescription;
+        depthBufferDescription.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+        depthBufferDescription.Alignment = 0;
+        depthBufferDescription.Width = GameWidth;
+        depthBufferDescription.Height = GameHeight;
+        depthBufferDescription.DepthOrArraySize = 1;
+        depthBufferDescription.MipLevels = 1;
+        depthBufferDescription.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
+
+        depthBufferDescription.SampleDesc.Count = 1;
+        depthBufferDescription.SampleDesc.Quality = 0;
+
+        depthBufferDescription.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+        depthBufferDescription.Flags = D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
+
+        D3D12_CLEAR_VALUE clearValue;
+        clearValue.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
+        clearValue.DepthStencil.Depth = 1.0f;
+        clearValue.DepthStencil.Stencil = 0;
+
+        D3D12_HEAP_PROPERTIES heapProperties;
+        heapProperties.Type = D3D12_HEAP_TYPE_DEFAULT;
+        heapProperties.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
+        heapProperties.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
+        heapProperties.VisibleNodeMask = 1;
+        heapProperties.CreationNodeMask = 1;
+
+        ID3D12Resource* depthStencilBuffer = nullptr;
+        D3D_NOT_FAILED(device->CreateCommittedResource(&heapProperties, D3D12_HEAP_FLAG_NONE, &depthBufferDescription, D3D12_RESOURCE_STATE_COMMON, &clearValue, IID_PPV_ARGS(&depthStencilBuffer)));
+
+        D3D12_DESCRIPTOR_HEAP_DESC depthStencilViewHeapDescription;
+        depthStencilViewHeapDescription.Type = D3D12_DESCRIPTOR_HEAP_TYPE::D3D12_DESCRIPTOR_HEAP_TYPE_DSV;
+        depthStencilViewHeapDescription.NumDescriptors = 1;
+        depthStencilViewHeapDescription.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+        depthStencilViewHeapDescription.NodeMask = 0;
+
+        ID3D12DescriptorHeap* depthStencilViewHeap = nullptr;
+        D3D_NOT_FAILED(device->CreateDescriptorHeap(&depthStencilViewHeapDescription, IID_PPV_ARGS(&depthStencilViewHeap)));
+
+        D3D12_CPU_DESCRIPTOR_HANDLE depthBufferHandle(depthStencilViewHeap->GetCPUDescriptorHandleForHeapStart());
+        device->CreateDepthStencilView(depthStencilBuffer, nullptr, depthBufferHandle);
+
         ID3D12CommandAllocator* allocator = nullptr;
         D3D_NOT_FAILED(device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&allocator)));
 
-        ID3D12CommandList* commandList = nullptr;
+        ID3D12GraphicsCommandList* commandList = nullptr;
         D3D_NOT_FAILED(device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, allocator, nullptr, IID_PPV_ARGS(&commandList)));
+
+        D3D12_RESOURCE_BARRIER depthBufferWriteTransition;
+        depthBufferWriteTransition.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+        depthBufferWriteTransition.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+
+        depthBufferWriteTransition.Transition.pResource = depthStencilBuffer;
+        depthBufferWriteTransition.Transition.StateBefore = D3D12_RESOURCE_STATE_COMMON;
+        depthBufferWriteTransition.Transition.StateAfter = D3D12_RESOURCE_STATE_DEPTH_WRITE;
+        depthBufferWriteTransition.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+
+        commandList->ResourceBarrier(1, &depthBufferWriteTransition);
+
+        // loop
+        D3D12_RESOURCE_BARRIER renderTargetBufferTransition;
+        renderTargetBufferTransition.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+        renderTargetBufferTransition.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+
+        renderTargetBufferTransition.Transition.pResource = frontBuffer;
+        renderTargetBufferTransition.Transition.StateBefore = D3D12_RESOURCE_STATE_PRESENT;
+        renderTargetBufferTransition.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
+        renderTargetBufferTransition.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+
+        commandList->ResourceBarrier(1, &renderTargetBufferTransition);
+
+        D3D12_VIEWPORT viewport;
+        viewport.TopLeftX = 0.0f;
+        viewport.TopLeftY = 0.0f;
+        viewport.Width = GameWidth;
+        viewport.Height = GameHeight;
+        viewport.MinDepth = 0.0f;
+        viewport.MaxDepth = 0.0f;
+
+        commandList->RSSetViewports(1, &viewport);
+
+        D3D12_RECT scissor;
+        scissor.left = 0;
+        scissor.top = 0;
+        scissor.bottom = GameHeight;
+        scissor.right = GameWidth;
+
+        commandList->RSSetScissorRects(1, &scissor);
+        commandList->OMSetRenderTargets(1, &frontBufferHandle, true, &depthBufferHandle);
+
+        FLOAT clearColor[4] = { 1.0f, 0.f, 0.f, 1.000000000f };
+        commandList->ClearRenderTargetView(frontBufferHandle, clearColor, 0, nullptr);
+        commandList->ClearDepthStencilView(depthBufferHandle, D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, 1.0f, 0, 0, nullptr);
+
+        D3D12_RESOURCE_BARRIER presentBufferTransition;
+        presentBufferTransition.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+        presentBufferTransition.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+
+        presentBufferTransition.Transition.pResource = frontBuffer;
+        presentBufferTransition.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
+        presentBufferTransition.Transition.StateAfter = D3D12_RESOURCE_STATE_PRESENT;
+        presentBufferTransition.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+
+        commandList->ResourceBarrier(1, &presentBufferTransition);
+        commandList->Close();
+
+        ID3D12CommandList* cmdsLists[1] = { commandList };
+        queue->ExecuteCommandLists(1, cmdsLists);
+
+        swapChain->Present(0, 0);
+
+        allocator->Reset();
+        commandList->Reset(allocator, nullptr);
         commandList->Release();
 
         while (isRunning)
