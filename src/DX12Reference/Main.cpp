@@ -780,8 +780,6 @@ int CALLBACK WinMain(
 
         light.position = Vec{ 100.0f, 100.0f, 100.0f, 1.0f };
 
-
-
         ID3D12Debug* debugController = nullptr;
         D3D_NOT_FAILED(D3D12GetDebugInterface(IID_PPV_ARGS(&debugController)));
         debugController->EnableDebugLayer();
@@ -833,17 +831,17 @@ int CALLBACK WinMain(
         ID3D12DescriptorHeap* renderTargetViewHeap = nullptr;
         D3D_NOT_FAILED(device->CreateDescriptorHeap(&renderTargetViewHeapDescription, IID_PPV_ARGS(&renderTargetViewHeap)));
 
-        ID3D12Resource* frontBuffer = nullptr;
-        D3D_NOT_FAILED(swapChain->GetBuffer(0, IID_PPV_ARGS(&frontBuffer)));
+        ID3D12Resource* zeroBuffer = nullptr;
+        D3D_NOT_FAILED(swapChain->GetBuffer(0, IID_PPV_ARGS(&zeroBuffer)));
 
-        D3D12_CPU_DESCRIPTOR_HANDLE frontBufferHandle{ SIZE_T(INT64(renderTargetViewHeap->GetCPUDescriptorHandleForHeapStart().ptr)) };
-        device->CreateRenderTargetView(frontBuffer, nullptr, frontBufferHandle);
+        D3D12_CPU_DESCRIPTOR_HANDLE zeroBufferHandle{ SIZE_T(INT64(renderTargetViewHeap->GetCPUDescriptorHandleForHeapStart().ptr)) };
+        device->CreateRenderTargetView(zeroBuffer, nullptr, zeroBufferHandle);
 
-        ID3D12Resource* backBuffer = nullptr;
-        D3D_NOT_FAILED(swapChain->GetBuffer(1, IID_PPV_ARGS(&backBuffer)));
+        ID3D12Resource* firstBuffer = nullptr;
+        D3D_NOT_FAILED(swapChain->GetBuffer(1, IID_PPV_ARGS(&firstBuffer)));
 
-        D3D12_CPU_DESCRIPTOR_HANDLE backBufferHandle{ SIZE_T(INT64(renderTargetViewHeap->GetCPUDescriptorHandleForHeapStart().ptr) + INT64(device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV))) };
-        device->CreateRenderTargetView(backBuffer, nullptr, backBufferHandle);
+        D3D12_CPU_DESCRIPTOR_HANDLE firstBufferHandle{ SIZE_T(INT64(renderTargetViewHeap->GetCPUDescriptorHandleForHeapStart().ptr) + INT64(device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV))) };
+        device->CreateRenderTargetView(firstBuffer, nullptr, firstBufferHandle);
 
         D3D12_RESOURCE_DESC depthBufferDescription;
         depthBufferDescription.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
@@ -904,61 +902,12 @@ int CALLBACK WinMain(
 
         commandList->ResourceBarrier(1, &depthBufferWriteTransition);
 
-        // loop
-        D3D12_RESOURCE_BARRIER renderTargetBufferTransition;
-        renderTargetBufferTransition.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-        renderTargetBufferTransition.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+        UINT64 currentFenceValue = 0;
 
-        renderTargetBufferTransition.Transition.pResource = frontBuffer;
-        renderTargetBufferTransition.Transition.StateBefore = D3D12_RESOURCE_STATE_PRESENT;
-        renderTargetBufferTransition.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
-        renderTargetBufferTransition.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+        ID3D12Fence* fence = nullptr;
+        D3D_NOT_FAILED(device->CreateFence(currentFenceValue, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fence)));
 
-        commandList->ResourceBarrier(1, &renderTargetBufferTransition);
-
-        D3D12_VIEWPORT viewport;
-        viewport.TopLeftX = 0.0f;
-        viewport.TopLeftY = 0.0f;
-        viewport.Width = GameWidth;
-        viewport.Height = GameHeight;
-        viewport.MinDepth = 0.0f;
-        viewport.MaxDepth = 0.0f;
-
-        commandList->RSSetViewports(1, &viewport);
-
-        D3D12_RECT scissor;
-        scissor.left = 0;
-        scissor.top = 0;
-        scissor.bottom = GameHeight;
-        scissor.right = GameWidth;
-
-        commandList->RSSetScissorRects(1, &scissor);
-        commandList->OMSetRenderTargets(1, &frontBufferHandle, true, &depthBufferHandle);
-
-        FLOAT clearColor[4] = { 1.0f, 0.f, 0.f, 1.000000000f };
-        commandList->ClearRenderTargetView(frontBufferHandle, clearColor, 0, nullptr);
-        commandList->ClearDepthStencilView(depthBufferHandle, D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, 1.0f, 0, 0, nullptr);
-
-        D3D12_RESOURCE_BARRIER presentBufferTransition;
-        presentBufferTransition.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-        presentBufferTransition.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
-
-        presentBufferTransition.Transition.pResource = frontBuffer;
-        presentBufferTransition.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
-        presentBufferTransition.Transition.StateAfter = D3D12_RESOURCE_STATE_PRESENT;
-        presentBufferTransition.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-
-        commandList->ResourceBarrier(1, &presentBufferTransition);
-        commandList->Close();
-
-        ID3D12CommandList* cmdsLists[1] = { commandList };
-        queue->ExecuteCommandLists(1, cmdsLists);
-
-        swapChain->Present(0, 0);
-
-        allocator->Reset();
-        commandList->Reset(allocator, nullptr);
-        commandList->Release();
+        bool isZeroBufferInTheBack = true;
 
         while (isRunning)
         {
@@ -1044,8 +993,6 @@ int CALLBACK WinMain(
             // calculate light's position in view space
             light.position_view = view(camera) * modelMat(models[1]) * models[1].position;
 
-            // clear screen - not implemented
-
             int32_t indices_offset = 0;
             for (size_t i = 0; i < models.size(); i++)
             {
@@ -1058,7 +1005,77 @@ int CALLBACK WinMain(
                 indices_offset += model.indices_count;
             }
 
-            // swap buffers - not implemented
+            ID3D12Resource* currentBuffer = isZeroBufferInTheBack ? zeroBuffer : firstBuffer;
+            D3D12_CPU_DESCRIPTOR_HANDLE* currentBufferHandle = isZeroBufferInTheBack ? &zeroBufferHandle : &firstBufferHandle;
+
+            D3D12_RESOURCE_BARRIER renderTargetBufferTransition;
+            renderTargetBufferTransition.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+            renderTargetBufferTransition.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+
+            renderTargetBufferTransition.Transition.pResource = currentBuffer;
+            renderTargetBufferTransition.Transition.StateBefore = D3D12_RESOURCE_STATE_PRESENT;
+            renderTargetBufferTransition.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
+            renderTargetBufferTransition.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+
+            commandList->ResourceBarrier(1, &renderTargetBufferTransition);
+
+            D3D12_VIEWPORT viewport;
+            viewport.TopLeftX = 0.0f;
+            viewport.TopLeftY = 0.0f;
+            viewport.Width = GameWidth;
+            viewport.Height = GameHeight;
+            viewport.MinDepth = 0.0f;
+            viewport.MaxDepth = 0.0f;
+
+            commandList->RSSetViewports(1, &viewport);
+
+            D3D12_RECT scissor;
+            scissor.left = 0;
+            scissor.top = 0;
+            scissor.bottom = GameHeight;
+            scissor.right = GameWidth;
+
+            commandList->RSSetScissorRects(1, &scissor);
+            commandList->OMSetRenderTargets(1, currentBufferHandle, true, &depthBufferHandle);
+
+            FLOAT clearColor[4] = { 1.0f, 0.f, 0.f, 1.000000000f };
+            commandList->ClearRenderTargetView(*currentBufferHandle, clearColor, 0, nullptr);
+            commandList->ClearDepthStencilView(depthBufferHandle, D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, 1.0f, 0, 0, nullptr);
+
+            D3D12_RESOURCE_BARRIER presentBufferTransition;
+            presentBufferTransition.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+            presentBufferTransition.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+
+            presentBufferTransition.Transition.pResource = currentBuffer;
+            presentBufferTransition.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
+            presentBufferTransition.Transition.StateAfter = D3D12_RESOURCE_STATE_PRESENT;
+            presentBufferTransition.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+
+            commandList->ResourceBarrier(1, &presentBufferTransition);
+            commandList->Close();
+
+            ID3D12CommandList* cmdsLists[1] = { commandList };
+            queue->ExecuteCommandLists(1, cmdsLists);
+
+            D3D_NOT_FAILED(swapChain->Present(0, 0));
+            isZeroBufferInTheBack = !isZeroBufferInTheBack;
+
+            currentFenceValue++;
+            queue->Signal(fence, currentFenceValue);
+
+            if (fence->GetCompletedValue() != currentFenceValue)
+            {
+                HANDLE eventHandle = CreateEventExW(nullptr, nullptr, 0, EVENT_ALL_ACCESS);
+                assert(eventHandle != 0);
+
+                D3D_NOT_FAILED(fence->SetEventOnCompletion(currentFenceValue, eventHandle));
+                WaitForSingleObject(eventHandle, INFINITE);
+                CloseHandle(eventHandle);
+            }
+
+            // clean stuff
+            D3D_NOT_FAILED(allocator->Reset());
+            D3D_NOT_FAILED(commandList->Reset(allocator, nullptr));
 
             auto frameActualTime = frameStart - chrono::steady_clock::now();
             auto timeLeft = frameExpectedTime - frameActualTime;
@@ -1069,6 +1086,11 @@ int CALLBACK WinMain(
             }
         }
 
+        // release hepas and render targets
+        swapChain->Release();
+        commandList->Release();
+        allocator->Release();
+        queue->Release();
         device->Release();
         stbi_image_free(Texture);
     }
