@@ -3,7 +3,7 @@
 #include <Windows.h>
 #include <dxgi.h>
 #include <d3d12.h>
-
+#include <DirectXMath.h>
 
 #include <stdint.h>
 #include <cassert>
@@ -720,6 +720,23 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
     return DefWindowProc(hWnd, uMsg, wParam, lParam);
 }
 
+struct Constants
+{
+    DirectX::XMFLOAT4X4 worldViewProj = {
+        1.0f, 0.0f, 0.0f, 0.0f,
+        0.0f, 1.0f, 0.0f, 0.0f,
+        0.0f, 0.0f, 1.0f, 0.0f,
+        0.0f, 0.0f, 0.0f, 1.0f
+    };
+};
+
+template<typename T>
+uint64_t AlignBytes(uint64_t alignment = 256)
+{
+    const uint64_t upperBound = sizeof(T) + alignment - 1;
+    return upperBound - upperBound % alignment;
+}
+
 int CALLBACK WinMain(
     _In_ HINSTANCE hInstance,
     _In_opt_ HINSTANCE hPrevInstance,
@@ -788,8 +805,11 @@ int CALLBACK WinMain(
         IDXGIFactory* factory = nullptr;
         D3D_NOT_FAILED(CreateDXGIFactory(IID_PPV_ARGS(&factory)));
 
+        IDXGIAdapter* adapter = nullptr;
+        factory->EnumAdapters(0, &adapter);
+
         ID3D12Device* device = nullptr;
-        D3D_NOT_FAILED(D3D12CreateDevice(nullptr, D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&device)));
+        D3D_NOT_FAILED(D3D12CreateDevice(adapter, D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&device)));
 
         ID3D12CommandQueue* queue = nullptr;
         D3D12_COMMAND_QUEUE_DESC queueDesc = {};
@@ -863,15 +883,15 @@ int CALLBACK WinMain(
         clearValue.DepthStencil.Depth = 1.0f;
         clearValue.DepthStencil.Stencil = 0;
 
-        D3D12_HEAP_PROPERTIES heapProperties;
-        heapProperties.Type = D3D12_HEAP_TYPE_DEFAULT;
-        heapProperties.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
-        heapProperties.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
-        heapProperties.VisibleNodeMask = 1;
-        heapProperties.CreationNodeMask = 1;
+        D3D12_HEAP_PROPERTIES depthStencilHeapProperties;
+        depthStencilHeapProperties.Type = D3D12_HEAP_TYPE_DEFAULT;
+        depthStencilHeapProperties.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
+        depthStencilHeapProperties.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
+        depthStencilHeapProperties.VisibleNodeMask = 1;
+        depthStencilHeapProperties.CreationNodeMask = 1;
 
         ID3D12Resource* depthStencilBuffer = nullptr;
-        D3D_NOT_FAILED(device->CreateCommittedResource(&heapProperties, D3D12_HEAP_FLAG_NONE, &depthBufferDescription, D3D12_RESOURCE_STATE_COMMON, &clearValue, IID_PPV_ARGS(&depthStencilBuffer)));
+        D3D_NOT_FAILED(device->CreateCommittedResource(&depthStencilHeapProperties, D3D12_HEAP_FLAG_NONE, &depthBufferDescription, D3D12_RESOURCE_STATE_COMMON, &clearValue, IID_PPV_ARGS(&depthStencilBuffer)));
 
         D3D12_DESCRIPTOR_HEAP_DESC depthStencilViewHeapDescription;
         depthStencilViewHeapDescription.Type = D3D12_DESCRIPTOR_HEAP_TYPE::D3D12_DESCRIPTOR_HEAP_TYPE_DSV;
@@ -906,8 +926,53 @@ int CALLBACK WinMain(
 
         ID3D12Fence* fence = nullptr;
         D3D_NOT_FAILED(device->CreateFence(currentFenceValue, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fence)));
+        HANDLE fenceEventHandle = CreateEventExW(nullptr, nullptr, CREATE_EVENT_MANUAL_RESET, EVENT_ALL_ACCESS);
+        assert(fenceEventHandle);
 
         bool isZeroBufferInTheBack = true;
+
+        // rendering
+
+        // Constant buffer
+        D3D12_HEAP_PROPERTIES uploadHeapProperties;
+        uploadHeapProperties.Type = D3D12_HEAP_TYPE_UPLOAD;
+        uploadHeapProperties.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
+        uploadHeapProperties.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
+        uploadHeapProperties.VisibleNodeMask = 1;
+        uploadHeapProperties.CreationNodeMask = 1;
+
+        D3D12_RESOURCE_DESC uploadBufferDescription;
+        uploadBufferDescription.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+        uploadBufferDescription.Alignment = 0;
+        uploadBufferDescription.Width = AlignBytes<Constants>();
+        uploadBufferDescription.Height = 1;
+        uploadBufferDescription.DepthOrArraySize = 1;
+        uploadBufferDescription.MipLevels = 1;
+        uploadBufferDescription.Format = DXGI_FORMAT_UNKNOWN;
+
+        uploadBufferDescription.SampleDesc.Count = 1;
+        uploadBufferDescription.SampleDesc.Quality = 0;
+
+        uploadBufferDescription.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+        uploadBufferDescription.Flags = D3D12_RESOURCE_FLAG_NONE;
+
+        ID3D12Resource* uploadBuffer = nullptr;
+        D3D_NOT_FAILED(device->CreateCommittedResource(&uploadHeapProperties, D3D12_HEAP_FLAG_NONE, &uploadBufferDescription, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&uploadBuffer)));
+
+        D3D12_DESCRIPTOR_HEAP_DESC constantBufferDescriptorHeapDescription;
+        constantBufferDescriptorHeapDescription.Type = D3D12_DESCRIPTOR_HEAP_TYPE::D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+        constantBufferDescriptorHeapDescription.NumDescriptors = 1;
+        constantBufferDescriptorHeapDescription.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+        constantBufferDescriptorHeapDescription.NodeMask = 0;
+
+        ID3D12DescriptorHeap* constantBufferDescriptorHeap = nullptr;
+        D3D_NOT_FAILED(device->CreateDescriptorHeap(&constantBufferDescriptorHeapDescription, IID_PPV_ARGS(&constantBufferDescriptorHeap)));
+
+        D3D12_CONSTANT_BUFFER_VIEW_DESC constantBufferViewDescription;
+        constantBufferViewDescription.BufferLocation = uploadBuffer->GetGPUVirtualAddress();
+        constantBufferViewDescription.SizeInBytes = static_cast<UINT>(uploadBufferDescription.Width);
+
+        device->CreateConstantBufferView(&constantBufferViewDescription, constantBufferDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
 
         while (isRunning)
         {
@@ -1065,12 +1130,9 @@ int CALLBACK WinMain(
 
             if (fence->GetCompletedValue() != currentFenceValue)
             {
-                HANDLE eventHandle = CreateEventExW(nullptr, nullptr, 0, EVENT_ALL_ACCESS);
-                assert(eventHandle != 0);
-
-                D3D_NOT_FAILED(fence->SetEventOnCompletion(currentFenceValue, eventHandle));
-                WaitForSingleObject(eventHandle, INFINITE);
-                CloseHandle(eventHandle);
+                D3D_NOT_FAILED(fence->SetEventOnCompletion(currentFenceValue, fenceEventHandle));
+                WaitForSingleObject(fenceEventHandle, INFINITE);
+                ResetEvent(fenceEventHandle);
             }
 
             // clean stuff
@@ -1087,6 +1149,7 @@ int CALLBACK WinMain(
         }
 
         // release hepas and render targets
+        CloseHandle(fenceEventHandle);
         swapChain->Release();
         commandList->Release();
         allocator->Release();
