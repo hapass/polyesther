@@ -4,6 +4,8 @@
 #include <dxgi.h>
 #include <d3d12.h>
 #include <DirectXMath.h>
+#include <DirectXColors.h>
+#include <d3dcompiler.h>
 
 #include <stdint.h>
 #include <cassert>
@@ -730,6 +732,12 @@ struct Constants
     };
 };
 
+struct XVertex
+{
+    DirectX::XMFLOAT3 Pos;
+    DirectX::XMFLOAT4 Color;
+};
+
 template<typename T>
 uint64_t AlignBytes(uint64_t alignment = 256)
 {
@@ -973,6 +981,170 @@ int CALLBACK WinMain(
         constantBufferViewDescription.SizeInBytes = static_cast<UINT>(uploadBufferDescription.Width);
 
         device->CreateConstantBufferView(&constantBufferViewDescription, constantBufferDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
+
+        // root signature
+        D3D12_DESCRIPTOR_RANGE constantBufferDescriptorRange;
+        constantBufferDescriptorRange.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_CBV;
+        constantBufferDescriptorRange.NumDescriptors = 1;
+        constantBufferDescriptorRange.BaseShaderRegister = 0;
+        constantBufferDescriptorRange.RegisterSpace = 0;
+        constantBufferDescriptorRange.OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+
+        D3D12_ROOT_PARAMETER constantBufferParameter;
+        constantBufferParameter.ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+        constantBufferParameter.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+        constantBufferParameter.DescriptorTable.NumDescriptorRanges = 1;
+        constantBufferParameter.DescriptorTable.pDescriptorRanges = &constantBufferDescriptorRange;
+
+        D3D12_ROOT_SIGNATURE_DESC rootSignatureDescription;
+        rootSignatureDescription.NumParameters = 1;
+        rootSignatureDescription.pParameters = &constantBufferParameter;
+        rootSignatureDescription.NumStaticSamplers = 0;
+        rootSignatureDescription.pStaticSamplers = nullptr;
+        rootSignatureDescription.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
+
+        ID3DBlob* rootSignatureData = nullptr;
+        D3D_NOT_FAILED(D3D12SerializeRootSignature(&rootSignatureDescription, D3D_ROOT_SIGNATURE_VERSION_1, &rootSignatureData, nullptr));
+
+        ID3D12RootSignature* rootSignature = nullptr;
+        D3D_NOT_FAILED(device->CreateRootSignature(0, rootSignatureData->GetBufferPointer(), rootSignatureData->GetBufferSize(), IID_PPV_ARGS(&rootSignature)));
+
+        // pso
+        ID3DBlob* vertexShaderBlob = nullptr;
+        D3D_NOT_FAILED(D3DCompileFromFile(L"color.hlsl", nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE, "VS", "vs_5_0", 0, 0, &vertexShaderBlob, nullptr));
+
+        ID3DBlob* pixelShaderBlob = nullptr;
+        D3D_NOT_FAILED(D3DCompileFromFile(L"color.hlsl", nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE, "PS", "ps_5_0", 0, 0, &pixelShaderBlob, nullptr));
+
+        constexpr size_t vertexFieldsCount = 2;
+        D3D12_INPUT_ELEMENT_DESC inputElementDescription[vertexFieldsCount];
+
+        inputElementDescription[0].SemanticName = "POSITION";
+        inputElementDescription[0].SemanticIndex = 0;
+        inputElementDescription[0].Format = DXGI_FORMAT_R32G32B32_FLOAT;
+        inputElementDescription[0].InputSlot = 0;
+        inputElementDescription[0].AlignedByteOffset = 0;
+        inputElementDescription[0].InputSlotClass = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA;
+        inputElementDescription[0].InstanceDataStepRate = 0;
+
+        inputElementDescription[1].SemanticName = "COLOR";
+        inputElementDescription[1].SemanticIndex = 0;
+        inputElementDescription[1].Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
+        inputElementDescription[1].InputSlot = 0;
+        inputElementDescription[1].AlignedByteOffset = 12;
+        inputElementDescription[1].InputSlotClass = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA;
+        inputElementDescription[1].InstanceDataStepRate = 0;
+
+        D3D12_GRAPHICS_PIPELINE_STATE_DESC pipelineStateObjectDescription = {};
+        pipelineStateObjectDescription.InputLayout = { inputElementDescription, vertexFieldsCount };
+        pipelineStateObjectDescription.pRootSignature = rootSignature;
+        pipelineStateObjectDescription.VS = { (BYTE*)vertexShaderBlob->GetBufferPointer(), vertexShaderBlob->GetBufferSize() };
+        pipelineStateObjectDescription.PS = { (BYTE*)pixelShaderBlob->GetBufferPointer(), pixelShaderBlob->GetBufferSize() };
+
+        pipelineStateObjectDescription.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
+        pipelineStateObjectDescription.RasterizerState.CullMode = D3D12_CULL_MODE_BACK;
+        pipelineStateObjectDescription.RasterizerState.FrontCounterClockwise = false;
+        pipelineStateObjectDescription.RasterizerState.DepthBias = D3D12_DEFAULT_DEPTH_BIAS;
+        pipelineStateObjectDescription.RasterizerState.DepthBiasClamp = D3D12_DEFAULT_DEPTH_BIAS_CLAMP;
+        pipelineStateObjectDescription.RasterizerState.SlopeScaledDepthBias = D3D12_DEFAULT_SLOPE_SCALED_DEPTH_BIAS;
+        pipelineStateObjectDescription.RasterizerState.DepthClipEnable = true;
+        pipelineStateObjectDescription.RasterizerState.MultisampleEnable = false;
+        pipelineStateObjectDescription.RasterizerState.AntialiasedLineEnable = false;
+        pipelineStateObjectDescription.RasterizerState.ForcedSampleCount = 0;
+        pipelineStateObjectDescription.RasterizerState.ConservativeRaster = D3D12_CONSERVATIVE_RASTERIZATION_MODE_OFF;
+
+        pipelineStateObjectDescription.BlendState.AlphaToCoverageEnable = false;
+        pipelineStateObjectDescription.BlendState.IndependentBlendEnable = false;
+        for (UINT i = 0; i < D3D12_SIMULTANEOUS_RENDER_TARGET_COUNT; ++i)
+        {
+            pipelineStateObjectDescription.BlendState.RenderTarget[i].BlendEnable = false;
+            pipelineStateObjectDescription.BlendState.RenderTarget[i].LogicOpEnable = false;
+            pipelineStateObjectDescription.BlendState.RenderTarget[i].SrcBlend = D3D12_BLEND_ONE;
+            pipelineStateObjectDescription.BlendState.RenderTarget[i].DestBlend = D3D12_BLEND_ZERO;
+            pipelineStateObjectDescription.BlendState.RenderTarget[i].BlendOp = D3D12_BLEND_OP_ADD;
+            pipelineStateObjectDescription.BlendState.RenderTarget[i].SrcBlendAlpha = D3D12_BLEND_ONE;
+            pipelineStateObjectDescription.BlendState.RenderTarget[i].DestBlendAlpha = D3D12_BLEND_ZERO;
+            pipelineStateObjectDescription.BlendState.RenderTarget[i].BlendOpAlpha = D3D12_BLEND_OP_ADD;
+            pipelineStateObjectDescription.BlendState.RenderTarget[i].LogicOp = D3D12_LOGIC_OP_NOOP;
+            pipelineStateObjectDescription.BlendState.RenderTarget[i].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
+        }
+
+        pipelineStateObjectDescription.DepthStencilState.DepthEnable = true;
+        pipelineStateObjectDescription.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL;
+        pipelineStateObjectDescription.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_LESS;
+        pipelineStateObjectDescription.DepthStencilState.StencilEnable = false;
+        pipelineStateObjectDescription.DepthStencilState.StencilReadMask = D3D12_DEFAULT_STENCIL_READ_MASK;
+        pipelineStateObjectDescription.DepthStencilState.StencilWriteMask = D3D12_DEFAULT_STENCIL_WRITE_MASK;
+
+        pipelineStateObjectDescription.DepthStencilState.FrontFace.StencilFailOp = D3D12_STENCIL_OP_KEEP;
+        pipelineStateObjectDescription.DepthStencilState.FrontFace.StencilDepthFailOp = D3D12_STENCIL_OP_KEEP;
+        pipelineStateObjectDescription.DepthStencilState.FrontFace.StencilPassOp = D3D12_STENCIL_OP_KEEP;
+        pipelineStateObjectDescription.DepthStencilState.FrontFace.StencilFunc = D3D12_COMPARISON_FUNC_ALWAYS;
+
+        pipelineStateObjectDescription.DepthStencilState.BackFace.StencilFailOp = D3D12_STENCIL_OP_KEEP;
+        pipelineStateObjectDescription.DepthStencilState.BackFace.StencilDepthFailOp = D3D12_STENCIL_OP_KEEP;
+        pipelineStateObjectDescription.DepthStencilState.BackFace.StencilPassOp = D3D12_STENCIL_OP_KEEP;
+        pipelineStateObjectDescription.DepthStencilState.BackFace.StencilFunc = D3D12_COMPARISON_FUNC_ALWAYS;
+
+        pipelineStateObjectDescription.SampleMask = UINT_MAX;
+        pipelineStateObjectDescription.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+        pipelineStateObjectDescription.NumRenderTargets = 1;
+        pipelineStateObjectDescription.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
+        pipelineStateObjectDescription.SampleDesc.Count = 1;
+        pipelineStateObjectDescription.SampleDesc.Quality = 0;
+        pipelineStateObjectDescription.DSVFormat = DXGI_FORMAT_D24_UNORM_S8_UINT;
+
+        ID3D12PipelineState* pso = nullptr;
+        D3D_NOT_FAILED(device->CreateGraphicsPipelineState(&pipelineStateObjectDescription, IID_PPV_ARGS(&pso)));
+
+        // upload static geometry
+        std::array<XVertex, 8> cubeVertices =
+        {
+            XVertex({ DirectX::XMFLOAT3(-1.0f, -1.0f, -1.0f), DirectX::XMFLOAT4(DirectX::Colors::White) }),
+            XVertex({ DirectX::XMFLOAT3(-1.0f, +1.0f, -1.0f), DirectX::XMFLOAT4(DirectX::Colors::Black) }),
+            XVertex({ DirectX::XMFLOAT3(+1.0f, +1.0f, -1.0f), DirectX::XMFLOAT4(DirectX::Colors::Red) }),
+            XVertex({ DirectX::XMFLOAT3(+1.0f, -1.0f, -1.0f), DirectX::XMFLOAT4(DirectX::Colors::Green) }),
+            XVertex({ DirectX::XMFLOAT3(-1.0f, -1.0f, +1.0f), DirectX::XMFLOAT4(DirectX::Colors::Blue) }),
+            XVertex({ DirectX::XMFLOAT3(-1.0f, +1.0f, +1.0f), DirectX::XMFLOAT4(DirectX::Colors::Yellow) }),
+            XVertex({ DirectX::XMFLOAT3(+1.0f, +1.0f, +1.0f), DirectX::XMFLOAT4(DirectX::Colors::Cyan) }),
+            XVertex({ DirectX::XMFLOAT3(+1.0f, -1.0f, +1.0f), DirectX::XMFLOAT4(DirectX::Colors::Magenta) })
+        };
+
+        std::array<std::uint16_t, 36> cubeIndices =
+        {
+            // front face
+            0, 1, 2,
+            0, 2, 3,
+
+            // back face
+            4, 6, 5,
+            4, 7, 6,
+
+            // left face
+            4, 5, 1,
+            4, 1, 0,
+
+            // right face
+            3, 2, 6,
+            3, 6, 7,
+
+            // top face
+            1, 5, 6,
+            1, 6, 2,
+
+            // bottom face
+            4, 0, 3,
+            4, 3, 7
+        };
+
+        SIZE_T vertexBufferBytes = static_cast<SIZE_T>(cubeVertices.size()) * sizeof(XVertex);
+        SIZE_T indexBufferBytes = static_cast<SIZE_T>(cubeIndices.size()) * sizeof(std::uint16_t);
+
+        ID3DBlob* vertexCPUBuffer = nullptr;
+        D3D_NOT_FAILED(D3DCreateBlob(vertexBufferBytes, &vertexCPUBuffer));
+
+        ID3DBlob* indexCPUBuffer = nullptr;
+        D3D_NOT_FAILED(D3DCreateBlob(indexBufferBytes, &indexCPUBuffer));
 
         while (isRunning)
         {
