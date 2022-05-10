@@ -891,15 +891,15 @@ int CALLBACK WinMain(
         clearValue.DepthStencil.Depth = 1.0f;
         clearValue.DepthStencil.Stencil = 0;
 
-        D3D12_HEAP_PROPERTIES depthStencilHeapProperties;
-        depthStencilHeapProperties.Type = D3D12_HEAP_TYPE_DEFAULT;
-        depthStencilHeapProperties.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
-        depthStencilHeapProperties.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
-        depthStencilHeapProperties.VisibleNodeMask = 1;
-        depthStencilHeapProperties.CreationNodeMask = 1;
+        D3D12_HEAP_PROPERTIES defaultHeapProperties;
+        defaultHeapProperties.Type = D3D12_HEAP_TYPE_DEFAULT;
+        defaultHeapProperties.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
+        defaultHeapProperties.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
+        defaultHeapProperties.VisibleNodeMask = 1;
+        defaultHeapProperties.CreationNodeMask = 1;
 
         ID3D12Resource* depthStencilBuffer = nullptr;
-        D3D_NOT_FAILED(device->CreateCommittedResource(&depthStencilHeapProperties, D3D12_HEAP_FLAG_NONE, &depthBufferDescription, D3D12_RESOURCE_STATE_COMMON, &clearValue, IID_PPV_ARGS(&depthStencilBuffer)));
+        D3D_NOT_FAILED(device->CreateCommittedResource(&defaultHeapProperties, D3D12_HEAP_FLAG_NONE, &depthBufferDescription, D3D12_RESOURCE_STATE_COMMON, &clearValue, IID_PPV_ARGS(&depthStencilBuffer)));
 
         D3D12_DESCRIPTOR_HEAP_DESC depthStencilViewHeapDescription;
         depthStencilViewHeapDescription.Type = D3D12_DESCRIPTOR_HEAP_TYPE::D3D12_DESCRIPTOR_HEAP_TYPE_DSV;
@@ -1098,17 +1098,6 @@ int CALLBACK WinMain(
         D3D_NOT_FAILED(device->CreateGraphicsPipelineState(&pipelineStateObjectDescription, IID_PPV_ARGS(&pso)));
 
         // upload static geometry
-        std::array<XVertex, 8> cubeVertices =
-        {
-            XVertex({ DirectX::XMFLOAT3(-1.0f, -1.0f, -1.0f), DirectX::XMFLOAT4(DirectX::Colors::White) }),
-            XVertex({ DirectX::XMFLOAT3(-1.0f, +1.0f, -1.0f), DirectX::XMFLOAT4(DirectX::Colors::Black) }),
-            XVertex({ DirectX::XMFLOAT3(+1.0f, +1.0f, -1.0f), DirectX::XMFLOAT4(DirectX::Colors::Red) }),
-            XVertex({ DirectX::XMFLOAT3(+1.0f, -1.0f, -1.0f), DirectX::XMFLOAT4(DirectX::Colors::Green) }),
-            XVertex({ DirectX::XMFLOAT3(-1.0f, -1.0f, +1.0f), DirectX::XMFLOAT4(DirectX::Colors::Blue) }),
-            XVertex({ DirectX::XMFLOAT3(-1.0f, +1.0f, +1.0f), DirectX::XMFLOAT4(DirectX::Colors::Yellow) }),
-            XVertex({ DirectX::XMFLOAT3(+1.0f, +1.0f, +1.0f), DirectX::XMFLOAT4(DirectX::Colors::Cyan) }),
-            XVertex({ DirectX::XMFLOAT3(+1.0f, -1.0f, +1.0f), DirectX::XMFLOAT4(DirectX::Colors::Magenta) })
-        };
 
         std::array<std::uint16_t, 36> cubeIndices =
         {
@@ -1137,14 +1126,160 @@ int CALLBACK WinMain(
             4, 3, 7
         };
 
-        SIZE_T vertexBufferBytes = static_cast<SIZE_T>(cubeVertices.size()) * sizeof(XVertex);
         SIZE_T indexBufferBytes = static_cast<SIZE_T>(cubeIndices.size()) * sizeof(std::uint16_t);
 
-        ID3DBlob* vertexCPUBuffer = nullptr;
-        D3D_NOT_FAILED(D3DCreateBlob(vertexBufferBytes, &vertexCPUBuffer));
+        D3D12_RESOURCE_DESC dataBufferDescription;
+        dataBufferDescription.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+        dataBufferDescription.Alignment = 0;
+        dataBufferDescription.Height = 1;
+        dataBufferDescription.DepthOrArraySize = 1;
+        dataBufferDescription.MipLevels = 1;
+        dataBufferDescription.Format = DXGI_FORMAT_UNKNOWN;
 
-        ID3DBlob* indexCPUBuffer = nullptr;
-        D3D_NOT_FAILED(D3DCreateBlob(indexBufferBytes, &indexCPUBuffer));
+        dataBufferDescription.SampleDesc.Count = 1;
+        dataBufferDescription.SampleDesc.Quality = 0;
+
+        dataBufferDescription.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+        dataBufferDescription.Flags = D3D12_RESOURCE_FLAG_NONE;
+
+        D3D12_RESOURCE_BARRIER copyDestBufferTransition;
+        copyDestBufferTransition.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+        copyDestBufferTransition.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+        copyDestBufferTransition.Transition.StateBefore = D3D12_RESOURCE_STATE_COMMON;
+        copyDestBufferTransition.Transition.StateAfter = D3D12_RESOURCE_STATE_COPY_DEST;
+        copyDestBufferTransition.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+
+        D3D12_RESOURCE_BARRIER genericReadBufferTransition;
+        copyDestBufferTransition.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+        copyDestBufferTransition.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+        copyDestBufferTransition.Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
+        copyDestBufferTransition.Transition.StateAfter = D3D12_RESOURCE_STATE_GENERIC_READ;
+        copyDestBufferTransition.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+
+        {
+            std::array<XVertex, 8> data =
+            {
+                XVertex({ DirectX::XMFLOAT3(-1.0f, -1.0f, -1.0f), DirectX::XMFLOAT4(DirectX::Colors::White) }),
+                XVertex({ DirectX::XMFLOAT3(-1.0f, +1.0f, -1.0f), DirectX::XMFLOAT4(DirectX::Colors::Black) }),
+                XVertex({ DirectX::XMFLOAT3(+1.0f, +1.0f, -1.0f), DirectX::XMFLOAT4(DirectX::Colors::Red) }),
+                XVertex({ DirectX::XMFLOAT3(+1.0f, -1.0f, -1.0f), DirectX::XMFLOAT4(DirectX::Colors::Green) }),
+                XVertex({ DirectX::XMFLOAT3(-1.0f, -1.0f, +1.0f), DirectX::XMFLOAT4(DirectX::Colors::Blue) }),
+                XVertex({ DirectX::XMFLOAT3(-1.0f, +1.0f, +1.0f), DirectX::XMFLOAT4(DirectX::Colors::Yellow) }),
+                XVertex({ DirectX::XMFLOAT3(+1.0f, +1.0f, +1.0f), DirectX::XMFLOAT4(DirectX::Colors::Cyan) }),
+                XVertex({ DirectX::XMFLOAT3(+1.0f, -1.0f, +1.0f), DirectX::XMFLOAT4(DirectX::Colors::Magenta) })
+            };
+
+            ID3DBlob* cpuBuffer = nullptr;
+            D3D_NOT_FAILED(D3DCreateBlob(static_cast<SIZE_T>(data.size()) * sizeof(XVertex), &cpuBuffer));
+            CopyMemory(cpuBuffer->GetBufferPointer(), data.data(), data.size());
+
+            dataBufferDescription.Width = cpuBuffer->GetBufferSize();
+
+            ID3D12Resource* dataUploadBuffer = nullptr;
+            D3D_NOT_FAILED(device->CreateCommittedResource(&uploadHeapProperties, D3D12_HEAP_FLAG_NONE, &dataBufferDescription, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&dataUploadBuffer)));
+        
+            ID3D12Resource* dataBuffer = nullptr;
+            D3D_NOT_FAILED(device->CreateCommittedResource(&defaultHeapProperties, D3D12_HEAP_FLAG_NONE, &dataBufferDescription, D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&dataBuffer)));
+            
+            copyDestBufferTransition.Transition.pResource = dataBuffer;
+            genericReadBufferTransition.Transition.pResource = dataBuffer;
+
+            commandList->ResourceBarrier(1, &copyDestBufferTransition);
+
+            BYTE* mappedData = nullptr;
+            dataUploadBuffer->Map(0, nullptr, (void**)&mappedData);
+            memcpy(mappedData, cpuBuffer->GetBufferPointer(), cpuBuffer->GetBufferSize());
+            dataUploadBuffer->Unmap(0, nullptr);
+            commandList->CopyBufferRegion(dataBuffer, 0, dataUploadBuffer, 0, cpuBuffer->GetBufferSize());
+
+            commandList->Close();
+
+            ID3D12CommandList* cmdsLists[1] = { commandList };
+            queue->ExecuteCommandLists(1, cmdsLists);
+
+            currentFenceValue++;
+            queue->Signal(fence, currentFenceValue);
+
+            if (fence->GetCompletedValue() != currentFenceValue)
+            {
+                D3D_NOT_FAILED(fence->SetEventOnCompletion(currentFenceValue, fenceEventHandle));
+                WaitForSingleObject(fenceEventHandle, INFINITE);
+                ResetEvent(fenceEventHandle);
+            }
+
+            D3D_NOT_FAILED(allocator->Reset());
+            D3D_NOT_FAILED(commandList->Reset(allocator, nullptr));
+        }
+
+        {
+            std::array<std::uint16_t, 36> data =
+            {
+                // front face
+                0, 1, 2,
+                0, 2, 3,
+
+                // back face
+                4, 6, 5,
+                4, 7, 6,
+
+                // left face
+                4, 5, 1,
+                4, 1, 0,
+
+                // right face
+                3, 2, 6,
+                3, 6, 7,
+
+                // top face
+                1, 5, 6,
+                1, 6, 2,
+
+                // bottom face
+                4, 0, 3,
+                4, 3, 7
+            };
+
+            ID3DBlob* cpuBuffer = nullptr;
+            D3D_NOT_FAILED(D3DCreateBlob(static_cast<SIZE_T>(data.size()) * sizeof(std::uint16_t), &cpuBuffer));
+            CopyMemory(cpuBuffer->GetBufferPointer(), data.data(), data.size());
+
+            dataBufferDescription.Width = cpuBuffer->GetBufferSize();
+
+            static ID3D12Resource* dataUploadBuffer = nullptr;
+            D3D_NOT_FAILED(device->CreateCommittedResource(&uploadHeapProperties, D3D12_HEAP_FLAG_NONE, &dataBufferDescription, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&dataUploadBuffer)));
+
+            static ID3D12Resource* dataBuffer = nullptr;
+            D3D_NOT_FAILED(device->CreateCommittedResource(&defaultHeapProperties, D3D12_HEAP_FLAG_NONE, &dataBufferDescription, D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&dataBuffer)));
+
+            copyDestBufferTransition.Transition.pResource = dataBuffer;
+            genericReadBufferTransition.Transition.pResource = dataBuffer;
+
+            commandList->ResourceBarrier(1, &copyDestBufferTransition);
+
+            BYTE* mappedData = nullptr;
+            dataUploadBuffer->Map(0, nullptr, (void**)&mappedData);
+            memcpy(mappedData, cpuBuffer->GetBufferPointer(), cpuBuffer->GetBufferSize());
+            dataUploadBuffer->Unmap(0, nullptr);
+            commandList->CopyBufferRegion(dataBuffer, 0, dataUploadBuffer, 0, cpuBuffer->GetBufferSize());
+
+            commandList->Close();
+
+            ID3D12CommandList* cmdsLists[1] = { commandList };
+            queue->ExecuteCommandLists(1, cmdsLists);
+
+            currentFenceValue++;
+            queue->Signal(fence, currentFenceValue);
+
+            if (fence->GetCompletedValue() != currentFenceValue)
+            {
+                D3D_NOT_FAILED(fence->SetEventOnCompletion(currentFenceValue, fenceEventHandle));
+                WaitForSingleObject(fenceEventHandle, INFINITE);
+                ResetEvent(fenceEventHandle);
+            }
+
+            D3D_NOT_FAILED(allocator->Reset());
+            D3D_NOT_FAILED(commandList->Reset(allocator, nullptr));
+        }
 
         while (isRunning)
         {
