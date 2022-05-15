@@ -982,6 +982,34 @@ int CALLBACK WinMain(
 
         device->CreateConstantBufferView(&constantBufferViewDescription, constantBufferDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
 
+        // upload mvp matrix
+        {
+            Constants constantsStruct;
+
+            float theta = 1.5f * DirectX::XM_PI;
+            float phi = DirectX::XM_PIDIV4;
+            float radius = 5.0f;
+
+            float x = radius * sinf(phi) * cosf(theta);
+            float z = radius * sinf(phi) * sinf(theta);
+            float y = radius * cosf(phi);
+
+            // Build the view matrix.
+            DirectX::XMVECTOR pos = DirectX::XMVectorSet(x, y, z, 1.0f);
+            DirectX::XMVECTOR target = DirectX::XMVectorZero();
+            DirectX::XMVECTOR up = DirectX::XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);
+
+            DirectX::XMMATRIX view = DirectX::XMMatrixLookAtLH(pos, target, up);
+            DirectX::XMMATRIX projection = DirectX::XMMatrixPerspectiveFovLH(0.25f * DirectX::XM_PI, 800.0f/600.0f, 1.0f, 1000.0f);
+
+            DirectX::XMStoreFloat4x4(&constantsStruct.worldViewProj, XMMatrixTranspose(view * projection));
+
+            BYTE* mappedData = nullptr;
+            uploadBuffer->Map(0, nullptr, (void**)&mappedData);
+            memcpy(mappedData, &constantsStruct, sizeof(Constants));
+            uploadBuffer->Unmap(0, nullptr);
+        }
+
         // root signature
         D3D12_DESCRIPTOR_RANGE constantBufferDescriptorRange;
         constantBufferDescriptorRange.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_CBV;
@@ -1099,35 +1127,6 @@ int CALLBACK WinMain(
 
         // upload static geometry
 
-        std::array<std::uint16_t, 36> cubeIndices =
-        {
-            // front face
-            0, 1, 2,
-            0, 2, 3,
-
-            // back face
-            4, 6, 5,
-            4, 7, 6,
-
-            // left face
-            4, 5, 1,
-            4, 1, 0,
-
-            // right face
-            3, 2, 6,
-            3, 6, 7,
-
-            // top face
-            1, 5, 6,
-            1, 6, 2,
-
-            // bottom face
-            4, 0, 3,
-            4, 3, 7
-        };
-
-        SIZE_T indexBufferBytes = static_cast<SIZE_T>(cubeIndices.size()) * sizeof(std::uint16_t);
-
         D3D12_RESOURCE_DESC dataBufferDescription;
         dataBufferDescription.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
         dataBufferDescription.Alignment = 0;
@@ -1150,12 +1149,13 @@ int CALLBACK WinMain(
         copyDestBufferTransition.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
 
         D3D12_RESOURCE_BARRIER genericReadBufferTransition;
-        copyDestBufferTransition.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-        copyDestBufferTransition.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
-        copyDestBufferTransition.Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
-        copyDestBufferTransition.Transition.StateAfter = D3D12_RESOURCE_STATE_GENERIC_READ;
-        copyDestBufferTransition.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+        genericReadBufferTransition.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+        genericReadBufferTransition.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+        genericReadBufferTransition.Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
+        genericReadBufferTransition.Transition.StateAfter = D3D12_RESOURCE_STATE_GENERIC_READ;
+        genericReadBufferTransition.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
 
+        ID3D12Resource* vertexBuffer = nullptr;
         {
             std::array<XVertex, 8> data =
             {
@@ -1169,13 +1169,9 @@ int CALLBACK WinMain(
                 XVertex({ DirectX::XMFLOAT3(+1.0f, -1.0f, +1.0f), DirectX::XMFLOAT4(DirectX::Colors::Magenta) })
             };
 
-            ID3DBlob* cpuBuffer = nullptr;
-            D3D_NOT_FAILED(D3DCreateBlob(static_cast<SIZE_T>(data.size()) * sizeof(XVertex), &cpuBuffer));
-            CopyMemory(cpuBuffer->GetBufferPointer(), data.data(), data.size());
+            dataBufferDescription.Width = data.size() * sizeof(XVertex);
 
-            dataBufferDescription.Width = cpuBuffer->GetBufferSize();
-
-            ID3D12Resource* dataUploadBuffer = nullptr;
+            ID3D12Resource* dataUploadBuffer = nullptr; // TODO: should be cleared later
             D3D_NOT_FAILED(device->CreateCommittedResource(&uploadHeapProperties, D3D12_HEAP_FLAG_NONE, &dataBufferDescription, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&dataUploadBuffer)));
         
             ID3D12Resource* dataBuffer = nullptr;
@@ -1188,9 +1184,11 @@ int CALLBACK WinMain(
 
             BYTE* mappedData = nullptr;
             dataUploadBuffer->Map(0, nullptr, (void**)&mappedData);
-            memcpy(mappedData, cpuBuffer->GetBufferPointer(), cpuBuffer->GetBufferSize());
+            memcpy(mappedData, data.data(), data.size() * sizeof(XVertex));
             dataUploadBuffer->Unmap(0, nullptr);
-            commandList->CopyBufferRegion(dataBuffer, 0, dataUploadBuffer, 0, cpuBuffer->GetBufferSize());
+            commandList->CopyBufferRegion(dataBuffer, 0, dataUploadBuffer, 0, data.size() * sizeof(XVertex));
+
+            commandList->ResourceBarrier(1, &genericReadBufferTransition);
 
             commandList->Close();
 
@@ -1208,9 +1206,12 @@ int CALLBACK WinMain(
             }
 
             D3D_NOT_FAILED(allocator->Reset());
-            D3D_NOT_FAILED(commandList->Reset(allocator, nullptr));
+            D3D_NOT_FAILED(commandList->Reset(allocator, pso));
+
+            vertexBuffer = dataBuffer;
         }
 
+        ID3D12Resource* indexBuffer = nullptr;
         {
             std::array<std::uint16_t, 36> data =
             {
@@ -1241,14 +1242,14 @@ int CALLBACK WinMain(
 
             ID3DBlob* cpuBuffer = nullptr;
             D3D_NOT_FAILED(D3DCreateBlob(static_cast<SIZE_T>(data.size()) * sizeof(std::uint16_t), &cpuBuffer));
-            CopyMemory(cpuBuffer->GetBufferPointer(), data.data(), data.size());
+            CopyMemory(cpuBuffer->GetBufferPointer(), data.data(), static_cast<SIZE_T>(data.size()) * sizeof(std::uint16_t));
 
             dataBufferDescription.Width = cpuBuffer->GetBufferSize();
 
-            static ID3D12Resource* dataUploadBuffer = nullptr;
+            ID3D12Resource* dataUploadBuffer = nullptr; // TODO: should be cleared later
             D3D_NOT_FAILED(device->CreateCommittedResource(&uploadHeapProperties, D3D12_HEAP_FLAG_NONE, &dataBufferDescription, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&dataUploadBuffer)));
 
-            static ID3D12Resource* dataBuffer = nullptr;
+            ID3D12Resource* dataBuffer = nullptr;
             D3D_NOT_FAILED(device->CreateCommittedResource(&defaultHeapProperties, D3D12_HEAP_FLAG_NONE, &dataBufferDescription, D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&dataBuffer)));
 
             copyDestBufferTransition.Transition.pResource = dataBuffer;
@@ -1261,6 +1262,8 @@ int CALLBACK WinMain(
             memcpy(mappedData, cpuBuffer->GetBufferPointer(), cpuBuffer->GetBufferSize());
             dataUploadBuffer->Unmap(0, nullptr);
             commandList->CopyBufferRegion(dataBuffer, 0, dataUploadBuffer, 0, cpuBuffer->GetBufferSize());
+
+            commandList->ResourceBarrier(1, &genericReadBufferTransition);
 
             commandList->Close();
 
@@ -1278,7 +1281,9 @@ int CALLBACK WinMain(
             }
 
             D3D_NOT_FAILED(allocator->Reset());
-            D3D_NOT_FAILED(commandList->Reset(allocator, nullptr));
+            D3D_NOT_FAILED(commandList->Reset(allocator, pso));
+
+            indexBuffer = dataBuffer;
         }
 
         while (isRunning)
@@ -1380,6 +1385,24 @@ int CALLBACK WinMain(
             ID3D12Resource* currentBuffer = isZeroBufferInTheBack ? zeroBuffer : firstBuffer;
             D3D12_CPU_DESCRIPTOR_HANDLE* currentBufferHandle = isZeroBufferInTheBack ? &zeroBufferHandle : &firstBufferHandle;
 
+            D3D12_VIEWPORT viewport;
+            viewport.TopLeftX = 0.0f;
+            viewport.TopLeftY = 0.0f;
+            viewport.Width = GameWidth;
+            viewport.Height = GameHeight;
+            viewport.MinDepth = 0.0f;
+            viewport.MaxDepth = 1.0f;
+
+            commandList->RSSetViewports(1, &viewport);
+
+            D3D12_RECT scissor;
+            scissor.left = 0;
+            scissor.top = 0;
+            scissor.bottom = GameHeight;
+            scissor.right = GameWidth;
+
+            commandList->RSSetScissorRects(1, &scissor);
+
             D3D12_RESOURCE_BARRIER renderTargetBufferTransition;
             renderTargetBufferTransition.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
             renderTargetBufferTransition.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
@@ -1391,28 +1414,33 @@ int CALLBACK WinMain(
 
             commandList->ResourceBarrier(1, &renderTargetBufferTransition);
 
-            D3D12_VIEWPORT viewport;
-            viewport.TopLeftX = 0.0f;
-            viewport.TopLeftY = 0.0f;
-            viewport.Width = GameWidth;
-            viewport.Height = GameHeight;
-            viewport.MinDepth = 0.0f;
-            viewport.MaxDepth = 0.0f;
-
-            commandList->RSSetViewports(1, &viewport);
-
-            D3D12_RECT scissor;
-            scissor.left = 0;
-            scissor.top = 0;
-            scissor.bottom = GameHeight;
-            scissor.right = GameWidth;
-
-            commandList->RSSetScissorRects(1, &scissor);
-            commandList->OMSetRenderTargets(1, currentBufferHandle, true, &depthBufferHandle);
-
-            FLOAT clearColor[4] = { 1.0f, 0.f, 0.f, 1.000000000f };
+            FLOAT clearColor[4] = { 1.0f, 1.f, 1.f, 1.000000000f };
             commandList->ClearRenderTargetView(*currentBufferHandle, clearColor, 0, nullptr);
             commandList->ClearDepthStencilView(depthBufferHandle, D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, 1.0f, 0, 0, nullptr);
+
+            commandList->OMSetRenderTargets(1, currentBufferHandle, true, &depthBufferHandle);
+
+            ID3D12DescriptorHeap* descriptorHeaps[] = { constantBufferDescriptorHeap };
+            commandList->SetDescriptorHeaps(1, descriptorHeaps);
+            commandList->SetGraphicsRootSignature(rootSignature);
+
+            D3D12_VERTEX_BUFFER_VIEW vertexBufferView;
+            vertexBufferView.BufferLocation = vertexBuffer->GetGPUVirtualAddress();
+            vertexBufferView.StrideInBytes = sizeof(XVertex);
+            vertexBufferView.SizeInBytes = sizeof(XVertex) * 8;
+            commandList->IASetVertexBuffers(0, 1, &vertexBufferView);
+
+            D3D12_INDEX_BUFFER_VIEW indexBufferView;
+            indexBufferView.BufferLocation = indexBuffer->GetGPUVirtualAddress();
+            indexBufferView.Format = DXGI_FORMAT_R16_UINT;
+            indexBufferView.SizeInBytes = sizeof(std::uint16_t) * 36;
+            commandList->IASetIndexBuffer(&indexBufferView);
+
+            commandList->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+            commandList->SetGraphicsRootDescriptorTable(0, constantBufferDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
+
+            commandList->DrawIndexedInstanced(36, 1, 0, 0, 0);
 
             D3D12_RESOURCE_BARRIER presentBufferTransition;
             presentBufferTransition.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
@@ -1444,7 +1472,7 @@ int CALLBACK WinMain(
 
             // clean stuff
             D3D_NOT_FAILED(allocator->Reset());
-            D3D_NOT_FAILED(commandList->Reset(allocator, nullptr));
+            D3D_NOT_FAILED(commandList->Reset(allocator, pso));
 
             auto frameActualTime = frameStart - chrono::steady_clock::now();
             auto timeLeft = frameExpectedTime - frameActualTime;
