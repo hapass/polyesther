@@ -51,8 +51,6 @@ static int32_t TextureWidth;
 static int32_t TextureHeight;
 static uint8_t* Texture;
 
-static uint32_t CurrentModelIndex = 0;
-
 struct Matrix
 {
     Matrix()
@@ -1157,17 +1155,17 @@ int CALLBACK WinMain(
 
         ID3D12Resource* vertexBuffer = nullptr;
         {
-            std::array<XVertex, 8> data =
+            std::vector<XVertex> data;
+
+            for (int i = 0; i < verticesObj.size(); i++)
             {
-                XVertex({ DirectX::XMFLOAT3(-1.0f, -1.0f, -1.0f), DirectX::XMFLOAT4(DirectX::Colors::White) }),
-                XVertex({ DirectX::XMFLOAT3(-1.0f, +1.0f, -1.0f), DirectX::XMFLOAT4(DirectX::Colors::Black) }),
-                XVertex({ DirectX::XMFLOAT3(+1.0f, +1.0f, -1.0f), DirectX::XMFLOAT4(DirectX::Colors::Red) }),
-                XVertex({ DirectX::XMFLOAT3(+1.0f, -1.0f, -1.0f), DirectX::XMFLOAT4(DirectX::Colors::Green) }),
-                XVertex({ DirectX::XMFLOAT3(-1.0f, -1.0f, +1.0f), DirectX::XMFLOAT4(DirectX::Colors::Blue) }),
-                XVertex({ DirectX::XMFLOAT3(-1.0f, +1.0f, +1.0f), DirectX::XMFLOAT4(DirectX::Colors::Yellow) }),
-                XVertex({ DirectX::XMFLOAT3(+1.0f, +1.0f, +1.0f), DirectX::XMFLOAT4(DirectX::Colors::Cyan) }),
-                XVertex({ DirectX::XMFLOAT3(+1.0f, -1.0f, +1.0f), DirectX::XMFLOAT4(DirectX::Colors::Magenta) })
-            };
+                data.push_back(
+                    XVertex({
+                        DirectX::XMFLOAT3(verticesObj[i].x, verticesObj[i].y, verticesObj[i].z),
+                        DirectX::XMFLOAT4(colorsObj[i].x, colorsObj[i].y, colorsObj[i].z, colorsObj[i].w)
+                    })
+                );
+            }
 
             dataBufferDescription.Width = data.size() * sizeof(XVertex);
 
@@ -1213,32 +1211,12 @@ int CALLBACK WinMain(
 
         ID3D12Resource* indexBuffer = nullptr;
         {
-            std::array<std::uint16_t, 36> data =
+            std::vector<std::uint16_t> data;
+
+            for (uint32_t i = 0; i < indicesObj.size(); i++)
             {
-                // front face
-                0, 1, 2,
-                0, 2, 3,
-
-                // back face
-                4, 6, 5,
-                4, 7, 6,
-
-                // left face
-                4, 5, 1,
-                4, 1, 0,
-
-                // right face
-                3, 2, 6,
-                3, 6, 7,
-
-                // top face
-                1, 5, 6,
-                1, 6, 2,
-
-                // bottom face
-                4, 0, 3,
-                4, 3, 7
-            };
+                data.push_back(static_cast<uint16_t>(indicesObj[i].vert));
+            }
 
             ID3DBlob* cpuBuffer = nullptr;
             D3D_NOT_FAILED(D3DCreateBlob(static_cast<SIZE_T>(data.size()) * sizeof(std::uint16_t), &cpuBuffer));
@@ -1370,18 +1348,6 @@ int CALLBACK WinMain(
             // calculate light's position in view space
             light.position_view = view(camera) * modelMat(models[1]) * models[1].position;
 
-            int32_t indices_offset = 0;
-            for (size_t i = 0; i < models.size(); i++)
-            {
-                CurrentModelIndex = static_cast<uint32_t>(i);
-                const Model& model = models.at(i);
-                for (uint32_t i = 0; i < model.indices_count / 3; i++)
-                {
-                    // draw triangle - not implemented
-                }
-                indices_offset += model.indices_count;
-            }
-
             ID3D12Resource* currentBuffer = isZeroBufferInTheBack ? zeroBuffer : firstBuffer;
             D3D12_CPU_DESCRIPTOR_HANDLE* currentBufferHandle = isZeroBufferInTheBack ? &zeroBufferHandle : &firstBufferHandle;
 
@@ -1414,7 +1380,7 @@ int CALLBACK WinMain(
 
             commandList->ResourceBarrier(1, &renderTargetBufferTransition);
 
-            FLOAT clearColor[4] = { 1.0f, 1.f, 1.f, 1.000000000f };
+            FLOAT clearColor[4] = { 1.0f, 0.f, 0.f, 1.000000000f };
             commandList->ClearRenderTargetView(*currentBufferHandle, clearColor, 0, nullptr);
             commandList->ClearDepthStencilView(depthBufferHandle, D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, 1.0f, 0, 0, nullptr);
 
@@ -1427,20 +1393,26 @@ int CALLBACK WinMain(
             D3D12_VERTEX_BUFFER_VIEW vertexBufferView;
             vertexBufferView.BufferLocation = vertexBuffer->GetGPUVirtualAddress();
             vertexBufferView.StrideInBytes = sizeof(XVertex);
-            vertexBufferView.SizeInBytes = sizeof(XVertex) * 8;
+            vertexBufferView.SizeInBytes = sizeof(XVertex) * static_cast<UINT>(verticesObj.size());
             commandList->IASetVertexBuffers(0, 1, &vertexBufferView);
 
             D3D12_INDEX_BUFFER_VIEW indexBufferView;
             indexBufferView.BufferLocation = indexBuffer->GetGPUVirtualAddress();
             indexBufferView.Format = DXGI_FORMAT_R16_UINT;
-            indexBufferView.SizeInBytes = sizeof(std::uint16_t) * 36;
+            indexBufferView.SizeInBytes = sizeof(std::uint16_t) * static_cast<UINT>(indicesObj.size());
             commandList->IASetIndexBuffer(&indexBufferView);
 
             commandList->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
             commandList->SetGraphicsRootDescriptorTable(0, constantBufferDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
 
-            commandList->DrawIndexedInstanced(36, 1, 0, 0, 0);
+            uint32_t indices_offset = 0;
+            for (size_t i = 0; i < models.size(); i++)
+            {
+                const Model& model = models.at(i);
+                commandList->DrawIndexedInstanced(model.indices_count, 1, indices_offset, 0, 0);
+                indices_offset += model.indices_count;
+            }
 
             D3D12_RESOURCE_BARRIER presentBufferTransition;
             presentBufferTransition.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
