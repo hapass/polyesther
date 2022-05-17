@@ -743,6 +743,17 @@ uint64_t AlignBytes(uint64_t alignment = 256)
     return upperBound - upperBound % alignment;
 }
 
+void SetModelViewProjection(ID3D12Resource* constantBuffer, const DirectX::XMMATRIX& mvp)
+{
+    Constants constantsStruct;
+    DirectX::XMStoreFloat4x4(&constantsStruct.worldViewProj, mvp);
+
+    BYTE* mappedData = nullptr;
+    constantBuffer->Map(0, nullptr, (void**)&mappedData);
+    memcpy(mappedData, &constantsStruct, sizeof(Constants));
+    constantBuffer->Unmap(0, nullptr);
+}
+
 int CALLBACK WinMain(
     _In_ HINSTANCE hInstance,
     _In_opt_ HINSTANCE hPrevInstance,
@@ -979,34 +990,6 @@ int CALLBACK WinMain(
         constantBufferViewDescription.SizeInBytes = static_cast<UINT>(uploadBufferDescription.Width);
 
         device->CreateConstantBufferView(&constantBufferViewDescription, constantBufferDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
-
-        // upload mvp matrix
-        {
-            Constants constantsStruct;
-
-            float theta = 1.5f * DirectX::XM_PI;
-            float phi = DirectX::XM_PIDIV4;
-            float radius = 5.0f;
-
-            float x = radius * sinf(phi) * cosf(theta);
-            float z = radius * sinf(phi) * sinf(theta);
-            float y = radius * cosf(phi);
-
-            // Build the view matrix.
-            DirectX::XMVECTOR pos = DirectX::XMVectorSet(x, y, z, 1.0f);
-            DirectX::XMVECTOR target = DirectX::XMVectorZero();
-            DirectX::XMVECTOR up = DirectX::XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);
-
-            DirectX::XMMATRIX view = DirectX::XMMatrixLookAtLH(pos, target, up);
-            DirectX::XMMATRIX projection = DirectX::XMMatrixPerspectiveFovLH(0.25f * DirectX::XM_PI, 800.0f/600.0f, 1.0f, 1000.0f);
-
-            DirectX::XMStoreFloat4x4(&constantsStruct.worldViewProj, XMMatrixTranspose(view * projection));
-
-            BYTE* mappedData = nullptr;
-            uploadBuffer->Map(0, nullptr, (void**)&mappedData);
-            memcpy(mappedData, &constantsStruct, sizeof(Constants));
-            uploadBuffer->Unmap(0, nullptr);
-        }
 
         // root signature
         D3D12_DESCRIPTOR_RANGE constantBufferDescriptorRange;
@@ -1347,6 +1330,22 @@ int CALLBACK WinMain(
 
             // calculate light's position in view space
             light.position_view = view(camera) * modelMat(models[1]) * models[1].position;
+
+            // upload mvp matrix
+            {
+                // Build the view matrix.
+                Matrix mvp = perspective() * view(camera);
+
+                DirectX::XMMATRIX mvpX
+                {
+                    {mvp.m[0], mvp.m[1], mvp.m[2], mvp.m[3]},
+                    {mvp.m[4], mvp.m[5], mvp.m[6], mvp.m[7]},
+                    {mvp.m[8], mvp.m[9], mvp.m[10], mvp.m[11]},
+                    {mvp.m[12], mvp.m[13], mvp.m[14], mvp.m[15]}
+                };
+
+                SetModelViewProjection(uploadBuffer, mvpX);
+            }
 
             ID3D12Resource* currentBuffer = isZeroBufferInTheBack ? zeroBuffer : firstBuffer;
             D3D12_CPU_DESCRIPTOR_HANDLE* currentBufferHandle = isZeroBufferInTheBack ? &zeroBufferHandle : &firstBufferHandle;
