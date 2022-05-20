@@ -92,7 +92,6 @@ struct Model {
     uint32_t normal_count;
 
     Vec position;
-    float scale;
 };
 
 struct Camera
@@ -536,7 +535,7 @@ Matrix view(const Camera& camera)
 
 Matrix modelMat(const Model& model)
 {
-    return translate(model.position.x, model.position.y, model.position.z) * scale(model.scale);
+    return translate(model.position.x, model.position.y, model.position.z);
 }
 
 Matrix cam(const Camera& camera)
@@ -568,13 +567,14 @@ struct LoadContext
 
 static Color tint = Color::White;
 
-Model LoadOBJ(const char* fileName, LoadContext& context)
+Model LoadOBJ(const char* fileName, float modelScale, const Vec& position, LoadContext& context)
 {
     Model model;
     model.indices_count = 0;
     model.vertices_count = 0;
     model.texture_count = 0;
     model.normal_count = 0;
+    model.position = position;
 
     fstream file(fileName);
     string line;
@@ -595,7 +595,7 @@ Model LoadOBJ(const char* fileName, LoadContext& context)
 
                     if (primitive_type == "v")
                     {
-                        verticesObj.push_back({ x, y, z, 1.0f });
+                        verticesObj.push_back(translate(model.position.x, model.position.y, model.position.z) * scale(modelScale) * Vec { x, y, z, 1.0f });
                         colorsObj.push_back(tint.GetVec());
 
                         // colors and vertices are assumed to have the same count
@@ -793,13 +793,10 @@ int CALLBACK WinMain(
         LoadContext context;
 
         // init model
-        models.push_back(LoadOBJ("../../assets/monkey.obj", context));
-        models[0].scale = 50.0f;
-        models[0].position = Vec { 0.0f, 0.0f, 0.0f, 1.0f };
+        models.push_back(LoadOBJ("../../assets/monkey.obj", 50.0f, Vec { 0.0f, 0.0f, 0.0f, 1.0f }, context));
 
         // init light
-        models.push_back(LoadOBJ("../../assets/cube.obj", context));
-        models[1].scale = 10.0f;
+        models.push_back(LoadOBJ("../../assets/cube.obj", 10.0f, Vec { 100.0f, 100.0f, 100.0f, 1.0f }, context));
 
         Camera camera;
         camera.position.z = 200;
@@ -812,7 +809,7 @@ int CALLBACK WinMain(
         camera.forward = Vec{ 0.0f, 0.0f, -10.0f, 0.0f };
         camera.left = Vec{ -10.0f, 0.0f, 0.0f, 0.0f };
 
-        light.position = Vec{ 100.0f, 100.0f, 100.0f, 1.0f };
+        light.position = models[1].position;
 
         ID3D12Debug* debugController = nullptr;
         D3D_NOT_FAILED(D3D12GetDebugInterface(IID_PPV_ARGS(&debugController)));
@@ -1325,11 +1322,8 @@ int CALLBACK WinMain(
                 camera.position = camera.position - left;
             }
 
-            // visualize light at the right position
-            models[1].position = light.position;
-
             // calculate light's position in view space
-            light.position_view = view(camera) * modelMat(models[1]) * models[1].position;
+            light.position_view = view(camera) * light.position;
 
             // upload mvp matrix
             {
@@ -1379,7 +1373,7 @@ int CALLBACK WinMain(
 
             commandList->ResourceBarrier(1, &renderTargetBufferTransition);
 
-            FLOAT clearColor[4] = { 1.0f, 0.f, 0.f, 1.000000000f };
+            FLOAT clearColor[4] = { 0.0f, 0.f, 0.f, 1.000000000f };
             commandList->ClearRenderTargetView(*currentBufferHandle, clearColor, 0, nullptr);
             commandList->ClearDepthStencilView(depthBufferHandle, D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, 1.0f, 0, 0, nullptr);
 
