@@ -39,7 +39,7 @@ struct Constants
 struct XVertex
 {
     DirectX::XMFLOAT3 Pos;
-    DirectX::XMFLOAT4 Color;
+    DirectX::XMFLOAT2 TextureCoord;
 };
 
 template<typename T>
@@ -92,7 +92,7 @@ int CALLBACK WinMain(
         ), 0);
 
         int32_t channels;
-        NOT_FAILED(Texture = stbi_load("../../assets/texture.jpg", &TextureWidth, &TextureHeight, &channels, 3), 0);
+        NOT_FAILED(Texture = stbi_load("../../assets/texture.jpg", &TextureWidth, &TextureHeight, &channels, 4), 0);
 
         auto frameExpectedTime = chrono::milliseconds(1000 / FPS);
 
@@ -281,7 +281,7 @@ int CALLBACK WinMain(
 
         D3D12_DESCRIPTOR_HEAP_DESC constantBufferDescriptorHeapDescription;
         constantBufferDescriptorHeapDescription.Type = D3D12_DESCRIPTOR_HEAP_TYPE::D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
-        constantBufferDescriptorHeapDescription.NumDescriptors = 1;
+        constantBufferDescriptorHeapDescription.NumDescriptors = 2;
         constantBufferDescriptorHeapDescription.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
         constantBufferDescriptorHeapDescription.NodeMask = 0;
 
@@ -302,17 +302,41 @@ int CALLBACK WinMain(
         constantBufferDescriptorRange.RegisterSpace = 0;
         constantBufferDescriptorRange.OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
+        D3D12_DESCRIPTOR_RANGE textureDescriptorRange;
+        textureDescriptorRange.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+        textureDescriptorRange.NumDescriptors = 1;
+        textureDescriptorRange.BaseShaderRegister = 0;
+        textureDescriptorRange.RegisterSpace = 0;
+        textureDescriptorRange.OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+
+        D3D12_DESCRIPTOR_RANGE descriptorRanges[2] = { constantBufferDescriptorRange, textureDescriptorRange };
+
         D3D12_ROOT_PARAMETER constantBufferParameter;
         constantBufferParameter.ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
         constantBufferParameter.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
-        constantBufferParameter.DescriptorTable.NumDescriptorRanges = 1;
-        constantBufferParameter.DescriptorTable.pDescriptorRanges = &constantBufferDescriptorRange;
+        constantBufferParameter.DescriptorTable.NumDescriptorRanges = 2;
+        constantBufferParameter.DescriptorTable.pDescriptorRanges = descriptorRanges;
+
+        D3D12_STATIC_SAMPLER_DESC sampler = {};
+        sampler.Filter = D3D12_FILTER_MIN_MAG_MIP_POINT;
+        sampler.AddressU = D3D12_TEXTURE_ADDRESS_MODE_BORDER;
+        sampler.AddressV = D3D12_TEXTURE_ADDRESS_MODE_BORDER;
+        sampler.AddressW = D3D12_TEXTURE_ADDRESS_MODE_BORDER;
+        sampler.MipLODBias = 0;
+        sampler.MaxAnisotropy = 0;
+        sampler.ComparisonFunc = D3D12_COMPARISON_FUNC_NEVER;
+        sampler.BorderColor = D3D12_STATIC_BORDER_COLOR_TRANSPARENT_BLACK;
+        sampler.MinLOD = 0.0f;
+        sampler.MaxLOD = D3D12_FLOAT32_MAX;
+        sampler.ShaderRegister = 0;
+        sampler.RegisterSpace = 0;
+        sampler.ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
 
         D3D12_ROOT_SIGNATURE_DESC rootSignatureDescription;
         rootSignatureDescription.NumParameters = 1;
         rootSignatureDescription.pParameters = &constantBufferParameter;
-        rootSignatureDescription.NumStaticSamplers = 0;
-        rootSignatureDescription.pStaticSamplers = nullptr;
+        rootSignatureDescription.NumStaticSamplers = 1;
+        rootSignatureDescription.pStaticSamplers = &sampler;
         rootSignatureDescription.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
 
         ID3DBlob* rootSignatureData = nullptr;
@@ -339,9 +363,9 @@ int CALLBACK WinMain(
         inputElementDescription[0].InputSlotClass = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA;
         inputElementDescription[0].InstanceDataStepRate = 0;
 
-        inputElementDescription[1].SemanticName = "COLOR";
+        inputElementDescription[1].SemanticName = "TEXCOORD";
         inputElementDescription[1].SemanticIndex = 0;
-        inputElementDescription[1].Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
+        inputElementDescription[1].Format = DXGI_FORMAT_R32G32_FLOAT;
         inputElementDescription[1].InputSlot = 0;
         inputElementDescription[1].AlignedByteOffset = 12;
         inputElementDescription[1].InputSlotClass = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA;
@@ -448,7 +472,7 @@ int CALLBACK WinMain(
                 data.push_back(
                     XVertex({
                         DirectX::XMFLOAT3(verticesObj[i].x, verticesObj[i].y, verticesObj[i].z),
-                        DirectX::XMFLOAT4(colorsObj[i].x, colorsObj[i].y, colorsObj[i].z, colorsObj[i].w)
+                        DirectX::XMFLOAT2(textureX[i], textureY[i])
                     })
                 );
             }
@@ -462,8 +486,6 @@ int CALLBACK WinMain(
             D3D_NOT_FAILED(device->CreateCommittedResource(&defaultHeapProperties, D3D12_HEAP_FLAG_NONE, &dataBufferDescription, D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&dataBuffer)));
             
             copyDestBufferTransition.Transition.pResource = dataBuffer;
-            genericReadBufferTransition.Transition.pResource = dataBuffer;
-
             commandList->ResourceBarrier(1, &copyDestBufferTransition);
 
             BYTE* mappedData = nullptr;
@@ -472,6 +494,7 @@ int CALLBACK WinMain(
             dataUploadBuffer->Unmap(0, nullptr);
             commandList->CopyBufferRegion(dataBuffer, 0, dataUploadBuffer, 0, data.size() * sizeof(XVertex));
 
+            genericReadBufferTransition.Transition.pResource = dataBuffer;
             commandList->ResourceBarrier(1, &genericReadBufferTransition);
 
             commandList->Close();
@@ -549,6 +572,85 @@ int CALLBACK WinMain(
 
             indexBuffer = dataBuffer;
         }
+
+        // texture heap
+        D3D12_RESOURCE_DESC textureDesc = {};
+        textureDesc.MipLevels = 1;
+        textureDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        textureDesc.Width = TextureWidth;
+        textureDesc.Height = TextureHeight;
+        textureDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
+        textureDesc.DepthOrArraySize = 1;
+        textureDesc.SampleDesc.Count = 1;
+        textureDesc.SampleDesc.Quality = 0;
+        textureDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+
+        ID3D12Resource* texture = nullptr;
+        {
+            D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint = {};
+            UINT numRows = 0;
+            UINT64 rowSizeInBytes = 0;
+            UINT64 totalBytes = 0;
+            device->GetCopyableFootprints(&textureDesc, 0, 1, 0, &footprint, &numRows, &rowSizeInBytes, &totalBytes);
+
+            uploadBufferDescription.Width = totalBytes;
+
+            ID3D12Resource* dataUploadBuffer = nullptr; // TODO: should be cleared later
+            D3D_NOT_FAILED(device->CreateCommittedResource(&uploadHeapProperties, D3D12_HEAP_FLAG_NONE, &uploadBufferDescription, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&dataUploadBuffer)));
+
+            ID3D12Resource* dataBuffer = nullptr;
+            D3D_NOT_FAILED(device->CreateCommittedResource(&defaultHeapProperties, D3D12_HEAP_FLAG_NONE, &textureDesc, D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&dataBuffer)));
+
+            BYTE* mappedData = nullptr;
+            dataUploadBuffer->Map(0, nullptr, (void**)&mappedData);
+            memcpy(mappedData, Texture, static_cast<size_t>(TextureWidth) * TextureHeight * 4 * sizeof(uint8_t));
+            dataUploadBuffer->Unmap(0, nullptr);
+
+            D3D12_TEXTURE_COPY_LOCATION dest;
+            dest.pResource = dataBuffer;
+            dest.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+            dest.PlacedFootprint = {};
+            dest.SubresourceIndex = 0;
+
+            D3D12_TEXTURE_COPY_LOCATION src;
+            src.pResource = dataUploadBuffer;
+            src.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+            src.PlacedFootprint = footprint;
+
+            commandList->CopyTextureRegion(&dest, 0, 0, 0, &src, nullptr);
+
+            genericReadBufferTransition.Transition.pResource = dataBuffer;
+            commandList->ResourceBarrier(1, &genericReadBufferTransition);
+            commandList->Close();
+
+            ID3D12CommandList* cmdsLists[1] = { commandList };
+            queue->ExecuteCommandLists(1, cmdsLists);
+
+            currentFenceValue++;
+            queue->Signal(fence, currentFenceValue);
+
+            if (fence->GetCompletedValue() != currentFenceValue)
+            {
+                D3D_NOT_FAILED(fence->SetEventOnCompletion(currentFenceValue, fenceEventHandle));
+                WaitForSingleObject(fenceEventHandle, INFINITE);
+                ResetEvent(fenceEventHandle);
+            }
+
+            D3D_NOT_FAILED(allocator->Reset());
+            D3D_NOT_FAILED(commandList->Reset(allocator, pso));
+
+            texture = dataBuffer;
+        }
+
+        // Describe and create a SRV for the texture.
+        D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+        srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+        srvDesc.Format = textureDesc.Format;
+        srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+        srvDesc.Texture2D.MipLevels = 1;
+
+        D3D12_CPU_DESCRIPTOR_HANDLE secondConstantBufferHandle{ SIZE_T(INT64(constantBufferDescriptorHeap->GetCPUDescriptorHandleForHeapStart().ptr) + INT64(device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV))) };
+        device->CreateShaderResourceView(texture, &srvDesc, secondConstantBufferHandle);
 
         while (isRunning)
         {
