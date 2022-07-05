@@ -13,6 +13,7 @@
 #include <chrono>
 #include <algorithm>
 #include <vector>
+#include <unordered_map>
 #include <array>
 #include <cmath>
 #include <wincodec.h>
@@ -42,11 +43,16 @@ struct XVertex
     DirectX::XMFLOAT2 TextureCoord;
 };
 
+uint64_t AlignBytes(uint64_t size, uint64_t alignment = 256)
+{
+    const uint64_t upperBound = size + alignment - 1;
+    return upperBound - upperBound % alignment;
+}
+
 template<typename T>
 uint64_t AlignBytes(uint64_t alignment = 256)
 {
-    const uint64_t upperBound = sizeof(T) + alignment - 1;
-    return upperBound - upperBound % alignment;
+    return AlignBytes(sizeof(T), alignment);
 }
 
 void SetModelViewProjection(ID3D12Resource* constantBuffer, const DirectX::XMMATRIX& mvp)
@@ -472,7 +478,7 @@ int CALLBACK WinMain(
                 data.push_back(
                     XVertex({
                         DirectX::XMFLOAT3(verticesObj[i].x, verticesObj[i].y, verticesObj[i].z),
-                        DirectX::XMFLOAT2(textureX[i], textureY[i])
+                        DirectX::XMFLOAT2(textureX[vertToText[i]], textureY[vertToText[i]])
                     })
                 );
             }
@@ -603,7 +609,11 @@ int CALLBACK WinMain(
 
             BYTE* mappedData = nullptr;
             dataUploadBuffer->Map(0, nullptr, (void**)&mappedData);
-            memcpy(mappedData, Texture, static_cast<size_t>(TextureWidth) * TextureHeight * 4 * sizeof(uint8_t));
+
+            for (size_t i = 0; i < numRows; i++)
+            {
+                memcpy(mappedData + footprint.Footprint.RowPitch * i, Texture + rowSizeInBytes * i, rowSizeInBytes);
+            }
             dataUploadBuffer->Unmap(0, nullptr);
 
             D3D12_TEXTURE_COPY_LOCATION dest;
