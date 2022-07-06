@@ -454,13 +454,6 @@ int CALLBACK WinMain(
         dataBufferDescription.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
         dataBufferDescription.Flags = D3D12_RESOURCE_FLAG_NONE;
 
-        D3D12_RESOURCE_BARRIER copyDestBufferTransition;
-        copyDestBufferTransition.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-        copyDestBufferTransition.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
-        copyDestBufferTransition.Transition.StateBefore = D3D12_RESOURCE_STATE_COMMON;
-        copyDestBufferTransition.Transition.StateAfter = D3D12_RESOURCE_STATE_COPY_DEST;
-        copyDestBufferTransition.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-
         D3D12_RESOURCE_BARRIER genericReadBufferTransition;
         genericReadBufferTransition.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
         genericReadBufferTransition.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
@@ -487,16 +480,13 @@ int CALLBACK WinMain(
             ID3D12Resource* dataUploadBuffer = nullptr; // TODO: should be cleared later
             D3D_NOT_FAILED(device->CreateCommittedResource(&uploadHeapProperties, D3D12_HEAP_FLAG_NONE, &dataBufferDescription, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&dataUploadBuffer)));
         
-            ID3D12Resource* dataBuffer = nullptr;
-            D3D_NOT_FAILED(device->CreateCommittedResource(&defaultHeapProperties, D3D12_HEAP_FLAG_NONE, &dataBufferDescription, D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&dataBuffer)));
-            
-            copyDestBufferTransition.Transition.pResource = dataBuffer;
-            commandList->ResourceBarrier(1, &copyDestBufferTransition);
-
             BYTE* mappedData = nullptr;
             dataUploadBuffer->Map(0, nullptr, (void**)&mappedData);
             memcpy(mappedData, data.data(), data.size() * sizeof(XVertex));
             dataUploadBuffer->Unmap(0, nullptr);
+
+            ID3D12Resource* dataBuffer = nullptr;
+            D3D_NOT_FAILED(device->CreateCommittedResource(&defaultHeapProperties, D3D12_HEAP_FLAG_NONE, &dataBufferDescription, D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&dataBuffer)));
             commandList->CopyBufferRegion(dataBuffer, 0, dataUploadBuffer, 0, data.size() * sizeof(XVertex));
 
             genericReadBufferTransition.Transition.pResource = dataBuffer;
@@ -537,16 +527,13 @@ int CALLBACK WinMain(
             ID3D12Resource* dataUploadBuffer = nullptr; // TODO: should be cleared later
             D3D_NOT_FAILED(device->CreateCommittedResource(&uploadHeapProperties, D3D12_HEAP_FLAG_NONE, &dataBufferDescription, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&dataUploadBuffer)));
 
-            ID3D12Resource* dataBuffer = nullptr;
-            D3D_NOT_FAILED(device->CreateCommittedResource(&defaultHeapProperties, D3D12_HEAP_FLAG_NONE, &dataBufferDescription, D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&dataBuffer)));
-
-            copyDestBufferTransition.Transition.pResource = dataBuffer;
-            commandList->ResourceBarrier(1, &copyDestBufferTransition);
-
             BYTE* mappedData = nullptr;
             dataUploadBuffer->Map(0, nullptr, (void**)&mappedData);
             memcpy(mappedData, data.data(), data.size() * sizeof(std::uint16_t));
             dataUploadBuffer->Unmap(0, nullptr);
+
+            ID3D12Resource* dataBuffer = nullptr;
+            D3D_NOT_FAILED(device->CreateCommittedResource(&defaultHeapProperties, D3D12_HEAP_FLAG_NONE, &dataBufferDescription, D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&dataBuffer)));
             commandList->CopyBufferRegion(dataBuffer, 0, dataUploadBuffer, 0, data.size() * sizeof(std::uint16_t));
 
             genericReadBufferTransition.Transition.pResource = dataBuffer;
