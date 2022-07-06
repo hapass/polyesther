@@ -13,7 +13,6 @@
 #include <chrono>
 #include <algorithm>
 #include <vector>
-#include <unordered_map>
 #include <array>
 #include <cmath>
 #include <wincodec.h>
@@ -325,9 +324,9 @@ int CALLBACK WinMain(
 
         D3D12_STATIC_SAMPLER_DESC sampler = {};
         sampler.Filter = D3D12_FILTER_MIN_MAG_MIP_POINT;
-        sampler.AddressU = D3D12_TEXTURE_ADDRESS_MODE_BORDER;
-        sampler.AddressV = D3D12_TEXTURE_ADDRESS_MODE_BORDER;
-        sampler.AddressW = D3D12_TEXTURE_ADDRESS_MODE_BORDER;
+        sampler.AddressU = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+        sampler.AddressV = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+        sampler.AddressW = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
         sampler.MipLODBias = 0;
         sampler.MaxAnisotropy = 0;
         sampler.ComparisonFunc = D3D12_COMPARISON_FUNC_NEVER;
@@ -385,7 +384,7 @@ int CALLBACK WinMain(
 
         pipelineStateObjectDescription.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
         pipelineStateObjectDescription.RasterizerState.CullMode = D3D12_CULL_MODE_BACK;
-        pipelineStateObjectDescription.RasterizerState.FrontCounterClockwise = false;
+        pipelineStateObjectDescription.RasterizerState.FrontCounterClockwise = true;
         pipelineStateObjectDescription.RasterizerState.DepthBias = D3D12_DEFAULT_DEPTH_BIAS;
         pipelineStateObjectDescription.RasterizerState.DepthBiasClamp = D3D12_DEFAULT_DEPTH_BIAS_CLAMP;
         pipelineStateObjectDescription.RasterizerState.SlopeScaledDepthBias = D3D12_DEFAULT_SLOPE_SCALED_DEPTH_BIAS;
@@ -473,12 +472,12 @@ int CALLBACK WinMain(
         {
             std::vector<XVertex> data;
 
-            for (int i = 0; i < verticesObj.size(); i++)
+            for (uint32_t i = 0; i < indicesObj.size(); i++)
             {
                 data.push_back(
                     XVertex({
-                        DirectX::XMFLOAT3(verticesObj[i].x, verticesObj[i].y, verticesObj[i].z),
-                        DirectX::XMFLOAT2(textureX[vertToText[i]], textureY[vertToText[i]])
+                        DirectX::XMFLOAT3(verticesObj[indicesObj[i].vert].x, verticesObj[indicesObj[i].vert].y, verticesObj[indicesObj[i].vert].z),
+                        DirectX::XMFLOAT2(textureX[indicesObj[i].text], textureY[indicesObj[i].text])
                     })
                 );
             }
@@ -530,14 +529,10 @@ int CALLBACK WinMain(
 
             for (uint32_t i = 0; i < indicesObj.size(); i++)
             {
-                data.push_back(static_cast<uint16_t>(indicesObj[i].vert));
+                data.push_back(static_cast<uint16_t>(i));
             }
 
-            ID3DBlob* cpuBuffer = nullptr;
-            D3D_NOT_FAILED(D3DCreateBlob(static_cast<SIZE_T>(data.size()) * sizeof(std::uint16_t), &cpuBuffer));
-            CopyMemory(cpuBuffer->GetBufferPointer(), data.data(), static_cast<SIZE_T>(data.size()) * sizeof(std::uint16_t));
-
-            dataBufferDescription.Width = cpuBuffer->GetBufferSize();
+            dataBufferDescription.Width = data.size() * sizeof(std::uint16_t);
 
             ID3D12Resource* dataUploadBuffer = nullptr; // TODO: should be cleared later
             D3D_NOT_FAILED(device->CreateCommittedResource(&uploadHeapProperties, D3D12_HEAP_FLAG_NONE, &dataBufferDescription, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&dataUploadBuffer)));
@@ -546,16 +541,15 @@ int CALLBACK WinMain(
             D3D_NOT_FAILED(device->CreateCommittedResource(&defaultHeapProperties, D3D12_HEAP_FLAG_NONE, &dataBufferDescription, D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&dataBuffer)));
 
             copyDestBufferTransition.Transition.pResource = dataBuffer;
-            genericReadBufferTransition.Transition.pResource = dataBuffer;
-
             commandList->ResourceBarrier(1, &copyDestBufferTransition);
 
             BYTE* mappedData = nullptr;
             dataUploadBuffer->Map(0, nullptr, (void**)&mappedData);
-            memcpy(mappedData, cpuBuffer->GetBufferPointer(), cpuBuffer->GetBufferSize());
+            memcpy(mappedData, data.data(), data.size() * sizeof(std::uint16_t));
             dataUploadBuffer->Unmap(0, nullptr);
-            commandList->CopyBufferRegion(dataBuffer, 0, dataUploadBuffer, 0, cpuBuffer->GetBufferSize());
+            commandList->CopyBufferRegion(dataBuffer, 0, dataUploadBuffer, 0, data.size() * sizeof(std::uint16_t));
 
+            genericReadBufferTransition.Transition.pResource = dataBuffer;
             commandList->ResourceBarrier(1, &genericReadBufferTransition);
 
             commandList->Close();
@@ -804,7 +798,7 @@ int CALLBACK WinMain(
             D3D12_VERTEX_BUFFER_VIEW vertexBufferView;
             vertexBufferView.BufferLocation = vertexBuffer->GetGPUVirtualAddress();
             vertexBufferView.StrideInBytes = sizeof(XVertex);
-            vertexBufferView.SizeInBytes = sizeof(XVertex) * static_cast<UINT>(verticesObj.size());
+            vertexBufferView.SizeInBytes = sizeof(XVertex) * static_cast<UINT>(indicesObj.size());
             commandList->IASetVertexBuffers(0, 1, &vertexBufferView);
 
             D3D12_INDEX_BUFFER_VIEW indexBufferView;

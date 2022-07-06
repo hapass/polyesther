@@ -92,7 +92,6 @@ static std::vector<float> textureX;
 static std::vector<float> textureY;
 static std::vector<Index> indicesObj;
 static std::vector<Vec> colorsObj;
-static std::unordered_map<uint32_t, uint32_t> vertToText;
 
 static std::vector<Model> models;
 
@@ -617,7 +616,6 @@ Model LoadOBJ(const char* fileName, float modelScale, const Vec& position, LoadC
                     v >> normal_index;
 
                     vertIndices.push_back({ context.vertices_offset + vert_index - 1, context.texture_offset + texture_index - 1, context.normal_offset + normal_index - 1 });
-                    vertToText[context.vertices_offset + vert_index - 1] = context.texture_offset + texture_index - 1;
                 }
 
                 if (vertIndices.size() == 3)
