@@ -34,12 +34,20 @@ struct Constants
         0.0f, 0.0f, 1.0f, 0.0f,
         0.0f, 0.0f, 0.0f, 1.0f
     };
+    DirectX::XMFLOAT4X4 worldView = {
+        1.0f, 0.0f, 0.0f, 0.0f,
+        0.0f, 1.0f, 0.0f, 0.0f,
+        0.0f, 0.0f, 1.0f, 0.0f,
+        0.0f, 0.0f, 0.0f, 1.0f
+    };
+    DirectX::XMFLOAT4 lightPos = { 0.0f, 0.0f, 0.0f, 0.0f };
 };
 
 struct XVertex
 {
     DirectX::XMFLOAT3 Pos;
     DirectX::XMFLOAT2 TextureCoord;
+    DirectX::XMFLOAT3 Normal;
 };
 
 uint64_t AlignBytes(uint64_t size, uint64_t alignment = 256)
@@ -54,10 +62,12 @@ uint64_t AlignBytes(uint64_t alignment = 256)
     return AlignBytes(sizeof(T), alignment);
 }
 
-void SetModelViewProjection(ID3D12Resource* constantBuffer, const DirectX::XMMATRIX& mvp)
+void SetModelViewProjection(ID3D12Resource* constantBuffer, const DirectX::XMMATRIX& mvp, const DirectX::XMMATRIX& mv, const DirectX::XMVECTOR& lightPos)
 {
     Constants constantsStruct;
     DirectX::XMStoreFloat4x4(&constantsStruct.worldViewProj, mvp);
+    DirectX::XMStoreFloat4x4(&constantsStruct.worldView, mv);
+    DirectX::XMStoreFloat4(&constantsStruct.lightPos, lightPos);
 
     BYTE* mappedData = nullptr;
     constantBuffer->Map(0, nullptr, (void**)&mappedData);
@@ -357,7 +367,7 @@ int CALLBACK WinMain(
         ID3DBlob* pixelShaderBlob = nullptr;
         D3D_NOT_FAILED(D3DCompileFromFile(L"color.hlsl", nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE, "PS", "ps_5_0", 0, 0, &pixelShaderBlob, nullptr));
 
-        constexpr size_t vertexFieldsCount = 2;
+        constexpr size_t vertexFieldsCount = 3;
         D3D12_INPUT_ELEMENT_DESC inputElementDescription[vertexFieldsCount];
 
         inputElementDescription[0].SemanticName = "POSITION";
@@ -375,6 +385,14 @@ int CALLBACK WinMain(
         inputElementDescription[1].AlignedByteOffset = 12;
         inputElementDescription[1].InputSlotClass = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA;
         inputElementDescription[1].InstanceDataStepRate = 0;
+
+        inputElementDescription[2].SemanticName = "NORMALS";
+        inputElementDescription[2].SemanticIndex = 0;
+        inputElementDescription[2].Format = DXGI_FORMAT_R32G32B32_FLOAT;
+        inputElementDescription[2].InputSlot = 0;
+        inputElementDescription[2].AlignedByteOffset = 20;
+        inputElementDescription[2].InputSlotClass = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA;
+        inputElementDescription[2].InstanceDataStepRate = 0;
 
         D3D12_GRAPHICS_PIPELINE_STATE_DESC pipelineStateObjectDescription = {};
         pipelineStateObjectDescription.InputLayout = { inputElementDescription, vertexFieldsCount };
@@ -470,7 +488,8 @@ int CALLBACK WinMain(
                 data.push_back(
                     XVertex({
                         DirectX::XMFLOAT3(verticesObj[indicesObj[i].vert].x, verticesObj[indicesObj[i].vert].y, verticesObj[indicesObj[i].vert].z),
-                        DirectX::XMFLOAT2(textureX[indicesObj[i].text], textureY[indicesObj[i].text])
+                        DirectX::XMFLOAT2(textureX[indicesObj[i].text], textureY[indicesObj[i].text]),
+                        DirectX::XMFLOAT3(normalsObj[indicesObj[i].norm].x, normalsObj[indicesObj[i].norm].y, normalsObj[indicesObj[i].norm].z)
                     })
                 );
             }
@@ -729,6 +748,8 @@ int CALLBACK WinMain(
                 // Build the view matrix.
                 Matrix mvp = perspective() * view(camera);
 
+                Matrix mv = view(camera);
+
                 DirectX::XMMATRIX mvpX
                 {
                     {mvp.m[0], mvp.m[1], mvp.m[2], mvp.m[3]},
@@ -737,7 +758,17 @@ int CALLBACK WinMain(
                     {mvp.m[12], mvp.m[13], mvp.m[14], mvp.m[15]}
                 };
 
-                SetModelViewProjection(uploadBuffer, mvpX);
+                DirectX::XMMATRIX mvX
+                {
+                    {mv.m[0], mv.m[1], mv.m[2], mv.m[3]},
+                    {mv.m[4], mv.m[5], mv.m[6], mv.m[7]},
+                    {mv.m[8], mv.m[9], mv.m[10], mv.m[11]},
+                    {mv.m[12], mv.m[13], mv.m[14], mv.m[15]}
+                };
+
+                DirectX::XMVECTOR lightPos = { light.position_view.x, light.position_view.y, light.position_view.z, light.position_view.w };
+
+                SetModelViewProjection(uploadBuffer, mvpX, mvX, lightPos);
             }
 
             ID3D12Resource* currentBuffer = isZeroBufferInTheBack ? zeroBuffer : firstBuffer;
