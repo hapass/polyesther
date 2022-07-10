@@ -16,9 +16,9 @@ Texture2D g_texture : register(t0);
 
 struct VertexIn
 {
-    float3 PosL  : POSITION;
+    float3 PosL : POSITION;
     float2 TexCoord : TEXCOORD;
-    float Normals : NORMALS;
+    float3 Normals : NORMALS;
 };
 
 struct VertexOut
@@ -35,11 +35,13 @@ VertexOut VS(VertexIn vin)
 	
     // Transform to homogeneous clip space.
     vout.PosH = mul(float4(vin.PosL, 1.0f), gWorldViewProj);
+
+    // Transform to view space.
     vout.PosView = mul(float4(vin.PosL, 1.0f), gWorldView);
+    vout.Normals = mul(float4(vin.Normals, 0.0f), gWorldView).xyz;
 	
-    // Just pass vertex texture coords and normals into the pixel shader.
+    // Just pass vertex texture coords into the pixel shader.
     vout.TexCoord = vin.TexCoord;
-    vout.Normals = vin.Normals;
     
     return vout;
 }
@@ -59,7 +61,8 @@ float4 PS(VertexOut pin) : SV_Target
     float4 diffuse = light_color * max(dot(normal_vec, light_vec), 0.0);
     float4 ambient = light_color * ambientStrength;
 
-    float specAmount = max(dot(normalize(pos_view), reflect(light_vec * -1.0f, normal_vec)), 0.0f);
+    // might be broken, since reflect should accept normal as a second param
+    float specAmount = max(dot(normalize(pos_view), reflect(normal_vec, light_vec * -1.0f)), 0.0f);
     float specular = light_color * pow(specAmount, specularShininess) * specularStrength;
 
     float4 frag_color = g_texture.Sample(g_sampler, pin.TexCoord);
