@@ -415,6 +415,14 @@ int CALLBACK WinMain(
 
     if (RegisterClassW(&MainWindowClass))
     {
+        RECT clientArea;
+        clientArea.left = 0;
+        clientArea.top = 0;
+        clientArea.right = WindowWidth;
+        clientArea.bottom = WindowHeight;
+
+        AdjustWindowRect(&clientArea, WS_OVERLAPPEDWINDOW | WS_VISIBLE, 0);
+
         HWND window;
         NOT_FAILED(window = CreateWindowExW(
             0,
@@ -423,8 +431,8 @@ int CALLBACK WinMain(
             WS_OVERLAPPEDWINDOW | WS_VISIBLE,
             CW_USEDEFAULT,
             CW_USEDEFAULT,
-            WindowWidth,
-            WindowHeight,
+            clientArea.right - clientArea.left,
+            clientArea.bottom - clientArea.top,
             0,
             0,
             hInstance,
