@@ -185,12 +185,15 @@ void DrawTrianglePart(Edge& minMax, Edge& other, bool isSecondPart = false)
             // Assuming 1 is model for light.
             Vec frag_color = CurrentModelIndex == 1 ? Vec{ tintRed, tintGreen, tintBlue } : texture_color.GetVec();
             Vec final_color = CurrentModelIndex == 1 ? frag_color : (diffuse + ambient + specular) * frag_color;
+            final_color.x = clamp(final_color.x, 0.0f, 1.0f);
+            final_color.y = clamp(final_color.y, 0.0f, 1.0f);
+            final_color.z = clamp(final_color.z, 0.0f, 1.0f);
             final_color = final_color * 255.0f;
 
             DrawPixel(x, y, Color(
-                static_cast<uint8_t>(min(final_color.x, 255.0f)),
-                static_cast<uint8_t>(min(final_color.y, 255.0f)),
-                static_cast<uint8_t>(min(final_color.z, 255.0f))
+                static_cast<uint8_t>(final_color.x),
+                static_cast<uint8_t>(final_color.y),
+                static_cast<uint8_t>(final_color.z)
             ));
         }
     }
@@ -459,7 +462,7 @@ int CALLBACK WinMain(
         LoadContext context;
 
         // init model
-        models.push_back(LoadOBJ("../../assets/monkey.obj", 50.0f, Vec{ 0.0f, 0.0f, 0.0f, 1.0f }, context));
+        models.push_back(LoadOBJ("../../assets/cube.obj", 50.0f, Vec{ 0.0f, 0.0f, 0.0f, 1.0f }, context));
 
         // init light
         models.push_back(LoadOBJ("../../assets/cube.obj", 10.0f, Vec{ 100.0f, 100.0f, 100.0f, 1.0f }, context));

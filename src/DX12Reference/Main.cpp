@@ -122,7 +122,7 @@ int CALLBACK WinMain(
         LoadContext context;
 
         // init model
-        models.push_back(LoadOBJ("../../assets/monkey.obj", 50.0f, Vec { 0.0f, 0.0f, 0.0f, 1.0f }, context));
+        models.push_back(LoadOBJ("../../assets/cube.obj", 50.0f, Vec { 0.0f, 0.0f, 0.0f, 1.0f }, context));
 
         // init light
         models.push_back(LoadOBJ("../../assets/cube.obj", 10.0f, Vec { 100.0f, 100.0f, 100.0f, 1.0f }, context));

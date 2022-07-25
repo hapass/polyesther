@@ -67,7 +67,7 @@ float4 PS(VertexOut pin) : SV_Target
 
     float4 frag_color = g_texture.Sample(g_sampler, pin.TexCoord);
     float4 res = (diffuse + ambient + specular) * frag_color;
-    return res;
+    return clamp(res, 0.0f, 1.0f);
 }
 
 
