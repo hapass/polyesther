@@ -62,7 +62,7 @@ float4 PS(VertexOut pin) : SV_Target
     float4 ambient = light_color * ambientStrength;
 
     // might be broken, since reflect should accept normal as a second param
-    float specAmount = max(dot(normalize(pos_view), reflect(normal_vec, light_vec * -1.0f)), 0.0f);
+    float specAmount = max(dot(normalize(pos_view), reflect(light_vec, normal_vec)), 0.0f);
     float specular = light_color * pow(specAmount, specularShininess) * specularStrength;
 
     float4 frag_color = g_texture.Sample(g_sampler, pin.TexCoord);
