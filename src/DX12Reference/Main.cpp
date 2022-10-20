@@ -24,6 +24,7 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "../common/stb_image.h"
 #include "../common/profile.h"
+#include "../common/math.h"
 #include "../common/common.h"
 
 struct Constants
@@ -754,7 +755,7 @@ int CALLBACK WinMain(
             // upload mvp matrix
             {
                 // Build the view matrix.
-                Matrix mvp = perspective() * view(camera);
+                Matrix mvp = perspective(static_cast<float>(WindowWidth), static_cast<float>(WindowHeight)) * view(camera);
 
                 Matrix mv = view(camera);
 

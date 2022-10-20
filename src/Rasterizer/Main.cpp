@@ -18,6 +18,7 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "../common/stb_image.h"
 #include "../common/profile.h"
+#include "../common/math.h"
 #include "../common/common.h"
 
 static uint32_t CurrentModelIndex = 0;
@@ -111,7 +112,12 @@ struct Edge
     std::vector<Interpolant> interpolants;
 };
 
-void DrawTrianglePart(Edge& minMax, Edge& other, bool isSecondPart = false)
+float Lerp(float begin, float end, float lerpAmount)
+{
+    return begin + (end - begin) * lerpAmount;
+}
+
+void DrawTrianglePart(Edge& minMax, Edge& other)
 {
     for (int32_t y = other.pixelYBegin; y < other.pixelYEnd; y++)
     {
@@ -133,14 +139,9 @@ void DrawTrianglePart(Edge& minMax, Edge& other, bool isSecondPart = false)
 
         for (int32_t x = left->pixelX; x < right->pixelX; x++)
         {
-            for (uint32_t i = 0; i < interpolants_raw.size(); i++)
-            {
-                float beginC = left->interpolants[i].currentC;
-                float endC = right->interpolants[i].currentC;
-                float percent = static_cast<float>(x - left->pixelX) / static_cast<float>(right->pixelX - left->pixelX);
-                interpolants_raw[i] = beginC + (endC - beginC) * percent;
-            }
+            float percent = static_cast<float>(x - left->pixelX) / static_cast<float>(right->pixelX - left->pixelX);
 
+            interpolants_raw[6] = Lerp(left->interpolants[6].currentC, right->interpolants[6].currentC, percent);
             if (interpolants_raw[6] < ZBuffer[y * GameWidth + x])
             {
                 ZBuffer[y * GameWidth + x] = interpolants_raw[6];
@@ -148,6 +149,11 @@ void DrawTrianglePart(Edge& minMax, Edge& other, bool isSecondPart = false)
             else
             {
                 continue;
+            }
+
+            for (uint32_t i = 0; i < interpolants_raw.size(); i++)
+            {
+                interpolants_raw[i] = Lerp(left->interpolants[i].currentC, right->interpolants[i].currentC, percent);
             }
 
             float tintRed = interpolants_raw[0] / interpolants_raw[5];
@@ -199,11 +205,6 @@ void DrawTrianglePart(Edge& minMax, Edge& other, bool isSecondPart = false)
     }
 }
 
-float Lerp(float begin, float end, float lerpAmount)
-{
-    return begin + (end - begin) * lerpAmount;
-}
-
 Vertex Lerp(const Vertex& begin, const Vertex& end, float lerpAmount)
 {
     Vertex result;
@@ -229,7 +230,11 @@ Vertex Lerp(const Vertex& begin, const Vertex& end, float lerpAmount)
 
 Interpolant GetInterpolant(std::vector<Vertex>& vertices, float c1, float c2, float c3)
 {
-    return Interpolant({ vertices[0].pos.x, vertices[0].pos.y, c1 / vertices[0].pos.w }, { vertices[1].pos.x, vertices[1].pos.y, c2 / vertices[1].pos.w }, { vertices[2].pos.x, vertices[2].pos.y, c3 / vertices[2].pos.w });
+    return Interpolant(
+        { vertices[0].pos.x, vertices[0].pos.y, c1 / vertices[0].pos.w },
+        { vertices[1].pos.x, vertices[1].pos.y, c2 / vertices[1].pos.w },
+        { vertices[2].pos.x, vertices[2].pos.y, c3 / vertices[2].pos.w }
+    );
 }
 
 void DrawRawTriangle(std::vector<Vertex>& vertices)
@@ -243,7 +248,11 @@ void DrawRawTriangle(std::vector<Vertex>& vertices)
         v.pos.z /= v.pos.w;
     }
 
-    // TODO.PAVELZA: We can do backface culling here.
+    // backface culling
+    if (cross(vertices[1].pos_view - vertices[0].pos_view, vertices[1].pos_view - vertices[2].pos_view).z >= 0)
+    {
+        return;
+    }
 
     std::sort(std::begin(vertices), std::end(vertices), [](const Vertex& lhs, const Vertex& rhs) { return lhs.pos.y < rhs.pos.y; });
 
@@ -285,7 +294,7 @@ void DrawRawTriangle(std::vector<Vertex>& vertices)
     Edge middleMax(vertices[1].pos, vertices[2].pos, interpolants, false);
 
     DrawTrianglePart(minMax, minMiddle);
-    DrawTrianglePart(minMax, middleMax, true);
+    DrawTrianglePart(minMax, middleMax);
 }
 
 bool IsVertexInside(const Vertex& point, int32_t axis, int32_t plane)
@@ -376,7 +385,7 @@ void DrawTriangle(Index a, Index b, Index c, const Matrix& transform)
 
     for (Vertex& v : vertices)
     {
-        v.pos = perspective() * transform * v.pos;
+        v.pos = perspective(static_cast<float>(WindowWidth), static_cast<float>(WindowHeight)) * transform * v.pos;
         v.pos_view = transform * v.pos_view;
         // This is possible because we do not do non-uniform scale in transform. If we are about to do non-uniform scale, we should calculate the normal matrix.
         v.normal = transform * v.normal;
