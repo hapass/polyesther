@@ -16,16 +16,180 @@
 #include <array>
 #include <cmath>
 #include <wincodec.h>
-#include <iostream>
-#include <fstream>
-#include <sstream>
 #include <algorithm>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "../common/stb_image.h"
 #include "../common/profile.h"
-#include "../common/math.h"
-#include "../common/common.h"
+
+#include <renderer/math.h>
+#include <renderer/renderer.h>
+#include <renderer/color.h>
+#include <renderer/scene.h>
+#include <renderer/swapchain.h>
+#include <renderer/texture.h>
+
+static const uint32_t GameWidth = 800;
+static const uint32_t GameHeight = 600;
+static const uint32_t FPS = 30;
+
+static int32_t WindowWidth = 800;
+static int32_t WindowHeight = 600;
+static BITMAPINFO BackBufferInfo;
+static uint32_t* BackBuffer;
+
+static float* ZBuffer;
+
+static int32_t TextureWidth;
+static int32_t TextureHeight;
+static uint8_t* Texture;
+
+static std::vector<Renderer::Model> models;
+
+void DebugOut(const wchar_t* fmt, ...)
+{
+    va_list argp;
+    va_start(argp, fmt);
+    wchar_t dbg_out[4096];
+    vswprintf_s(dbg_out, fmt, argp);
+    va_end(argp);
+    OutputDebugString(dbg_out);
+}
+
+void PrintError(HRESULT result)
+{
+    DebugOut(L"D3D Result: 0x%08X \n", result);
+}
+
+#define CONCAT(a, b) CONCAT_INNER(a, b)
+#define CONCAT_INNER(a, b) a ## b
+
+#define NOT_FAILED(call, failureCode) \
+    if ((call) == failureCode) \
+    { \
+         assert(false); \
+         exit(1); \
+    } \
+
+#define D3D_NOT_FAILED(call) \
+    HRESULT CONCAT(result, __LINE__) = (call); \
+    if (CONCAT(result, __LINE__) != S_OK) \
+    { \
+        PrintError(CONCAT(result, __LINE__)); \
+        assert(false); \
+        exit(1); \
+    } \
+
+static Renderer::Light light;
+
+const Renderer::Matrix& perspective(float width, float height)
+{
+    static float Far = 400.0f;
+    static float Near = 1.0f;
+
+    float farPlane = Far;
+    float nearPlane = Near;
+    float halfFieldOfView = 25 * (static_cast<float>(M_PI) / 180);
+    float aspect = width / height;
+
+    static Renderer::Matrix m;
+
+    //col 1
+    m.m[0] = 1 / (tan(halfFieldOfView) * aspect);
+    m.m[4] = 0.0f;
+    m.m[8] = 0.0f;
+    m.m[12] = 0.0f;
+
+    //col 2
+    m.m[1] = 0.0f;
+    m.m[5] = 1 / tan(halfFieldOfView);
+    m.m[9] = 0.0f;
+    m.m[13] = 0.0f;
+
+    //col 3
+    m.m[2] = 0.0f;
+    m.m[6] = 0.0f;
+    m.m[10] = -(farPlane + nearPlane) / (farPlane - nearPlane);
+    m.m[14] = -1.0f;
+
+    //col 4
+    m.m[3] = 0.0f;
+    m.m[7] = 0.0f;
+    m.m[11] = -2 * farPlane * nearPlane / (farPlane - nearPlane);
+    m.m[15] = 0.0f;
+
+    return m;
+}
+
+Renderer::Matrix view(const Renderer::Camera& camera)
+{
+    Renderer::Matrix rTranslate = Renderer::translate(-camera.position.x, -camera.position.y, -camera.position.z);
+    Renderer::Matrix rYaw = Renderer::transpose(Renderer::rotateY(camera.yaw));
+    Renderer::Matrix rPitch = Renderer::transpose(Renderer::rotateX(camera.pitch));
+
+    return rPitch * rYaw * rTranslate;
+}
+
+Renderer::Matrix modelMat(const Renderer::Model& model)
+{
+    return Renderer::translate(model.position.x, model.position.y, model.position.z);
+}
+
+Renderer::Matrix cam(const Renderer::Camera& camera)
+{
+    Renderer::Matrix rYaw = Renderer::rotateY(camera.yaw);
+    Renderer::Matrix rPitch = Renderer::rotateX(camera.pitch);
+
+    return rYaw * rPitch;
+}
+
+
+
+static bool KeyDown[256];
+
+static uint8_t WKey = 87;
+static uint8_t AKey = 65;
+static uint8_t SKey = 83;
+static uint8_t DKey = 68;
+
+static uint8_t UpKey = 38;
+static uint8_t LeftKey = 37;
+static uint8_t DownKey = 40;
+static uint8_t RightKey = 39;
+
+
+LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
+{
+    switch (uMsg)
+    {
+    case WM_SIZE:
+    {
+        RECT clientRect;
+        NOT_FAILED(GetClientRect(hWnd, &clientRect), 0);
+        WindowWidth = clientRect.right - clientRect.left;
+        WindowHeight = clientRect.bottom - clientRect.top;
+        break;
+    }
+    case WM_DESTROY:
+    {
+        PostQuitMessage(0);
+        break;
+    }
+    case WM_KEYDOWN:
+    {
+        uint8_t code = static_cast<uint8_t>(wParam);
+        KeyDown[code] = true;
+        break;
+    }
+    case WM_KEYUP:
+    {
+        uint8_t code = static_cast<uint8_t>(wParam);
+        KeyDown[code] = false;
+        break;
+    }
+    }
+    return DefWindowProc(hWnd, uMsg, wParam, lParam);
+}
 
 struct Constants
 {
@@ -128,7 +292,7 @@ int CALLBACK WinMain(
         // init light
         models.push_back(LoadOBJ("../../assets/cube.obj", 10.0f, Vec { 100.0f, 100.0f, 100.0f, 1.0f }, context));
 
-        Camera camera;
+        Renderer::Camera camera;
         camera.position.z = 200;
         camera.position.x = 10;
         camera.position.y = 0;
@@ -690,8 +854,8 @@ int CALLBACK WinMain(
                 }
             }
 
-            Vec forward = cam(camera) * camera.forward;
-            Vec left = cam(camera) * camera.left;
+            Renderer::Vec forward = cam(camera) * camera.forward;
+            Renderer::Vec left = cam(camera) * camera.left;
 
             if (KeyDown[UpKey])
             {
@@ -755,9 +919,9 @@ int CALLBACK WinMain(
             // upload mvp matrix
             {
                 // Build the view matrix.
-                Matrix mvp = perspective(static_cast<float>(WindowWidth), static_cast<float>(WindowHeight)) * view(camera);
+                Renderer::Matrix mvp = perspective(static_cast<float>(WindowWidth), static_cast<float>(WindowHeight)) * view(camera);
 
-                Matrix mv = view(camera);
+                Renderer::Matrix mv = view(camera);
 
                 DirectX::XMMATRIX mvpX
                 {
@@ -841,7 +1005,7 @@ int CALLBACK WinMain(
             uint32_t indices_offset = 0;
             for (size_t i = 0; i < models.size(); i++)
             {
-                const Model& model = models.at(i);
+                const Renderer::Model& model = models.at(i);
                 commandList->DrawIndexedInstanced(model.indices_count, 1, indices_offset, 0, 0);
                 indices_offset += model.indices_count;
             }
