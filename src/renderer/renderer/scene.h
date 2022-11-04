@@ -2,6 +2,7 @@
 
 #include <renderer/math.h>
 #include <renderer/color.h>
+#include <string>
 #include <vector>
 
 namespace Renderer
@@ -24,6 +25,8 @@ namespace Renderer
         Vec textureCoord;
         Color color;
     };
+
+    bool operator<(const Vertex& lhs, const Vertex& rhs);
 
     struct Material
     {
@@ -54,5 +57,5 @@ namespace Renderer
         std::vector<Model> models;
     };
 
-    bool Load(const char* fileName, Scene& scene);
+    bool Load(const std::string& fileName, Scene& scene);
 }

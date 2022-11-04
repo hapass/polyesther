@@ -3,6 +3,7 @@
 #include <renderer/math.h>
 #include <cassert>
 #include <cmath>
+#include <tuple>
 
 using namespace std;
 
@@ -268,6 +269,12 @@ namespace Renderer
         case 2: z = val;
         }
         w = val;
+    }
+
+    bool operator<(const Vec& lhs, const Vec& rhs)
+    {
+        return std::tie(lhs.x, lhs.y, lhs.z, lhs.w) <
+            std::tie(rhs.x, rhs.y, rhs.z, rhs.w);
     }
 
     Vec operator*(const Vec& a, const Vec& b)

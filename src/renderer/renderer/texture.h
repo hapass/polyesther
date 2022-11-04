@@ -8,5 +8,5 @@ namespace Renderer
     {
     };
 
-    bool Load(const char* path, Texture& texture);
+    bool Load(const char* path, Texture& texture) {};
 }

@@ -30,6 +30,8 @@ namespace Renderer
         void Set(int32_t index, float val);
     };
 
+    bool operator<(const Vec& lhs, const Vec& rhs);
+
     float dot(const Vec& a, const Vec& b);
 
     Vec operator*(const Vec& a, const Vec& b);

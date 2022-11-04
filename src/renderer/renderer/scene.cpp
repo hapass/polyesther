@@ -11,11 +11,7 @@ namespace Renderer
 {
     namespace
     {
-        bool operator<(const Vertex& lhs, const Vertex& rhs)
-        {
-            return std::tie(lhs.color.rgb_vec, lhs.normal, lhs.position, lhs.textureCoord) <
-                std::tie(rhs.color.rgb_vec, rhs.normal, rhs.position, rhs.textureCoord);
-        }
+        const char* RootFolder = "C:\\Users\\hapas\\Documents\\Code\\software_rasterizer\\assets\\";
 
         struct Context
         {
@@ -30,19 +26,29 @@ namespace Renderer
         bool Read(std::stringstream& lineStream, uint32_t elements, float def, Vec& vec)
         {
             uint32_t currentIndex = 0;
-            while (currentIndex <= 3)
+            while (currentIndex < 4)
             {
                 if (currentIndex < elements)
                 {
                     float val = 0.0f;
-                    lineStream >> val;
-                    vec.Set(currentIndex, val);
+                    if (lineStream >> val)
+                    {
+                        vec.Set(currentIndex, val);
+                    }
+                    else
+                    {
+                        return false;
+                    }
                 }
                 else
                 {
                     vec.Set(currentIndex, def);
                 }
+
+                currentIndex++;
             }
+
+            return true;
         }
 
         bool Read(std::stringstream& lineStream, const Context& loadContext, Vertex& vert)
@@ -54,20 +60,38 @@ namespace Renderer
                 std::stringstream faceDescriptionStream(faceDescription);
 
                 int32_t positionIndex;
-                faceDescriptionStream >> positionIndex;
-                vert.position = loadContext.positions.at(--positionIndex);
+                if (faceDescriptionStream >> positionIndex)
+                {
+                    vert.position = loadContext.positions.at(--positionIndex);
+                }
+                else
+                {
+                    return false;
+                }
 
                 faceDescriptionStream.ignore(1);
 
                 int32_t textureCoordIndex;
-                faceDescriptionStream >> textureCoordIndex;
-                vert.textureCoord = loadContext.textureCoords.at(--textureCoordIndex);
+                if (faceDescriptionStream >> textureCoordIndex)
+                {
+                    vert.textureCoord = loadContext.textureCoords.at(--textureCoordIndex);
+                }
+                else
+                {
+                    return false;
+                }
 
                 faceDescriptionStream.ignore(1);
 
                 int32_t normalIndex;
-                faceDescriptionStream >> normalIndex;
-                vert.normal = loadContext.normals.at(--normalIndex);
+                if (faceDescriptionStream >> normalIndex)
+                {
+                    vert.normal = loadContext.normals.at(--normalIndex);
+                }
+                else
+                {
+                    return false;
+                }
 
                 vert.materialId = loadContext.materials.at(loadContext.currentMaterial).id;
 
@@ -80,7 +104,7 @@ namespace Renderer
             const char* TYPE_MATERIAL= "newmtl";
             const char* TYPE_TEXTURE_FILENAME = "map_Kd";
 
-            std::fstream file(fileName);
+            std::fstream file(RootFolder + fileName);
             std::string line;
 
             std::string currentMaterial;
@@ -94,7 +118,14 @@ namespace Renderer
                 {
                     if (primitiveType == TYPE_MATERIAL)
                     {
-                        lineStream >> currentMaterial;
+                        if (lineStream >> currentMaterial)
+                        {
+                            // success
+                        }
+                        else
+                        {
+                            return false;
+                        }
                     }
                     else if (primitiveType == TYPE_TEXTURE_FILENAME)
                     {
@@ -106,9 +137,19 @@ namespace Renderer
                             material.textureName = materialFileName;
                             materials[currentMaterial] = std::move(material);
                         }
+                        else
+                        {
+                            return false;
+                        }
                     }
                 }
+                else
+                {
+                    return false;
+                }
             }
+
+            return true;
         }
 
         bool Load(const std::string& fileName, Model& model)
@@ -122,7 +163,7 @@ namespace Renderer
 
             Context loadContext;
 
-            std::fstream file(fileName);
+            std::fstream file(RootFolder + fileName);
             std::string line;
 
             while (std::getline(file, line))
@@ -138,6 +179,10 @@ namespace Renderer
                         {
                             loadContext.positions.push_back(position);
                         }
+                        else
+                        {
+                            return false;
+                        }
                     }
                     else if (primitiveType == TYPE_NORMAL)
                     {
@@ -146,6 +191,10 @@ namespace Renderer
                         {
                             loadContext.normals.push_back(normal);
                         }
+                        else
+                        {
+                            return false;
+                        }
                     }
                     else if (primitiveType == TYPE_TEXTURE_COORDS)
                     {
@@ -153,6 +202,10 @@ namespace Renderer
                         if (Read(lineStream, 2, 0.0f, uv))
                         {
                             loadContext.textureCoords.push_back(uv);
+                        }
+                        else
+                        {
+                            return false;
                         }
                     }
                     else if (primitiveType == TYPE_FACE)
@@ -163,7 +216,7 @@ namespace Renderer
                             if (loadContext.vertices.count(vert) == 0)
                             {
                                 model.vertices.push_back(vert);
-                                uint32_t index = model.vertices.size() - 1;
+                                uint32_t index = static_cast<uint32_t>(model.vertices.size()) - 1;
                                 model.indices.push_back(index);
                                 loadContext.vertices[vert] = index;
                             }
@@ -172,27 +225,61 @@ namespace Renderer
                                 model.indices.push_back(loadContext.vertices[vert]);
                             }
                         }
+                        else
+                        {
+                            return false;
+                        }
                     }
                     else if (primitiveType == TYPE_MATERIAL_LIB)
                     {
                         std::string fileName;
                         if (lineStream >> fileName)
                         {
-                            Load(fileName, loadContext.materials);
+                            if (Load(fileName, loadContext.materials))
+                            {
+                                // success
+                            }
+                            else
+                            {
+                                return false;
+                            }
+                        }
+                        else
+                        {
+                            return false;
                         }
                     }
                     else if (primitiveType == TYPE_MATERIAL)
                     {
-                        lineStream >> loadContext.currentMaterial;
+                        if (lineStream >> loadContext.currentMaterial)
+                        {
+                            // success
+                        }
+                        else
+                        {
+                            return false;
+                        }
                     }
                 }
+                else
+                {
+                    return false;
+                }
             }
+
+            return true;
         }
+    }
+
+    bool operator<(const Vertex& lhs, const Vertex& rhs)
+    {
+        return std::tie(lhs.color.rgb_vec, lhs.normal, lhs.position, lhs.textureCoord) <
+            std::tie(rhs.color.rgb_vec, rhs.normal, rhs.position, rhs.textureCoord);
     }
 
     bool Load(const std::string& fileName, Scene& scene)
     {
-        std::fstream file(fileName);
+        std::fstream file(RootFolder + fileName);
         std::string line;
 
         while (std::getline(file, line))
@@ -209,8 +296,22 @@ namespace Renderer
                     {
                         scene.models.push_back(std::move(model));
                     }
+                    else
+                    {
+                        return false;
+                    }
+                }
+                else
+                {
+                    return false;
                 }
             }
+            else
+            {
+                return false;
+            }
         }
+
+        return true;
     }
 }

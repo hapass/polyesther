@@ -7,6 +7,6 @@ namespace Renderer
     class Swapchain
     {
     public:
-        void Present(const Texture& image);
+        virtual void Present(const Texture& image) = 0;
     };
 }
