@@ -6,6 +6,7 @@
 #include <tuple>
 #include <map>
 #include <cassert>
+#include <iostream>
 
 namespace Renderer
 {
@@ -143,10 +144,6 @@ namespace Renderer
                         }
                     }
                 }
-                else
-                {
-                    return false;
-                }
             }
 
             return true;
@@ -261,10 +258,6 @@ namespace Renderer
                         }
                     }
                 }
-                else
-                {
-                    return false;
-                }
             }
 
             return true;
@@ -279,6 +272,7 @@ namespace Renderer
 
     bool Load(const std::string& fileName, Scene& scene)
     {
+        std::cerr << "Hello, world!\n";
         std::fstream file(RootFolder + fileName);
         std::string line;
 
