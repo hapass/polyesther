@@ -52,12 +52,13 @@ namespace Renderer
             return true;
         }
 
-        bool Read(std::stringstream& lineStream, const Context& loadContext, Vertex& vert)
+        bool Read(std::stringstream& lineStream, Context& loadContext, Model& model)
         {
-            uint32_t vertexCount = 0;
             std::string faceDescription;
             while (lineStream >> faceDescription)
             {
+                Vertex vert;
+
                 std::stringstream faceDescriptionStream(faceDescription);
 
                 int32_t positionIndex;
@@ -96,8 +97,20 @@ namespace Renderer
 
                 vert.materialId = loadContext.materials.at(loadContext.currentMaterial).id;
 
-                assert(vertexCount++ < 3);
+                if (loadContext.vertices.count(vert) == 0)
+                {
+                    model.vertices.push_back(vert);
+                    uint32_t index = static_cast<uint32_t>(model.vertices.size()) - 1;
+                    model.indices.push_back(index);
+                    loadContext.vertices[vert] = index;
+                }
+                else
+                {
+                    model.indices.push_back(loadContext.vertices[vert]);
+                }
             }
+
+            return true;
         }
 
         bool Load(const std::string& fileName, std::map<std::string, Material>& materials)
@@ -207,20 +220,9 @@ namespace Renderer
                     }
                     else if (primitiveType == TYPE_FACE)
                     {
-                        Vertex vert;
-                        if (Read(lineStream, loadContext, vert))
+                        if (Read(lineStream, loadContext, model))
                         {
-                            if (loadContext.vertices.count(vert) == 0)
-                            {
-                                model.vertices.push_back(vert);
-                                uint32_t index = static_cast<uint32_t>(model.vertices.size()) - 1;
-                                model.indices.push_back(index);
-                                loadContext.vertices[vert] = index;
-                            }
-                            else
-                            {
-                                model.indices.push_back(loadContext.vertices[vert]);
-                            }
+                            // should think about refactoring
                         }
                         else
                         {
@@ -270,9 +272,13 @@ namespace Renderer
             std::tie(rhs.color.rgb_vec, rhs.normal, rhs.position, rhs.textureCoord);
     }
 
+    bool operator==(const Vertex& lhs, const Vertex& rhs)
+    {
+        return !(lhs < rhs) && !(rhs < lhs);
+    }
+
     bool Load(const std::string& fileName, Scene& scene)
     {
-        std::cerr << "Hello, world!\n";
         std::fstream file(RootFolder + fileName);
         std::string line;
 

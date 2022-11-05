@@ -19,7 +19,7 @@ namespace Renderer
 
     struct Vertex
     {
-        uint32_t materialId;
+        uint32_t materialId = 0;
         Vec position;
         Vec normal;
         Vec textureCoord;
@@ -27,6 +27,7 @@ namespace Renderer
     };
 
     bool operator<(const Vertex& lhs, const Vertex& rhs);
+    bool operator==(const Vertex& lhs, const Vertex& rhs);
 
     struct Material
     {
@@ -55,6 +56,7 @@ namespace Renderer
     struct Scene
     {
         std::vector<Model> models;
+        std::vector<Material> materials;
     };
 
     bool Load(const std::string& fileName, Scene& scene);
