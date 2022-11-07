@@ -147,7 +147,7 @@ namespace Renderer
                 }
             }
 
-            return true;
+            return file.is_open();
         }
 
         bool Load(const std::string& fileName, Model& model)
@@ -266,7 +266,7 @@ namespace Renderer
                 }
             }
 
-            return true;
+            return file.is_open();
         }
     }
 
@@ -316,6 +316,6 @@ namespace Renderer
             }
         }
 
-        return true;
+        return file.is_open();
     }
 }

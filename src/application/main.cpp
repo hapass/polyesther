@@ -143,8 +143,6 @@ Renderer::Matrix cam(const Renderer::Camera& camera)
     return rYaw * rPitch;
 }
 
-
-
 static bool KeyDown[256];
 
 static uint8_t WKey = 87;

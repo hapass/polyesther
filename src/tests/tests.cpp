@@ -11,9 +11,8 @@ namespace tests
 	{
 	public:
 		
-		TEST_METHOD(Load)
+		TEST_METHOD(LoadShouldSucceedWhenThereIsSceneFile)
 		{
-			// add test case for loading missing files - should return false instead of true
 			Renderer::Scene scene;
 			bool success = Renderer::Load("scene.sce", scene);
 
@@ -124,6 +123,13 @@ namespace tests
 			} == secondModel.vertices);
 
 			Assert::IsTrue(std::vector<uint32_t>{0, 1, 2, 3, 4, 5} == secondModel.indices);
+		}
+
+		TEST_METHOD(LoadShouldFailWhenThereIsNoSceneFile)
+		{
+			Renderer::Scene scene;
+			bool success = Renderer::Load("", scene);
+			Assert::IsFalse(success);
 		}
 	};
 }
