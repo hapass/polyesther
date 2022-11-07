@@ -12,16 +12,15 @@ namespace Renderer
 {
     namespace
     {
-        const char* RootFolder = "C:\\Users\\hapas\\Documents\\Code\\software_rasterizer\\assets\\";
+        const char* RootFolder = "C:\\Users\\hapas\\Documents\\Code\\software_rasterizer\\assets\\tests\\";
 
         struct Context
         {
-            std::map<Vertex, uint32_t> vertices;
-            std::map<std::string, Material> materials;
+            std::map<std::string, uint32_t> materials;
             std::vector<Vec> textureCoords;
             std::vector<Vec> positions;
             std::vector<Vec> normals;
-            std::string currentMaterial;
+            uint32_t currentMaterialId;
         };
 
         bool Read(std::stringstream& lineStream, uint32_t elements, float def, Vec& vec)
@@ -52,7 +51,7 @@ namespace Renderer
             return true;
         }
 
-        bool Read(std::stringstream& lineStream, Context& loadContext, Model& model)
+        bool Read(std::stringstream& lineStream, const Context& loadContext, std::vector<Vertex>& vertices)
         {
             std::string faceDescription;
             while (lineStream >> faceDescription)
@@ -95,25 +94,14 @@ namespace Renderer
                     return false;
                 }
 
-                vert.materialId = loadContext.materials.at(loadContext.currentMaterial).id;
-
-                if (loadContext.vertices.count(vert) == 0)
-                {
-                    model.vertices.push_back(vert);
-                    uint32_t index = static_cast<uint32_t>(model.vertices.size()) - 1;
-                    model.indices.push_back(index);
-                    loadContext.vertices[vert] = index;
-                }
-                else
-                {
-                    model.indices.push_back(loadContext.vertices[vert]);
-                }
+                vert.materialId = loadContext.currentMaterialId;
+                vertices.push_back(vert);
             }
 
             return true;
         }
 
-        bool Load(const std::string& fileName, std::map<std::string, Material>& materials)
+        bool Load(const std::string& fileName, std::vector<Material>& materials)
         {
             const char* TYPE_MATERIAL= "newmtl";
             const char* TYPE_TEXTURE_FILENAME = "map_Kd";
@@ -121,8 +109,7 @@ namespace Renderer
             std::fstream file(RootFolder + fileName);
             std::string line;
 
-            std::string currentMaterial;
-            uint32_t currentMaterialId = 0;
+            std::string currentMaterialName;
 
             while (std::getline(file, line))
             {
@@ -132,9 +119,10 @@ namespace Renderer
                 {
                     if (primitiveType == TYPE_MATERIAL)
                     {
-                        if (lineStream >> currentMaterial)
+                        std::string materialName;
+                        if (lineStream >> materialName)
                         {
-                            // success
+                            currentMaterialName = materialName;
                         }
                         else
                         {
@@ -147,9 +135,9 @@ namespace Renderer
                         if (lineStream >> materialFileName)
                         {
                             Material material;
-                            material.id = currentMaterialId++;
+                            material.name = currentMaterialName;
                             material.textureName = materialFileName;
-                            materials[currentMaterial] = std::move(material);
+                            materials.push_back(std::move(material));
                         }
                         else
                         {
@@ -172,6 +160,8 @@ namespace Renderer
             const char* TYPE_MATERIAL = "usemtl";
 
             Context loadContext;
+
+            std::map<Vertex, uint32_t> vertexIndices;
 
             std::fstream file(RootFolder + fileName);
             std::string line;
@@ -220,9 +210,19 @@ namespace Renderer
                     }
                     else if (primitiveType == TYPE_FACE)
                     {
-                        if (Read(lineStream, loadContext, model))
+                        std::vector<Vertex> vertices;
+                        if (Read(lineStream, loadContext, vertices))
                         {
-                            // should think about refactoring
+                            for (const Vertex& vertex : vertices)
+                            {
+                                if (vertexIndices.count(vertex) == 0)
+                                {
+                                    model.vertices.push_back(vertex);
+                                    vertexIndices[vertex] = static_cast<uint32_t>(model.vertices.size()) - 1;
+                                }
+                                
+                                model.indices.push_back(vertexIndices[vertex]);
+                            }
                         }
                         else
                         {
@@ -234,9 +234,12 @@ namespace Renderer
                         std::string fileName;
                         if (lineStream >> fileName)
                         {
-                            if (Load(fileName, loadContext.materials))
+                            if (Load(fileName, model.materials))
                             {
-                                // success
+                                for (size_t i = 0; i < model.materials.size(); i++)
+                                {
+                                    loadContext.materials[model.materials[i].name] = i;
+                                }
                             }
                             else
                             {
@@ -250,9 +253,10 @@ namespace Renderer
                     }
                     else if (primitiveType == TYPE_MATERIAL)
                     {
-                        if (lineStream >> loadContext.currentMaterial)
+                        std::string currentMaterial;
+                        if (lineStream >> currentMaterial)
                         {
-                            // success
+                            loadContext.currentMaterialId = loadContext.materials.at(currentMaterial);
                         }
                         else
                         {
@@ -268,8 +272,8 @@ namespace Renderer
 
     bool operator<(const Vertex& lhs, const Vertex& rhs)
     {
-        return std::tie(lhs.color.rgb_vec, lhs.normal, lhs.position, lhs.textureCoord) <
-            std::tie(rhs.color.rgb_vec, rhs.normal, rhs.position, rhs.textureCoord);
+        return std::tie(lhs.materialId, lhs.color.rgb_vec, lhs.normal, lhs.position, lhs.textureCoord) <
+            std::tie(rhs.materialId, rhs.color.rgb_vec, rhs.normal, rhs.position, rhs.textureCoord);
     }
 
     bool operator==(const Vertex& lhs, const Vertex& rhs)

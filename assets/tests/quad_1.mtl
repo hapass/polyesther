@@ -1,0 +1,5 @@
+newmtl quad_material_0
+map_Kd quad_0.jpg
+
+newmtl quad_material_1
+map_Kd quad_1.png

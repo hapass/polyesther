@@ -31,13 +31,14 @@ namespace Renderer
 
     struct Material
     {
-        uint32_t id;
+        std::string name;
         std::string textureName;
     };
 
     struct Model
     {
         Vec position;
+        std::vector<Material> materials;
         std::vector<Vertex> vertices;
         std::vector<uint32_t> indices;
     };
@@ -56,7 +57,6 @@ namespace Renderer
     struct Scene
     {
         std::vector<Model> models;
-        std::vector<Material> materials;
     };
 
     bool Load(const std::string& fileName, Scene& scene);
