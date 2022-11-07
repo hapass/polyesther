@@ -12,7 +12,7 @@ namespace Renderer
 {
     namespace
     {
-        const char* RootFolder = "C:\\Users\\hapas\\Documents\\Code\\software_rasterizer\\assets\\tests\\";
+        const char* RootFolder = "C:\\Users\\hapas\\Documents\\Code\\software_rasterizer\\assets\\";
 
         struct Context
         {

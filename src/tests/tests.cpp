@@ -17,7 +17,7 @@ namespace tests
 			bool success = Renderer::Load("scene.sce", scene);
 
 			// everything is loaded
-			Assert::AreEqual(true, success);
+			Assert::IsTrue(success);
 
 			// there are two models
 			Assert::AreEqual(size_t(2), scene.models.size());
@@ -129,6 +129,7 @@ namespace tests
 		{
 			Renderer::Scene scene;
 			bool success = Renderer::Load("", scene);
+
 			Assert::IsFalse(success);
 		}
 	};

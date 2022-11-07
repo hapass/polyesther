@@ -44,8 +44,6 @@ static int32_t TextureWidth;
 static int32_t TextureHeight;
 static uint8_t* Texture;
 
-static std::vector<Renderer::Model> models;
-
 void DebugOut(const wchar_t* fmt, ...)
 {
     va_list argp;
@@ -79,8 +77,6 @@ void PrintError(HRESULT result)
         assert(false); \
         exit(1); \
     } \
-
-static Renderer::Light light;
 
 const Renderer::Matrix& perspective(float width, float height)
 {
@@ -278,17 +274,12 @@ int CALLBACK WinMain(
         ), 0);
 
         int32_t channels;
-        NOT_FAILED(Texture = stbi_load("../../assets/texture.jpg", &TextureWidth, &TextureHeight, &channels, 4), 0);
+        NOT_FAILED(Texture = stbi_load("../../assets/police_car_texture.png", &TextureWidth, &TextureHeight, &channels, 4), 0);
 
         auto frameExpectedTime = chrono::milliseconds(1000 / FPS);
 
-        LoadContext context;
-
-        // init model
-        models.push_back(LoadOBJ("../../assets/cube.obj", 50.0f, Vec { 0.0f, 0.0f, 0.0f, 1.0f }, context));
-
-        // init light
-        models.push_back(LoadOBJ("../../assets/cube.obj", 10.0f, Vec { 100.0f, 100.0f, 100.0f, 1.0f }, context));
+        Renderer::Scene scene;
+        Renderer::Load("scene.sce", scene);
 
         Renderer::Camera camera;
         camera.position.z = 200;
@@ -298,10 +289,11 @@ int CALLBACK WinMain(
         camera.pitch = 0.0f;
         camera.yaw = 0.0f;
 
-        camera.forward = Vec{ 0.0f, 0.0f, -10.0f, 0.0f };
-        camera.left = Vec{ -10.0f, 0.0f, 0.0f, 0.0f };
+        camera.forward = Renderer::Vec { 0.0f, 0.0f, -10.0f, 0.0f };
+        camera.left = Renderer::Vec { -10.0f, 0.0f, 0.0f, 0.0f };
 
-        light.position = models[1].position;
+        Renderer::Light light;
+        light.position = Renderer::Vec { 100.0f, 100.0f, 100.0f, 1.0f };
 
         ID3D12Debug* debugController = nullptr;
         D3D_NOT_FAILED(D3D12GetDebugInterface(IID_PPV_ARGS(&debugController)));
@@ -654,13 +646,14 @@ int CALLBACK WinMain(
         {
             std::vector<XVertex> data;
 
-            for (uint32_t i = 0; i < indicesObj.size(); i++)
+            for (Renderer::Vertex vert : scene.models[0].vertices)
             {
+                vert.position = Renderer::rotateY(90) * Renderer::scale(20.0f) * vert.position;
                 data.push_back(
                     XVertex({
-                        DirectX::XMFLOAT3(verticesObj[indicesObj[i].vert].x, verticesObj[indicesObj[i].vert].y, verticesObj[indicesObj[i].vert].z),
-                        DirectX::XMFLOAT2(textureX[indicesObj[i].text], textureY[indicesObj[i].text]),
-                        DirectX::XMFLOAT3(normalsObj[indicesObj[i].norm].x, normalsObj[indicesObj[i].norm].y, normalsObj[indicesObj[i].norm].z)
+                        DirectX::XMFLOAT3(vert.position.x, vert.position.y, vert.position.z),
+                        DirectX::XMFLOAT2(vert.textureCoord.x, vert.textureCoord.y),
+                        DirectX::XMFLOAT3(vert.normal.x, vert.normal.y, vert.normal.z)
                     })
                 );
             }
@@ -707,7 +700,7 @@ int CALLBACK WinMain(
         {
             std::vector<std::uint16_t> data;
 
-            for (uint32_t i = 0; i < indicesObj.size(); i++)
+            for (uint32_t i : scene.models[0].indices)
             {
                 data.push_back(static_cast<uint16_t>(i));
             }
@@ -987,26 +980,21 @@ int CALLBACK WinMain(
             D3D12_VERTEX_BUFFER_VIEW vertexBufferView;
             vertexBufferView.BufferLocation = vertexBuffer->GetGPUVirtualAddress();
             vertexBufferView.StrideInBytes = sizeof(XVertex);
-            vertexBufferView.SizeInBytes = sizeof(XVertex) * static_cast<UINT>(indicesObj.size());
+            vertexBufferView.SizeInBytes = sizeof(XVertex) * static_cast<UINT>(scene.models[0].indices.size());
             commandList->IASetVertexBuffers(0, 1, &vertexBufferView);
 
             D3D12_INDEX_BUFFER_VIEW indexBufferView;
             indexBufferView.BufferLocation = indexBuffer->GetGPUVirtualAddress();
             indexBufferView.Format = DXGI_FORMAT_R16_UINT;
-            indexBufferView.SizeInBytes = sizeof(std::uint16_t) * static_cast<UINT>(indicesObj.size());
+            indexBufferView.SizeInBytes = sizeof(std::uint16_t) * static_cast<UINT>(scene.models[0].indices.size());
             commandList->IASetIndexBuffer(&indexBufferView);
 
             commandList->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
             commandList->SetGraphicsRootDescriptorTable(0, constantBufferDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
 
-            uint32_t indices_offset = 0;
-            for (size_t i = 0; i < models.size(); i++)
-            {
-                const Renderer::Model& model = models.at(i);
-                commandList->DrawIndexedInstanced(model.indices_count, 1, indices_offset, 0, 0);
-                indices_offset += model.indices_count;
-            }
+            const Renderer::Model& model = scene.models[0];
+            commandList->DrawIndexedInstanced((UINT)model.indices.size(), 1, 0, 0, 0);
 
             D3D12_RESOURCE_BARRIER presentBufferTransition;
             presentBufferTransition.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
