@@ -10,7 +10,6 @@ namespace tests
 	TEST_CLASS(Scene)
 	{
 	public:
-		
 		TEST_METHOD(LoadShouldSucceedWhenThereIsSceneFile)
 		{
 			Renderer::Scene scene;

@@ -81,7 +81,7 @@ void PrintError(HRESULT result)
 const Renderer::Matrix& perspective(float width, float height)
 {
     static float Far = 400.0f;
-    static float Near = 1.0f;
+    static float Near = .1f;
 
     float farPlane = Far;
     float nearPlane = Near;
@@ -150,7 +150,6 @@ static uint8_t UpKey = 38;
 static uint8_t LeftKey = 37;
 static uint8_t DownKey = 40;
 static uint8_t RightKey = 39;
-
 
 LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
@@ -274,7 +273,7 @@ int CALLBACK WinMain(
         ), 0);
 
         int32_t channels;
-        NOT_FAILED(Texture = stbi_load("../../assets/police_car_texture.png", &TextureWidth, &TextureHeight, &channels, 4), 0);
+        NOT_FAILED(Texture = stbi_load("../../assets/tests/quad_0.jpg", &TextureWidth, &TextureHeight, &channels, 4), 0);
 
         auto frameExpectedTime = chrono::milliseconds(1000 / FPS);
 
@@ -282,15 +281,15 @@ int CALLBACK WinMain(
         Renderer::Load("scene.sce", scene);
 
         Renderer::Camera camera;
-        camera.position.z = 200;
-        camera.position.x = 10;
+        camera.position.z = 2;
+        camera.position.x = 0;
         camera.position.y = 0;
 
         camera.pitch = 0.0f;
         camera.yaw = 0.0f;
 
-        camera.forward = Renderer::Vec { 0.0f, 0.0f, -10.0f, 0.0f };
-        camera.left = Renderer::Vec { -10.0f, 0.0f, 0.0f, 0.0f };
+        camera.forward = Renderer::Vec { 0.0f, 0.0f, -1.0f, 0.0f };
+        camera.left = Renderer::Vec { -1.0f, 0.0f, 0.0f, 0.0f };
 
         Renderer::Light light;
         light.position = Renderer::Vec { 100.0f, 100.0f, 100.0f, 1.0f };
@@ -564,7 +563,7 @@ int CALLBACK WinMain(
         pipelineStateObjectDescription.PS = { (BYTE*)pixelShaderBlob->GetBufferPointer(), pixelShaderBlob->GetBufferSize() };
 
         pipelineStateObjectDescription.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
-        pipelineStateObjectDescription.RasterizerState.CullMode = D3D12_CULL_MODE_BACK;
+        pipelineStateObjectDescription.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
         pipelineStateObjectDescription.RasterizerState.FrontCounterClockwise = true;
         pipelineStateObjectDescription.RasterizerState.DepthBias = D3D12_DEFAULT_DEPTH_BIAS;
         pipelineStateObjectDescription.RasterizerState.DepthBiasClamp = D3D12_DEFAULT_DEPTH_BIAS_CLAMP;
@@ -648,7 +647,6 @@ int CALLBACK WinMain(
 
             for (Renderer::Vertex vert : scene.models[0].vertices)
             {
-                vert.position = Renderer::rotateY(90) * Renderer::scale(20.0f) * vert.position;
                 data.push_back(
                     XVertex({
                         DirectX::XMFLOAT3(vert.position.x, vert.position.y, vert.position.z),
@@ -850,7 +848,7 @@ int CALLBACK WinMain(
 
             if (KeyDown[UpKey])
             {
-                camera.pitch -= 0.1f;
+                camera.pitch -= 0.01f;
                 if (camera.pitch < 0)
                 {
                     camera.pitch += static_cast<float>(M_PI) * 2;
@@ -859,7 +857,7 @@ int CALLBACK WinMain(
 
             if (KeyDown[DownKey])
             {
-                camera.pitch += 0.1f;
+                camera.pitch += 0.01f;
                 if (camera.pitch > static_cast<float>(M_PI) * 2)
                 {
                     camera.pitch -= static_cast<float>(M_PI) * 2;
@@ -868,7 +866,7 @@ int CALLBACK WinMain(
 
             if (KeyDown[RightKey])
             {
-                camera.yaw -= 0.1f;
+                camera.yaw -= 0.01f;
                 if (camera.yaw < 0)
                 {
                     camera.yaw += static_cast<float>(M_PI) * 2;
@@ -877,7 +875,7 @@ int CALLBACK WinMain(
 
             if (KeyDown[LeftKey])
             {
-                camera.yaw += 0.1f;
+                camera.yaw += 0.01f;
                 if (camera.yaw > static_cast<float>(M_PI) * 2)
                 {
                     camera.yaw -= static_cast<float>(M_PI) * 2;
@@ -886,22 +884,22 @@ int CALLBACK WinMain(
 
             if (KeyDown[WKey]) 
             {
-                camera.position = camera.position + forward;
+                camera.position = camera.position + forward * 0.1f;
             }
 
             if (KeyDown[AKey])
             {
-                camera.position = camera.position + left;
+                camera.position = camera.position + left * 0.1f;
             }
 
             if (KeyDown[SKey])
             {
-                camera.position = camera.position - forward;
+                camera.position = camera.position - forward * 0.1f;
             }
 
             if (KeyDown[DKey])
             {
-                camera.position = camera.position - left;
+                camera.position = camera.position - left * 0.1f;
             }
 
             // calculate light's position in view space
@@ -980,7 +978,7 @@ int CALLBACK WinMain(
             D3D12_VERTEX_BUFFER_VIEW vertexBufferView;
             vertexBufferView.BufferLocation = vertexBuffer->GetGPUVirtualAddress();
             vertexBufferView.StrideInBytes = sizeof(XVertex);
-            vertexBufferView.SizeInBytes = sizeof(XVertex) * static_cast<UINT>(scene.models[0].indices.size());
+            vertexBufferView.SizeInBytes = sizeof(XVertex) * static_cast<UINT>(scene.models[0].vertices.size());
             commandList->IASetVertexBuffers(0, 1, &vertexBufferView);
 
             D3D12_INDEX_BUFFER_VIEW indexBufferView;
