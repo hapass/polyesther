@@ -380,13 +380,7 @@ int CALLBACK WinMain(
         clearValue.DepthStencil.Depth = 1.0f;
         clearValue.DepthStencil.Stencil = 0;
 
-        D3D12_HEAP_PROPERTIES defaultHeapProperties;
-        defaultHeapProperties.Type = D3D12_HEAP_TYPE_DEFAULT;
-        defaultHeapProperties.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
-        defaultHeapProperties.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
-        defaultHeapProperties.VisibleNodeMask = 1;
-        defaultHeapProperties.CreationNodeMask = 1;
-
+        D3D12_HEAP_PROPERTIES defaultHeapProperties = device->GetCustomHeapProperties(0, D3D12_HEAP_TYPE_DEFAULT);
         ID3D12Resource* depthStencilBuffer = nullptr;
         D3D_NOT_FAILED(device->CreateCommittedResource(&defaultHeapProperties, D3D12_HEAP_FLAG_NONE, &depthBufferDescription, D3D12_RESOURCE_STATE_COMMON, &clearValue, IID_PPV_ARGS(&depthStencilBuffer)));
 
@@ -431,12 +425,7 @@ int CALLBACK WinMain(
         // rendering
 
         // Constant buffer
-        D3D12_HEAP_PROPERTIES uploadHeapProperties;
-        uploadHeapProperties.Type = D3D12_HEAP_TYPE_UPLOAD;
-        uploadHeapProperties.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
-        uploadHeapProperties.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
-        uploadHeapProperties.VisibleNodeMask = 1;
-        uploadHeapProperties.CreationNodeMask = 1;
+        D3D12_HEAP_PROPERTIES uploadHeapProperties = device->GetCustomHeapProperties(0, D3D12_HEAP_TYPE_UPLOAD);
 
         D3D12_RESOURCE_DESC uploadBufferDescription;
         uploadBufferDescription.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
