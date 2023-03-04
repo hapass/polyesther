@@ -65,7 +65,9 @@ float4 PS(VertexOut pin) : SV_Target
     float specAmount = max(dot(normalize(pos_view), reflect(light_vec, normal_vec)), 0.0f);
     float specular = light_color * pow(specAmount, specularShininess) * specularStrength;
 
-    float4 frag_color = g_texture.Sample(g_sampler, pin.TexCoord);
+    float2 texCoord = float2(pin.TexCoord.x, 1.0 - pin.TexCoord.y); 
+
+    float4 frag_color = g_texture.Sample(g_sampler, texCoord);
     float4 res = (diffuse + ambient + specular) * frag_color;
     return clamp(res, 0.0f, 1.0f);
 }

@@ -78,14 +78,17 @@ void PrintError(HRESULT result)
         exit(1); \
     } \
 
+// In view space we are at 0 looking down the negative z axis.
+// Near plane of the camera frustum is ar -Near, far plane of the camera frustum is at -Far.
+// As DirectX clip space z axis ranges from 0 to 1, we map -Near to 0 and -Far to 1.
+// The coordinate system is right handed.
 const Renderer::Matrix& perspective(float width, float height)
 {
     static float Far = 400.0f;
     static float Near = .1f;
+    static float FOV = 25;
 
-    float farPlane = Far;
-    float nearPlane = Near;
-    float halfFieldOfView = 25 * (static_cast<float>(M_PI) / 180);
+    float halfFieldOfView = FOV * (static_cast<float>(M_PI) / 180);
     float aspect = width / height;
 
     static Renderer::Matrix m;
@@ -105,13 +108,13 @@ const Renderer::Matrix& perspective(float width, float height)
     //col 3
     m.m[2] = 0.0f;
     m.m[6] = 0.0f;
-    m.m[10] = -(farPlane + nearPlane) / (farPlane - nearPlane);
+    m.m[10] = Far / (Near - Far);
     m.m[14] = -1.0f;
 
     //col 4
     m.m[3] = 0.0f;
     m.m[7] = 0.0f;
-    m.m[11] = -2 * farPlane * nearPlane / (farPlane - nearPlane);
+    m.m[11] = Near * Far / (Near - Far);
     m.m[15] = 0.0f;
 
     return m;
@@ -634,7 +637,7 @@ int CALLBACK WinMain(
         {
             std::vector<XVertex> data;
 
-            for (Renderer::Vertex vert : scene.models[0].vertices)
+            for (const Renderer::Vertex& vert : scene.models[0].vertices)
             {
                 data.push_back(
                     XVertex({
