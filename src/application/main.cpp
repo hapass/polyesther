@@ -16,7 +16,7 @@
 #include <array>
 #include <cmath>
 #include <wincodec.h>
-#include <algorithm>
+#include <set>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "../common/stb_image.h"
@@ -39,10 +39,6 @@ static BITMAPINFO BackBufferInfo;
 static uint32_t* BackBuffer;
 
 static float* ZBuffer;
-
-static int32_t TextureWidth;
-static int32_t TextureHeight;
-static uint8_t* Texture;
 
 void DebugOut(const wchar_t* fmt, ...)
 {
@@ -79,7 +75,7 @@ void PrintError(HRESULT result)
     } \
 
 // In view space we are at 0 looking down the negative z axis.
-// Near plane of the camera frustum is ar -Near, far plane of the camera frustum is at -Far.
+// Near plane of the camera frustum is at -Near, far plane of the camera frustum is at -Far.
 // As DirectX clip space z axis ranges from 0 to 1, we map -Near to 0 and -Far to 1.
 // The coordinate system is right handed.
 const Renderer::Matrix& perspective(float width, float height)
@@ -236,6 +232,146 @@ void SetModelViewProjection(ID3D12Resource* constantBuffer, const DirectX::XMMAT
     constantBuffer->Unmap(0, nullptr);
 }
 
+ID3D12DescriptorHeap* CreateConstantBufferDescriptorHeap(ID3D12Device* device, UINT descriptorsCount)
+{
+    D3D12_DESCRIPTOR_HEAP_DESC constantBufferDescriptorHeapDescription;
+    constantBufferDescriptorHeapDescription.Type = D3D12_DESCRIPTOR_HEAP_TYPE::D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+    constantBufferDescriptorHeapDescription.NumDescriptors = descriptorsCount;
+    constantBufferDescriptorHeapDescription.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+    constantBufferDescriptorHeapDescription.NodeMask = 0;
+
+    ID3D12DescriptorHeap* constantBufferDescriptorHeap = nullptr;
+    D3D_NOT_FAILED(device->CreateDescriptorHeap(&constantBufferDescriptorHeapDescription, IID_PPV_ARGS(&constantBufferDescriptorHeap)));
+
+    return constantBufferDescriptorHeap;
+}
+
+void UploadTexturesToGPU(
+    ID3D12Device* device, 
+    ID3D12DescriptorHeap* constantBufferDescriptorHeap,
+    ID3D12CommandQueue* queue,
+    ID3D12PipelineState* pso
+    )
+{
+    int32_t TextureWidth;
+    int32_t TextureHeight;
+    uint8_t* Texture;
+
+    int32_t channels;
+    NOT_FAILED(Texture = stbi_load("../../assets/tests/quad_0.jpg", &TextureWidth, &TextureHeight, &channels, 4), 0);
+
+    D3D12_RESOURCE_DESC textureDesc = {};
+    textureDesc.MipLevels = 1;
+    textureDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    textureDesc.Width = TextureWidth;
+    textureDesc.Height = TextureHeight;
+    textureDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
+    textureDesc.DepthOrArraySize = 1;
+    textureDesc.SampleDesc.Count = 1;
+    textureDesc.SampleDesc.Quality = 0;
+    textureDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+
+    D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint = {};
+    UINT numRows = 0;
+    UINT64 rowSizeInBytes = 0;
+    UINT64 totalBytes = 0;
+    device->GetCopyableFootprints(&textureDesc, 0, 1, 0, &footprint, &numRows, &rowSizeInBytes, &totalBytes);
+
+    D3D12_RESOURCE_DESC uploadBufferDescription;
+    uploadBufferDescription.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+    uploadBufferDescription.Alignment = 0;
+    uploadBufferDescription.Width = totalBytes;
+    uploadBufferDescription.Height = 1;
+    uploadBufferDescription.DepthOrArraySize = 1;
+    uploadBufferDescription.MipLevels = 1;
+    uploadBufferDescription.Format = DXGI_FORMAT_UNKNOWN;
+    uploadBufferDescription.SampleDesc.Count = 1;
+    uploadBufferDescription.SampleDesc.Quality = 0;
+    uploadBufferDescription.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+    uploadBufferDescription.Flags = D3D12_RESOURCE_FLAG_NONE;
+
+    D3D12_HEAP_PROPERTIES uploadProperties = device->GetCustomHeapProperties(0, D3D12_HEAP_TYPE_UPLOAD);
+    ID3D12Resource* dataUploadBuffer = nullptr; // TODO: should be cleared later
+    D3D_NOT_FAILED(device->CreateCommittedResource(&uploadProperties, D3D12_HEAP_FLAG_NONE, &uploadBufferDescription, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&dataUploadBuffer)));
+
+    D3D12_HEAP_PROPERTIES defaultProperties = device->GetCustomHeapProperties(0, D3D12_HEAP_TYPE_DEFAULT);
+    ID3D12Resource* dataBuffer = nullptr;
+    D3D_NOT_FAILED(device->CreateCommittedResource(&defaultProperties, D3D12_HEAP_FLAG_NONE, &textureDesc, D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&dataBuffer)));
+
+    BYTE* mappedData = nullptr;
+    dataUploadBuffer->Map(0, nullptr, (void**)&mappedData);
+
+    for (size_t i = 0; i < numRows; i++)
+    {
+        memcpy(mappedData + footprint.Footprint.RowPitch * i, Texture + rowSizeInBytes * i, rowSizeInBytes);
+    }
+    dataUploadBuffer->Unmap(0, nullptr);
+
+    D3D12_TEXTURE_COPY_LOCATION dest;
+    dest.pResource = dataBuffer;
+    dest.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+    dest.PlacedFootprint = {};
+    dest.SubresourceIndex = 0;
+
+    D3D12_TEXTURE_COPY_LOCATION src;
+    src.pResource = dataUploadBuffer;
+    src.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+    src.PlacedFootprint = footprint;
+
+    D3D12_RESOURCE_BARRIER genericReadBufferTransition;
+    genericReadBufferTransition.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+    genericReadBufferTransition.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+    genericReadBufferTransition.Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
+    genericReadBufferTransition.Transition.StateAfter = D3D12_RESOURCE_STATE_GENERIC_READ;
+    genericReadBufferTransition.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+    genericReadBufferTransition.Transition.pResource = dataBuffer;
+
+    ID3D12CommandAllocator* allocator = nullptr;
+    D3D_NOT_FAILED(device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&allocator)));
+
+    ID3D12GraphicsCommandList* commandList = nullptr;
+    D3D_NOT_FAILED(device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, allocator, nullptr, IID_PPV_ARGS(&commandList)));
+
+    commandList->CopyTextureRegion(&dest, 0, 0, 0, &src, nullptr);
+    commandList->ResourceBarrier(1, &genericReadBufferTransition);
+    commandList->Close();
+
+    ID3D12CommandList* cmdsLists[1] = { commandList };
+    queue->ExecuteCommandLists(1, cmdsLists);
+
+    UINT64 currentFenceValue = 0;
+
+    ID3D12Fence* fence = nullptr;
+    D3D_NOT_FAILED(device->CreateFence(currentFenceValue, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fence)));
+    HANDLE fenceEventHandle = CreateEventExW(nullptr, nullptr, CREATE_EVENT_MANUAL_RESET, EVENT_ALL_ACCESS);
+    assert(fenceEventHandle);
+
+    currentFenceValue++;
+    queue->Signal(fence, currentFenceValue);
+
+    if (fence->GetCompletedValue() != currentFenceValue)
+    {
+        D3D_NOT_FAILED(fence->SetEventOnCompletion(currentFenceValue, fenceEventHandle));
+        WaitForSingleObject(fenceEventHandle, INFINITE);
+        ResetEvent(fenceEventHandle);
+    }
+
+    D3D_NOT_FAILED(allocator->Reset());
+    D3D_NOT_FAILED(commandList->Reset(allocator, pso));
+
+    // Describe and create a SRV for the texture.
+    D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+    srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+    srvDesc.Format = textureDesc.Format;
+    srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+    srvDesc.Texture2D.MipLevels = 1;
+
+    D3D12_CPU_DESCRIPTOR_HANDLE secondConstantBufferHandle{ SIZE_T(INT64(constantBufferDescriptorHeap->GetCPUDescriptorHandleForHeapStart().ptr) + INT64(device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV))) };
+    device->CreateShaderResourceView(dataBuffer, &srvDesc, secondConstantBufferHandle);
+
+    stbi_image_free(Texture);
+}
+
 int CALLBACK WinMain(
     _In_ HINSTANCE hInstance,
     _In_opt_ HINSTANCE hPrevInstance,
@@ -274,9 +410,6 @@ int CALLBACK WinMain(
             hInstance,
             0
         ), 0);
-
-        int32_t channels;
-        NOT_FAILED(Texture = stbi_load("../../assets/tests/quad_0.jpg", &TextureWidth, &TextureHeight, &channels, 4), 0);
 
         auto frameExpectedTime = chrono::milliseconds(1000 / FPS);
 
@@ -448,14 +581,16 @@ int CALLBACK WinMain(
         ID3D12Resource* uploadBuffer = nullptr;
         D3D_NOT_FAILED(device->CreateCommittedResource(&uploadHeapProperties, D3D12_HEAP_FLAG_NONE, &uploadBufferDescription, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&uploadBuffer)));
 
-        D3D12_DESCRIPTOR_HEAP_DESC constantBufferDescriptorHeapDescription;
-        constantBufferDescriptorHeapDescription.Type = D3D12_DESCRIPTOR_HEAP_TYPE::D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
-        constantBufferDescriptorHeapDescription.NumDescriptors = 2;
-        constantBufferDescriptorHeapDescription.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
-        constantBufferDescriptorHeapDescription.NodeMask = 0;
+        std::set<std::string> textureFiles;
+        for (const Renderer::Model& model : scene.models)
+        {
+            for (const Renderer::Material& material : model.materials)
+            {
+                textureFiles.insert(material.textureName);
+            }
+        }
 
-        ID3D12DescriptorHeap* constantBufferDescriptorHeap = nullptr;
-        D3D_NOT_FAILED(device->CreateDescriptorHeap(&constantBufferDescriptorHeapDescription, IID_PPV_ARGS(&constantBufferDescriptorHeap)));
+        ID3D12DescriptorHeap* constantBufferDescriptorHeap = CreateConstantBufferDescriptorHeap(device, 2);
 
         D3D12_CONSTANT_BUFFER_VIEW_DESC constantBufferViewDescription;
         constantBufferViewDescription.BufferLocation = uploadBuffer->GetGPUVirtualAddress();
@@ -733,88 +868,7 @@ int CALLBACK WinMain(
             indexBuffer = dataBuffer;
         }
 
-        // texture heap
-        D3D12_RESOURCE_DESC textureDesc = {};
-        textureDesc.MipLevels = 1;
-        textureDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-        textureDesc.Width = TextureWidth;
-        textureDesc.Height = TextureHeight;
-        textureDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
-        textureDesc.DepthOrArraySize = 1;
-        textureDesc.SampleDesc.Count = 1;
-        textureDesc.SampleDesc.Quality = 0;
-        textureDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
-
-        ID3D12Resource* texture = nullptr;
-        {
-            D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint = {};
-            UINT numRows = 0;
-            UINT64 rowSizeInBytes = 0;
-            UINT64 totalBytes = 0;
-            device->GetCopyableFootprints(&textureDesc, 0, 1, 0, &footprint, &numRows, &rowSizeInBytes, &totalBytes);
-
-            uploadBufferDescription.Width = totalBytes;
-
-            ID3D12Resource* dataUploadBuffer = nullptr; // TODO: should be cleared later
-            D3D_NOT_FAILED(device->CreateCommittedResource(&uploadHeapProperties, D3D12_HEAP_FLAG_NONE, &uploadBufferDescription, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&dataUploadBuffer)));
-
-            ID3D12Resource* dataBuffer = nullptr;
-            D3D_NOT_FAILED(device->CreateCommittedResource(&defaultHeapProperties, D3D12_HEAP_FLAG_NONE, &textureDesc, D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&dataBuffer)));
-
-            BYTE* mappedData = nullptr;
-            dataUploadBuffer->Map(0, nullptr, (void**)&mappedData);
-
-            for (size_t i = 0; i < numRows; i++)
-            {
-                memcpy(mappedData + footprint.Footprint.RowPitch * i, Texture + rowSizeInBytes * i, rowSizeInBytes);
-            }
-            dataUploadBuffer->Unmap(0, nullptr);
-
-            D3D12_TEXTURE_COPY_LOCATION dest;
-            dest.pResource = dataBuffer;
-            dest.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
-            dest.PlacedFootprint = {};
-            dest.SubresourceIndex = 0;
-
-            D3D12_TEXTURE_COPY_LOCATION src;
-            src.pResource = dataUploadBuffer;
-            src.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
-            src.PlacedFootprint = footprint;
-
-            commandList->CopyTextureRegion(&dest, 0, 0, 0, &src, nullptr);
-
-            genericReadBufferTransition.Transition.pResource = dataBuffer;
-            commandList->ResourceBarrier(1, &genericReadBufferTransition);
-            commandList->Close();
-
-            ID3D12CommandList* cmdsLists[1] = { commandList };
-            queue->ExecuteCommandLists(1, cmdsLists);
-
-            currentFenceValue++;
-            queue->Signal(fence, currentFenceValue);
-
-            if (fence->GetCompletedValue() != currentFenceValue)
-            {
-                D3D_NOT_FAILED(fence->SetEventOnCompletion(currentFenceValue, fenceEventHandle));
-                WaitForSingleObject(fenceEventHandle, INFINITE);
-                ResetEvent(fenceEventHandle);
-            }
-
-            D3D_NOT_FAILED(allocator->Reset());
-            D3D_NOT_FAILED(commandList->Reset(allocator, pso));
-
-            texture = dataBuffer;
-        }
-
-        // Describe and create a SRV for the texture.
-        D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
-        srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-        srvDesc.Format = textureDesc.Format;
-        srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-        srvDesc.Texture2D.MipLevels = 1;
-
-        D3D12_CPU_DESCRIPTOR_HANDLE secondConstantBufferHandle{ SIZE_T(INT64(constantBufferDescriptorHeap->GetCPUDescriptorHandleForHeapStart().ptr) + INT64(device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV))) };
-        device->CreateShaderResourceView(texture, &srvDesc, secondConstantBufferHandle);
+        UploadTexturesToGPU(device, constantBufferDescriptorHeap, queue, pso);
 
         while (isRunning)
         {
@@ -1034,7 +1088,6 @@ int CALLBACK WinMain(
         allocator->Release();
         queue->Release();
         device->Release();
-        stbi_image_free(Texture);
     }
 
     return 0;

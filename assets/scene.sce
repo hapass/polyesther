@@ -1,1 +1,1 @@
-0.0 0.0 0.0 quad_0.obj
+0.0 0.0 0.0 LowPolyCars.obj
