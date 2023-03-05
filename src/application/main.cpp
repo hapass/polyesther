@@ -234,16 +234,101 @@ void SetModelViewProjection(ID3D12Resource* constantBuffer, const DirectX::XMMAT
 
 ID3D12DescriptorHeap* CreateConstantBufferDescriptorHeap(ID3D12Device* device, UINT descriptorsCount)
 {
-    D3D12_DESCRIPTOR_HEAP_DESC constantBufferDescriptorHeapDescription;
-    constantBufferDescriptorHeapDescription.Type = D3D12_DESCRIPTOR_HEAP_TYPE::D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
-    constantBufferDescriptorHeapDescription.NumDescriptors = descriptorsCount;
-    constantBufferDescriptorHeapDescription.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
-    constantBufferDescriptorHeapDescription.NodeMask = 0;
+    D3D12_DESCRIPTOR_HEAP_DESC heapDescription;
+    heapDescription.Type = D3D12_DESCRIPTOR_HEAP_TYPE::D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+    heapDescription.NumDescriptors = descriptorsCount;
+    heapDescription.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+    heapDescription.NodeMask = 0;
 
-    ID3D12DescriptorHeap* constantBufferDescriptorHeap = nullptr;
-    D3D_NOT_FAILED(device->CreateDescriptorHeap(&constantBufferDescriptorHeapDescription, IID_PPV_ARGS(&constantBufferDescriptorHeap)));
+    ID3D12DescriptorHeap* heap = nullptr;
+    D3D_NOT_FAILED(device->CreateDescriptorHeap(&heapDescription, IID_PPV_ARGS(&heap)));
 
-    return constantBufferDescriptorHeap;
+    return heap;
+}
+
+void WaitForCommandListCompletion(ID3D12Device* device, ID3D12CommandQueue* queue)
+{
+    static UINT64 currentFenceValue = 0;
+    static ID3D12Fence* fence = nullptr;
+    static HANDLE fenceEventHandle = 0;
+
+    if (fence == nullptr)
+    {
+        D3D_NOT_FAILED(device->CreateFence(currentFenceValue, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fence)));
+        NOT_FAILED(fenceEventHandle = CreateEventExW(nullptr, nullptr, CREATE_EVENT_MANUAL_RESET, EVENT_ALL_ACCESS), 0);
+    }
+
+    currentFenceValue++;
+    queue->Signal(fence, currentFenceValue);
+
+    if (fence->GetCompletedValue() != currentFenceValue)
+    {
+        D3D_NOT_FAILED(fence->SetEventOnCompletion(currentFenceValue, fenceEventHandle));
+        WaitForSingleObject(fenceEventHandle, INFINITE);
+        ResetEvent(fenceEventHandle);
+    }
+}
+
+template <typename T>
+ID3D12Resource* UploadDataToGPU(ID3D12Device* device, ID3D12CommandQueue* queue, ID3D12PipelineState* pso, std::vector<T>& data)
+{
+    D3D12_RESOURCE_DESC dataBufferDescription;
+    dataBufferDescription.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+    dataBufferDescription.Alignment = 0;
+    dataBufferDescription.Height = 1;
+    dataBufferDescription.DepthOrArraySize = 1;
+    dataBufferDescription.MipLevels = 1;
+    dataBufferDescription.Format = DXGI_FORMAT_UNKNOWN;
+
+    dataBufferDescription.SampleDesc.Count = 1;
+    dataBufferDescription.SampleDesc.Quality = 0;
+
+    dataBufferDescription.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+    dataBufferDescription.Flags = D3D12_RESOURCE_FLAG_NONE;
+    dataBufferDescription.Width = data.size() * sizeof(T);
+
+    D3D12_HEAP_PROPERTIES uploadHeapProperties = device->GetCustomHeapProperties(0, D3D12_HEAP_TYPE_UPLOAD);
+
+    ID3D12Resource* dataUploadBuffer = nullptr; // TODO: should be cleared later
+    D3D_NOT_FAILED(device->CreateCommittedResource(&uploadHeapProperties, D3D12_HEAP_FLAG_NONE, &dataBufferDescription, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&dataUploadBuffer)));
+
+    BYTE* mappedData = nullptr;
+    dataUploadBuffer->Map(0, nullptr, (void**)&mappedData);
+    memcpy(mappedData, data.data(), data.size() * sizeof(T));
+    dataUploadBuffer->Unmap(0, nullptr);
+
+    ID3D12CommandAllocator* allocator = nullptr;
+    D3D_NOT_FAILED(device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&allocator)));
+
+    ID3D12GraphicsCommandList* commandList = nullptr;
+    D3D_NOT_FAILED(device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, allocator, nullptr, IID_PPV_ARGS(&commandList)));
+
+    D3D12_HEAP_PROPERTIES defaultHeapProperties = device->GetCustomHeapProperties(0, D3D12_HEAP_TYPE_DEFAULT);
+
+    ID3D12Resource* dataBuffer = nullptr;
+    D3D_NOT_FAILED(device->CreateCommittedResource(&defaultHeapProperties, D3D12_HEAP_FLAG_NONE, &dataBufferDescription, D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&dataBuffer)));
+    commandList->CopyBufferRegion(dataBuffer, 0, dataUploadBuffer, 0, data.size() * sizeof(T));
+
+    D3D12_RESOURCE_BARRIER genericReadBufferTransition;
+    genericReadBufferTransition.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+    genericReadBufferTransition.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+    genericReadBufferTransition.Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
+    genericReadBufferTransition.Transition.StateAfter = D3D12_RESOURCE_STATE_GENERIC_READ;
+    genericReadBufferTransition.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+    genericReadBufferTransition.Transition.pResource = dataBuffer;
+    commandList->ResourceBarrier(1, &genericReadBufferTransition);
+
+    commandList->Close();
+
+    ID3D12CommandList* cmdsLists[1] = { commandList };
+    queue->ExecuteCommandLists(1, cmdsLists);
+
+    WaitForCommandListCompletion(device, queue);
+
+    D3D_NOT_FAILED(allocator->Reset());
+    D3D_NOT_FAILED(commandList->Reset(allocator, pso));
+
+    return dataBuffer;
 }
 
 void UploadTexturesToGPU(
@@ -341,22 +426,7 @@ void UploadTexturesToGPU(
     ID3D12CommandList* cmdsLists[1] = { commandList };
     queue->ExecuteCommandLists(1, cmdsLists);
 
-    UINT64 currentFenceValue = 0;
-
-    ID3D12Fence* fence = nullptr;
-    D3D_NOT_FAILED(device->CreateFence(currentFenceValue, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fence)));
-    HANDLE fenceEventHandle = CreateEventExW(nullptr, nullptr, CREATE_EVENT_MANUAL_RESET, EVENT_ALL_ACCESS);
-    assert(fenceEventHandle);
-
-    currentFenceValue++;
-    queue->Signal(fence, currentFenceValue);
-
-    if (fence->GetCompletedValue() != currentFenceValue)
-    {
-        D3D_NOT_FAILED(fence->SetEventOnCompletion(currentFenceValue, fenceEventHandle));
-        WaitForSingleObject(fenceEventHandle, INFINITE);
-        ResetEvent(fenceEventHandle);
-    }
+    WaitForCommandListCompletion(device, queue);
 
     D3D_NOT_FAILED(allocator->Reset());
     D3D_NOT_FAILED(commandList->Reset(allocator, pso));
@@ -552,13 +622,6 @@ int CALLBACK WinMain(
 
         commandList->ResourceBarrier(1, &depthBufferWriteTransition);
 
-        UINT64 currentFenceValue = 0;
-
-        ID3D12Fence* fence = nullptr;
-        D3D_NOT_FAILED(device->CreateFence(currentFenceValue, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fence)));
-        HANDLE fenceEventHandle = CreateEventExW(nullptr, nullptr, CREATE_EVENT_MANUAL_RESET, EVENT_ALL_ACCESS);
-        assert(fenceEventHandle);
-
         bool isZeroBufferInTheBack = true;
 
         // rendering
@@ -687,191 +750,92 @@ int CALLBACK WinMain(
         inputElementDescription[3].InputSlotClass = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA;
         inputElementDescription[3].InstanceDataStepRate = 0;
 
-        D3D12_GRAPHICS_PIPELINE_STATE_DESC pipelineStateObjectDescription = {};
-        pipelineStateObjectDescription.InputLayout = { inputElementDescription, vertexFieldsCount };
-        pipelineStateObjectDescription.pRootSignature = rootSignature;
-        pipelineStateObjectDescription.VS = { (BYTE*)vertexShaderBlob->GetBufferPointer(), vertexShaderBlob->GetBufferSize() };
-        pipelineStateObjectDescription.PS = { (BYTE*)pixelShaderBlob->GetBufferPointer(), pixelShaderBlob->GetBufferSize() };
+        D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDescription = {};
+        psoDescription.InputLayout = { inputElementDescription, vertexFieldsCount };
+        psoDescription.pRootSignature = rootSignature;
+        psoDescription.VS = { (BYTE*)vertexShaderBlob->GetBufferPointer(), vertexShaderBlob->GetBufferSize() };
+        psoDescription.PS = { (BYTE*)pixelShaderBlob->GetBufferPointer(), pixelShaderBlob->GetBufferSize() };
 
-        pipelineStateObjectDescription.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
-        pipelineStateObjectDescription.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
-        pipelineStateObjectDescription.RasterizerState.FrontCounterClockwise = true;
-        pipelineStateObjectDescription.RasterizerState.DepthBias = D3D12_DEFAULT_DEPTH_BIAS;
-        pipelineStateObjectDescription.RasterizerState.DepthBiasClamp = D3D12_DEFAULT_DEPTH_BIAS_CLAMP;
-        pipelineStateObjectDescription.RasterizerState.SlopeScaledDepthBias = D3D12_DEFAULT_SLOPE_SCALED_DEPTH_BIAS;
-        pipelineStateObjectDescription.RasterizerState.DepthClipEnable = true;
-        pipelineStateObjectDescription.RasterizerState.MultisampleEnable = false;
-        pipelineStateObjectDescription.RasterizerState.AntialiasedLineEnable = false;
-        pipelineStateObjectDescription.RasterizerState.ForcedSampleCount = 0;
-        pipelineStateObjectDescription.RasterizerState.ConservativeRaster = D3D12_CONSERVATIVE_RASTERIZATION_MODE_OFF;
+        psoDescription.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
+        psoDescription.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
+        psoDescription.RasterizerState.FrontCounterClockwise = true;
+        psoDescription.RasterizerState.DepthBias = D3D12_DEFAULT_DEPTH_BIAS;
+        psoDescription.RasterizerState.DepthBiasClamp = D3D12_DEFAULT_DEPTH_BIAS_CLAMP;
+        psoDescription.RasterizerState.SlopeScaledDepthBias = D3D12_DEFAULT_SLOPE_SCALED_DEPTH_BIAS;
+        psoDescription.RasterizerState.DepthClipEnable = true;
+        psoDescription.RasterizerState.MultisampleEnable = false;
+        psoDescription.RasterizerState.AntialiasedLineEnable = false;
+        psoDescription.RasterizerState.ForcedSampleCount = 0;
+        psoDescription.RasterizerState.ConservativeRaster = D3D12_CONSERVATIVE_RASTERIZATION_MODE_OFF;
 
-        pipelineStateObjectDescription.BlendState.AlphaToCoverageEnable = false;
-        pipelineStateObjectDescription.BlendState.IndependentBlendEnable = false;
+        psoDescription.BlendState.AlphaToCoverageEnable = false;
+        psoDescription.BlendState.IndependentBlendEnable = false;
         for (UINT i = 0; i < D3D12_SIMULTANEOUS_RENDER_TARGET_COUNT; ++i)
         {
-            pipelineStateObjectDescription.BlendState.RenderTarget[i].BlendEnable = false;
-            pipelineStateObjectDescription.BlendState.RenderTarget[i].LogicOpEnable = false;
-            pipelineStateObjectDescription.BlendState.RenderTarget[i].SrcBlend = D3D12_BLEND_ONE;
-            pipelineStateObjectDescription.BlendState.RenderTarget[i].DestBlend = D3D12_BLEND_ZERO;
-            pipelineStateObjectDescription.BlendState.RenderTarget[i].BlendOp = D3D12_BLEND_OP_ADD;
-            pipelineStateObjectDescription.BlendState.RenderTarget[i].SrcBlendAlpha = D3D12_BLEND_ONE;
-            pipelineStateObjectDescription.BlendState.RenderTarget[i].DestBlendAlpha = D3D12_BLEND_ZERO;
-            pipelineStateObjectDescription.BlendState.RenderTarget[i].BlendOpAlpha = D3D12_BLEND_OP_ADD;
-            pipelineStateObjectDescription.BlendState.RenderTarget[i].LogicOp = D3D12_LOGIC_OP_NOOP;
-            pipelineStateObjectDescription.BlendState.RenderTarget[i].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
+            psoDescription.BlendState.RenderTarget[i].BlendEnable = false;
+            psoDescription.BlendState.RenderTarget[i].LogicOpEnable = false;
+            psoDescription.BlendState.RenderTarget[i].SrcBlend = D3D12_BLEND_ONE;
+            psoDescription.BlendState.RenderTarget[i].DestBlend = D3D12_BLEND_ZERO;
+            psoDescription.BlendState.RenderTarget[i].BlendOp = D3D12_BLEND_OP_ADD;
+            psoDescription.BlendState.RenderTarget[i].SrcBlendAlpha = D3D12_BLEND_ONE;
+            psoDescription.BlendState.RenderTarget[i].DestBlendAlpha = D3D12_BLEND_ZERO;
+            psoDescription.BlendState.RenderTarget[i].BlendOpAlpha = D3D12_BLEND_OP_ADD;
+            psoDescription.BlendState.RenderTarget[i].LogicOp = D3D12_LOGIC_OP_NOOP;
+            psoDescription.BlendState.RenderTarget[i].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
         }
 
-        pipelineStateObjectDescription.DepthStencilState.DepthEnable = true;
-        pipelineStateObjectDescription.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL;
-        pipelineStateObjectDescription.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_LESS;
-        pipelineStateObjectDescription.DepthStencilState.StencilEnable = false;
-        pipelineStateObjectDescription.DepthStencilState.StencilReadMask = D3D12_DEFAULT_STENCIL_READ_MASK;
-        pipelineStateObjectDescription.DepthStencilState.StencilWriteMask = D3D12_DEFAULT_STENCIL_WRITE_MASK;
+        psoDescription.DepthStencilState.DepthEnable = true;
+        psoDescription.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL;
+        psoDescription.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_LESS;
+        psoDescription.DepthStencilState.StencilEnable = false;
+        psoDescription.DepthStencilState.StencilReadMask = D3D12_DEFAULT_STENCIL_READ_MASK;
+        psoDescription.DepthStencilState.StencilWriteMask = D3D12_DEFAULT_STENCIL_WRITE_MASK;
 
-        pipelineStateObjectDescription.DepthStencilState.FrontFace.StencilFailOp = D3D12_STENCIL_OP_KEEP;
-        pipelineStateObjectDescription.DepthStencilState.FrontFace.StencilDepthFailOp = D3D12_STENCIL_OP_KEEP;
-        pipelineStateObjectDescription.DepthStencilState.FrontFace.StencilPassOp = D3D12_STENCIL_OP_KEEP;
-        pipelineStateObjectDescription.DepthStencilState.FrontFace.StencilFunc = D3D12_COMPARISON_FUNC_ALWAYS;
+        psoDescription.DepthStencilState.FrontFace.StencilFailOp = D3D12_STENCIL_OP_KEEP;
+        psoDescription.DepthStencilState.FrontFace.StencilDepthFailOp = D3D12_STENCIL_OP_KEEP;
+        psoDescription.DepthStencilState.FrontFace.StencilPassOp = D3D12_STENCIL_OP_KEEP;
+        psoDescription.DepthStencilState.FrontFace.StencilFunc = D3D12_COMPARISON_FUNC_ALWAYS;
 
-        pipelineStateObjectDescription.DepthStencilState.BackFace.StencilFailOp = D3D12_STENCIL_OP_KEEP;
-        pipelineStateObjectDescription.DepthStencilState.BackFace.StencilDepthFailOp = D3D12_STENCIL_OP_KEEP;
-        pipelineStateObjectDescription.DepthStencilState.BackFace.StencilPassOp = D3D12_STENCIL_OP_KEEP;
-        pipelineStateObjectDescription.DepthStencilState.BackFace.StencilFunc = D3D12_COMPARISON_FUNC_ALWAYS;
+        psoDescription.DepthStencilState.BackFace.StencilFailOp = D3D12_STENCIL_OP_KEEP;
+        psoDescription.DepthStencilState.BackFace.StencilDepthFailOp = D3D12_STENCIL_OP_KEEP;
+        psoDescription.DepthStencilState.BackFace.StencilPassOp = D3D12_STENCIL_OP_KEEP;
+        psoDescription.DepthStencilState.BackFace.StencilFunc = D3D12_COMPARISON_FUNC_ALWAYS;
 
-        pipelineStateObjectDescription.SampleMask = UINT_MAX;
-        pipelineStateObjectDescription.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
-        pipelineStateObjectDescription.NumRenderTargets = 1;
-        pipelineStateObjectDescription.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
-        pipelineStateObjectDescription.SampleDesc.Count = 1;
-        pipelineStateObjectDescription.SampleDesc.Quality = 0;
-        pipelineStateObjectDescription.DSVFormat = DXGI_FORMAT_D24_UNORM_S8_UINT;
+        psoDescription.SampleMask = UINT_MAX;
+        psoDescription.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+        psoDescription.NumRenderTargets = 1;
+        psoDescription.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
+        psoDescription.SampleDesc.Count = 1;
+        psoDescription.SampleDesc.Quality = 0;
+        psoDescription.DSVFormat = DXGI_FORMAT_D24_UNORM_S8_UINT;
 
         ID3D12PipelineState* pso = nullptr;
-        D3D_NOT_FAILED(device->CreateGraphicsPipelineState(&pipelineStateObjectDescription, IID_PPV_ARGS(&pso)));
+        D3D_NOT_FAILED(device->CreateGraphicsPipelineState(&psoDescription, IID_PPV_ARGS(&pso)));
 
         // upload static geometry
 
-        D3D12_RESOURCE_DESC dataBufferDescription;
-        dataBufferDescription.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
-        dataBufferDescription.Alignment = 0;
-        dataBufferDescription.Height = 1;
-        dataBufferDescription.DepthOrArraySize = 1;
-        dataBufferDescription.MipLevels = 1;
-        dataBufferDescription.Format = DXGI_FORMAT_UNKNOWN;
-
-        dataBufferDescription.SampleDesc.Count = 1;
-        dataBufferDescription.SampleDesc.Quality = 0;
-
-        dataBufferDescription.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
-        dataBufferDescription.Flags = D3D12_RESOURCE_FLAG_NONE;
-
-        D3D12_RESOURCE_BARRIER genericReadBufferTransition;
-        genericReadBufferTransition.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-        genericReadBufferTransition.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
-        genericReadBufferTransition.Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
-        genericReadBufferTransition.Transition.StateAfter = D3D12_RESOURCE_STATE_GENERIC_READ;
-        genericReadBufferTransition.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-
-        ID3D12Resource* vertexBuffer = nullptr;
+        std::vector<XVertex> vertexData;
+        for (const Renderer::Vertex& vert : model.vertices)
         {
-            std::vector<XVertex> data;
-
-            for (const Renderer::Vertex& vert : model.vertices)
-            {
-                data.push_back(
-                    XVertex({
-                        DirectX::XMFLOAT3(vert.position.x, vert.position.y, vert.position.z),
-                        DirectX::XMFLOAT2(vert.textureCoord.x, vert.textureCoord.y),
-                        DirectX::XMFLOAT3(vert.normal.x, vert.normal.y, vert.normal.z),
-                        UINT(vert.materialId)
+            vertexData.push_back(
+                XVertex({
+                    DirectX::XMFLOAT3(vert.position.x, vert.position.y, vert.position.z),
+                    DirectX::XMFLOAT2(vert.textureCoord.x, vert.textureCoord.y),
+                    DirectX::XMFLOAT3(vert.normal.x, vert.normal.y, vert.normal.z),
+                    UINT(vert.materialId)
                     })
-                );
-            }
-
-            dataBufferDescription.Width = data.size() * sizeof(XVertex);
-
-            ID3D12Resource* dataUploadBuffer = nullptr; // TODO: should be cleared later
-            D3D_NOT_FAILED(device->CreateCommittedResource(&uploadHeapProperties, D3D12_HEAP_FLAG_NONE, &dataBufferDescription, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&dataUploadBuffer)));
-        
-            BYTE* mappedData = nullptr;
-            dataUploadBuffer->Map(0, nullptr, (void**)&mappedData);
-            memcpy(mappedData, data.data(), data.size() * sizeof(XVertex));
-            dataUploadBuffer->Unmap(0, nullptr);
-
-            ID3D12Resource* dataBuffer = nullptr;
-            D3D_NOT_FAILED(device->CreateCommittedResource(&defaultHeapProperties, D3D12_HEAP_FLAG_NONE, &dataBufferDescription, D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&dataBuffer)));
-            commandList->CopyBufferRegion(dataBuffer, 0, dataUploadBuffer, 0, data.size() * sizeof(XVertex));
-
-            genericReadBufferTransition.Transition.pResource = dataBuffer;
-            commandList->ResourceBarrier(1, &genericReadBufferTransition);
-
-            commandList->Close();
-
-            ID3D12CommandList* cmdsLists[1] = { commandList };
-            queue->ExecuteCommandLists(1, cmdsLists);
-
-            currentFenceValue++;
-            queue->Signal(fence, currentFenceValue);
-
-            if (fence->GetCompletedValue() != currentFenceValue)
-            {
-                D3D_NOT_FAILED(fence->SetEventOnCompletion(currentFenceValue, fenceEventHandle));
-                WaitForSingleObject(fenceEventHandle, INFINITE);
-                ResetEvent(fenceEventHandle);
-            }
-
-            D3D_NOT_FAILED(allocator->Reset());
-            D3D_NOT_FAILED(commandList->Reset(allocator, pso));
-
-            vertexBuffer = dataBuffer;
+            );
         }
 
-        ID3D12Resource* indexBuffer = nullptr;
+        ID3D12Resource* vertexBuffer = UploadDataToGPU(device, queue, pso, vertexData);
+
+        std::vector<std::uint16_t> indexData;
+        for (uint32_t i : model.indices)
         {
-            std::vector<std::uint16_t> data;
-
-            for (uint32_t i : model.indices)
-            {
-                data.push_back(static_cast<uint16_t>(i));
-            }
-
-            dataBufferDescription.Width = data.size() * sizeof(std::uint16_t);
-
-            ID3D12Resource* dataUploadBuffer = nullptr; // TODO: should be cleared later
-            D3D_NOT_FAILED(device->CreateCommittedResource(&uploadHeapProperties, D3D12_HEAP_FLAG_NONE, &dataBufferDescription, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&dataUploadBuffer)));
-
-            BYTE* mappedData = nullptr;
-            dataUploadBuffer->Map(0, nullptr, (void**)&mappedData);
-            memcpy(mappedData, data.data(), data.size() * sizeof(std::uint16_t));
-            dataUploadBuffer->Unmap(0, nullptr);
-
-            ID3D12Resource* dataBuffer = nullptr;
-            D3D_NOT_FAILED(device->CreateCommittedResource(&defaultHeapProperties, D3D12_HEAP_FLAG_NONE, &dataBufferDescription, D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&dataBuffer)));
-            commandList->CopyBufferRegion(dataBuffer, 0, dataUploadBuffer, 0, data.size() * sizeof(std::uint16_t));
-
-            genericReadBufferTransition.Transition.pResource = dataBuffer;
-            commandList->ResourceBarrier(1, &genericReadBufferTransition);
-
-            commandList->Close();
-
-            ID3D12CommandList* cmdsLists[1] = { commandList };
-            queue->ExecuteCommandLists(1, cmdsLists);
-
-            currentFenceValue++;
-            queue->Signal(fence, currentFenceValue);
-
-            if (fence->GetCompletedValue() != currentFenceValue)
-            {
-                D3D_NOT_FAILED(fence->SetEventOnCompletion(currentFenceValue, fenceEventHandle));
-                WaitForSingleObject(fenceEventHandle, INFINITE);
-                ResetEvent(fenceEventHandle);
-            }
-
-            D3D_NOT_FAILED(allocator->Reset());
-            D3D_NOT_FAILED(commandList->Reset(allocator, pso));
-
-            indexBuffer = dataBuffer;
+            indexData.push_back(static_cast<uint16_t>(i));
         }
+
+        ID3D12Resource* indexBuffer = UploadDataToGPU(device, queue, pso, indexData);
 
         for (size_t i = 0; i < model.materials.size(); i++)
         {
@@ -1065,15 +1029,7 @@ int CALLBACK WinMain(
             D3D_NOT_FAILED(swapChain->Present(0, 0));
             isZeroBufferInTheBack = !isZeroBufferInTheBack;
 
-            currentFenceValue++;
-            queue->Signal(fence, currentFenceValue);
-
-            if (fence->GetCompletedValue() != currentFenceValue)
-            {
-                D3D_NOT_FAILED(fence->SetEventOnCompletion(currentFenceValue, fenceEventHandle));
-                WaitForSingleObject(fenceEventHandle, INFINITE);
-                ResetEvent(fenceEventHandle);
-            }
+            WaitForCommandListCompletion(device, queue);
 
             // clean stuff
             D3D_NOT_FAILED(allocator->Reset());
@@ -1089,7 +1045,6 @@ int CALLBACK WinMain(
         }
 
         // release hepas and render targets
-        CloseHandle(fenceEventHandle);
         swapChain->Release();
         commandList->Release();
         allocator->Release();
