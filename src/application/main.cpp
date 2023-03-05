@@ -16,7 +16,6 @@
 #include <array>
 #include <cmath>
 #include <wincodec.h>
-#include <set>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "../common/stb_image.h"
@@ -205,6 +204,7 @@ struct XVertex
     DirectX::XMFLOAT3 Pos;
     DirectX::XMFLOAT2 TextureCoord;
     DirectX::XMFLOAT3 Normal;
+    UINT TextureIndex;
 };
 
 uint64_t AlignBytes(uint64_t size, uint64_t alignment = 256)
@@ -247,24 +247,26 @@ ID3D12DescriptorHeap* CreateConstantBufferDescriptorHeap(ID3D12Device* device, U
 }
 
 void UploadTexturesToGPU(
-    ID3D12Device* device, 
+    ID3D12Device* device,
     ID3D12DescriptorHeap* constantBufferDescriptorHeap,
     ID3D12CommandQueue* queue,
-    ID3D12PipelineState* pso
+    ID3D12PipelineState* pso,
+    const std::string& textureName,
+    int32_t index
     )
 {
-    int32_t TextureWidth;
-    int32_t TextureHeight;
-    uint8_t* Texture;
+    int32_t textureWidth;
+    int32_t textureHeight;
+    uint8_t* texture = nullptr;
 
     int32_t channels;
-    NOT_FAILED(Texture = stbi_load("../../assets/tests/quad_0.jpg", &TextureWidth, &TextureHeight, &channels, 4), 0);
+    NOT_FAILED(texture = stbi_load(("../../assets/" + textureName).c_str(), &textureWidth, &textureHeight, &channels, 4), 0);
 
     D3D12_RESOURCE_DESC textureDesc = {};
     textureDesc.MipLevels = 1;
     textureDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-    textureDesc.Width = TextureWidth;
-    textureDesc.Height = TextureHeight;
+    textureDesc.Width = textureWidth;
+    textureDesc.Height = textureHeight;
     textureDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
     textureDesc.DepthOrArraySize = 1;
     textureDesc.SampleDesc.Count = 1;
@@ -303,7 +305,7 @@ void UploadTexturesToGPU(
 
     for (size_t i = 0; i < numRows; i++)
     {
-        memcpy(mappedData + footprint.Footprint.RowPitch * i, Texture + rowSizeInBytes * i, rowSizeInBytes);
+        memcpy(mappedData + footprint.Footprint.RowPitch * i, texture + rowSizeInBytes * i, rowSizeInBytes);
     }
     dataUploadBuffer->Unmap(0, nullptr);
 
@@ -366,10 +368,10 @@ void UploadTexturesToGPU(
     srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
     srvDesc.Texture2D.MipLevels = 1;
 
-    D3D12_CPU_DESCRIPTOR_HANDLE secondConstantBufferHandle{ SIZE_T(INT64(constantBufferDescriptorHeap->GetCPUDescriptorHandleForHeapStart().ptr) + INT64(device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV))) };
+    D3D12_CPU_DESCRIPTOR_HANDLE secondConstantBufferHandle{ SIZE_T(INT64(constantBufferDescriptorHeap->GetCPUDescriptorHandleForHeapStart().ptr) + INT64(device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV) * (index + 1)))};
     device->CreateShaderResourceView(dataBuffer, &srvDesc, secondConstantBufferHandle);
 
-    stbi_image_free(Texture);
+    stbi_image_free(texture);
 }
 
 int CALLBACK WinMain(
@@ -415,6 +417,7 @@ int CALLBACK WinMain(
 
         Renderer::Scene scene;
         Renderer::Load("scene.sce", scene);
+        const Renderer::Model& model = scene.models[0];
 
         Renderer::Camera camera;
         camera.position.z = 2;
@@ -442,7 +445,7 @@ int CALLBACK WinMain(
         factory->EnumAdapters(0, &adapter);
 
         ID3D12Device* device = nullptr;
-        D3D_NOT_FAILED(D3D12CreateDevice(adapter, D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&device)));
+        D3D_NOT_FAILED(D3D12CreateDevice(adapter, D3D_FEATURE_LEVEL_12_1, IID_PPV_ARGS(&device)));
 
         ID3D12CommandQueue* queue = nullptr;
         D3D12_COMMAND_QUEUE_DESC queueDesc = {};
@@ -581,16 +584,7 @@ int CALLBACK WinMain(
         ID3D12Resource* uploadBuffer = nullptr;
         D3D_NOT_FAILED(device->CreateCommittedResource(&uploadHeapProperties, D3D12_HEAP_FLAG_NONE, &uploadBufferDescription, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&uploadBuffer)));
 
-        std::set<std::string> textureFiles;
-        for (const Renderer::Model& model : scene.models)
-        {
-            for (const Renderer::Material& material : model.materials)
-            {
-                textureFiles.insert(material.textureName);
-            }
-        }
-
-        ID3D12DescriptorHeap* constantBufferDescriptorHeap = CreateConstantBufferDescriptorHeap(device, 2);
+        ID3D12DescriptorHeap* constantBufferDescriptorHeap = CreateConstantBufferDescriptorHeap(device, 1 + UINT(model.materials.size()));
 
         D3D12_CONSTANT_BUFFER_VIEW_DESC constantBufferViewDescription;
         constantBufferViewDescription.BufferLocation = uploadBuffer->GetGPUVirtualAddress();
@@ -608,7 +602,7 @@ int CALLBACK WinMain(
 
         D3D12_DESCRIPTOR_RANGE textureDescriptorRange;
         textureDescriptorRange.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
-        textureDescriptorRange.NumDescriptors = 1;
+        textureDescriptorRange.NumDescriptors = UINT(model.materials.size());
         textureDescriptorRange.BaseShaderRegister = 0;
         textureDescriptorRange.RegisterSpace = 0;
         textureDescriptorRange.OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
@@ -650,13 +644,15 @@ int CALLBACK WinMain(
         D3D_NOT_FAILED(device->CreateRootSignature(0, rootSignatureData->GetBufferPointer(), rootSignatureData->GetBufferSize(), IID_PPV_ARGS(&rootSignature)));
 
         // pso
+        UINT flags = D3DCOMPILE_ENABLE_UNBOUNDED_DESCRIPTOR_TABLES;
+
         ID3DBlob* vertexShaderBlob = nullptr;
-        D3D_NOT_FAILED(D3DCompileFromFile(L"color.hlsl", nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE, "VS", "vs_5_0", 0, 0, &vertexShaderBlob, nullptr));
+        D3D_NOT_FAILED(D3DCompileFromFile(L"color.hlsl", nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE, "VS", "vs_5_1", flags, 0, &vertexShaderBlob, nullptr));
 
         ID3DBlob* pixelShaderBlob = nullptr;
-        D3D_NOT_FAILED(D3DCompileFromFile(L"color.hlsl", nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE, "PS", "ps_5_0", 0, 0, &pixelShaderBlob, nullptr));
+        D3D_NOT_FAILED(D3DCompileFromFile(L"color.hlsl", nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE, "PS", "ps_5_1", flags, 0, &pixelShaderBlob, nullptr));
 
-        constexpr size_t vertexFieldsCount = 3;
+        constexpr size_t vertexFieldsCount = 4;
         D3D12_INPUT_ELEMENT_DESC inputElementDescription[vertexFieldsCount];
 
         inputElementDescription[0].SemanticName = "POSITION";
@@ -682,6 +678,14 @@ int CALLBACK WinMain(
         inputElementDescription[2].AlignedByteOffset = 20;
         inputElementDescription[2].InputSlotClass = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA;
         inputElementDescription[2].InstanceDataStepRate = 0;
+
+        inputElementDescription[3].SemanticName = "TEXINDEX";
+        inputElementDescription[3].SemanticIndex = 0;
+        inputElementDescription[3].Format = DXGI_FORMAT_R32_UINT;
+        inputElementDescription[3].InputSlot = 0;
+        inputElementDescription[3].AlignedByteOffset = 32;
+        inputElementDescription[3].InputSlotClass = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA;
+        inputElementDescription[3].InstanceDataStepRate = 0;
 
         D3D12_GRAPHICS_PIPELINE_STATE_DESC pipelineStateObjectDescription = {};
         pipelineStateObjectDescription.InputLayout = { inputElementDescription, vertexFieldsCount };
@@ -772,13 +776,14 @@ int CALLBACK WinMain(
         {
             std::vector<XVertex> data;
 
-            for (const Renderer::Vertex& vert : scene.models[0].vertices)
+            for (const Renderer::Vertex& vert : model.vertices)
             {
                 data.push_back(
                     XVertex({
                         DirectX::XMFLOAT3(vert.position.x, vert.position.y, vert.position.z),
                         DirectX::XMFLOAT2(vert.textureCoord.x, vert.textureCoord.y),
-                        DirectX::XMFLOAT3(vert.normal.x, vert.normal.y, vert.normal.z)
+                        DirectX::XMFLOAT3(vert.normal.x, vert.normal.y, vert.normal.z),
+                        UINT(vert.materialId)
                     })
                 );
             }
@@ -825,7 +830,7 @@ int CALLBACK WinMain(
         {
             std::vector<std::uint16_t> data;
 
-            for (uint32_t i : scene.models[0].indices)
+            for (uint32_t i : model.indices)
             {
                 data.push_back(static_cast<uint16_t>(i));
             }
@@ -868,7 +873,10 @@ int CALLBACK WinMain(
             indexBuffer = dataBuffer;
         }
 
-        UploadTexturesToGPU(device, constantBufferDescriptorHeap, queue, pso);
+        for (size_t i = 0; i < model.materials.size(); i++)
+        {
+            UploadTexturesToGPU(device, constantBufferDescriptorHeap, queue, pso, model.materials[i].textureName, static_cast<int32_t>(i));
+        }
 
         while (isRunning)
         {
@@ -1024,20 +1032,19 @@ int CALLBACK WinMain(
             D3D12_VERTEX_BUFFER_VIEW vertexBufferView;
             vertexBufferView.BufferLocation = vertexBuffer->GetGPUVirtualAddress();
             vertexBufferView.StrideInBytes = sizeof(XVertex);
-            vertexBufferView.SizeInBytes = sizeof(XVertex) * static_cast<UINT>(scene.models[0].vertices.size());
+            vertexBufferView.SizeInBytes = sizeof(XVertex) * static_cast<UINT>(model.vertices.size());
             commandList->IASetVertexBuffers(0, 1, &vertexBufferView);
 
             D3D12_INDEX_BUFFER_VIEW indexBufferView;
             indexBufferView.BufferLocation = indexBuffer->GetGPUVirtualAddress();
             indexBufferView.Format = DXGI_FORMAT_R16_UINT;
-            indexBufferView.SizeInBytes = sizeof(std::uint16_t) * static_cast<UINT>(scene.models[0].indices.size());
+            indexBufferView.SizeInBytes = sizeof(std::uint16_t) * static_cast<UINT>(model.indices.size());
             commandList->IASetIndexBuffer(&indexBufferView);
 
             commandList->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
             commandList->SetGraphicsRootDescriptorTable(0, constantBufferDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
 
-            const Renderer::Model& model = scene.models[0];
             commandList->DrawIndexedInstanced((UINT)model.indices.size(), 1, 0, 0, 0);
 
             D3D12_RESOURCE_BARRIER presentBufferTransition;

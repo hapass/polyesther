@@ -6,13 +6,14 @@ cbuffer cbPerObject : register(b0)
 };
 
 SamplerState g_sampler : register(s0);
-Texture2D g_texture : register(t0);
+Texture2D g_texture[] : register(t0);
 
 struct VertexIn
 {
     float3 PosL : POSITION;
     float2 TexCoord : TEXCOORD;
     float3 Normals : NORMALS;
+    uint TexIndex : TEXINDEX;
 };
 
 struct VertexOut
@@ -21,6 +22,7 @@ struct VertexOut
     float4 PosView: POSITION;
     float2 TexCoord : TEXCOORD;
     float3 Normals : NORMALS;
+    uint TexIndex : TEXINDEX;
 };
 
 VertexOut VS(VertexIn vin)
@@ -36,7 +38,8 @@ VertexOut VS(VertexIn vin)
 	
     // Just pass vertex texture coords into the pixel shader.
     vout.TexCoord = vin.TexCoord;
-    
+    vout.TexIndex = vin.TexIndex;
+
     return vout;
 }
 
@@ -57,11 +60,11 @@ float4 PS(VertexOut pin) : SV_Target
 
     // might be broken, since reflect should accept normal as a second param
     float specAmount = max(dot(normalize(pos_view), reflect(light_vec, normal_vec)), 0.0f);
-    float specular = light_color * pow(specAmount, specularShininess) * specularStrength;
+    float4 specular = light_color * pow(specAmount, specularShininess) * specularStrength;
 
     float2 texCoord = float2(pin.TexCoord.x, 1.0 - pin.TexCoord.y); 
 
-    float4 frag_color = g_texture.Sample(g_sampler, texCoord);
+    float4 frag_color = g_texture[pin.TexIndex].Sample(g_sampler, texCoord);
     float4 res = (diffuse + ambient + specular) * frag_color;
     return clamp(res, 0.0f, 1.0f);
 }
