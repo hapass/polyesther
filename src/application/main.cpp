@@ -19,6 +19,9 @@
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "../common/stb_image.h"
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include "../common/stb_image_write.h"
+
 #include "../common/profile.h"
 
 #include <renderer/math.h>
@@ -777,7 +780,7 @@ uint8_t* DownloadTextureFromGPU(int32_t textureWidth, int32_t textureHeight, ID3
     BYTE* mappedData = nullptr;
     readbackBuffer->Map(0, nullptr, (void**)&mappedData);
 
-    uint8_t* texture = new uint8_t(textureWidth * textureHeight * 4);
+    uint8_t* texture = new uint8_t[textureWidth * textureHeight * 4];
 
     for (size_t i = 0; i < numRows; i++)
     {
@@ -1130,7 +1133,7 @@ int CALLBACK WinMain(
             renderTargetBufferTransition.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
 
             renderTargetBufferTransition.Transition.pResource = currentBuffer;
-            renderTargetBufferTransition.Transition.StateBefore = D3D12_RESOURCE_STATE_PRESENT;
+            renderTargetBufferTransition.Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
             renderTargetBufferTransition.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
             renderTargetBufferTransition.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
 
@@ -1178,6 +1181,7 @@ int CALLBACK WinMain(
             D3D_NOT_FAILED(commandList->Reset(allocator, pso));
 
             uint8_t* actualTexture = DownloadTextureFromGPU(WindowWidth, WindowHeight, device, queue, pso, currentBuffer);
+            stbi_write_jpg("output.jpg", WindowWidth, WindowHeight, 4, actualTexture, 100);
 
             auto frameActualTime = frameStart - chrono::steady_clock::now();
             auto timeLeft = frameExpectedTime - frameActualTime;
