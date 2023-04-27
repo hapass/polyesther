@@ -5,9 +5,8 @@
 
 namespace Renderer
 {
-    class Renderer
+    struct Renderer
     {
-    public:
-        virtual Texture* Render(const Scene& scene) = 0;
+        virtual bool Render(const Scene& scene, Texture& texture) = 0;
     };
 }

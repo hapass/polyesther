@@ -27,13 +27,16 @@
     <ClInclude Include="renderer\color.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="renderer\swapchain.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="renderer\texture.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="renderer\scene.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="renderer\rendererdx12.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="renderer\renderersoftware.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
@@ -44,7 +47,16 @@
     <ClCompile Include="renderer\scene.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="color.cpp">
+    <ClCompile Include="renderer\color.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="renderer\rendererdx12.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="renderer\renderersoftware.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="renderer\texture.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

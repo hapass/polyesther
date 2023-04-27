@@ -1,34 +1,16 @@
 #define _USE_MATH_DEFINES
 
-#include <Windows.h>
-#include <dxgi.h>
+//#include <Windows.h>
 #include <d3d12.h>
 #include <DirectXMath.h>
-#include <DirectXColors.h>
 #include <d3dcompiler.h>
 
-#include <stdint.h>
-#include <cassert>
-#include <thread>
-#include <chrono>
-#include <algorithm>
-#include <vector>
-#include <array>
-#include <cmath>
-#include <wincodec.h>
 
-#define STB_IMAGE_IMPLEMENTATION
-#include "../common/stb_image.h"
-#define STB_IMAGE_WRITE_IMPLEMENTATION
-#include "../common/stb_image_write.h"
-
-#include "../common/profile.h"
 
 #include <renderer/math.h>
 #include <renderer/renderer.h>
 #include <renderer/color.h>
 #include <renderer/scene.h>
-#include <renderer/swapchain.h>
 #include <renderer/texture.h>
 
 static const uint32_t GameWidth = 800;
@@ -92,14 +74,14 @@ const Renderer::Matrix& perspective(float width, float height)
     static Renderer::Matrix m;
 
     //col 1
-    m.m[0] = 1 / (tan(halfFieldOfView) * aspect);
+    m.m[0] = 1.0f / (tanf(halfFieldOfView) * aspect);
     m.m[4] = 0.0f;
     m.m[8] = 0.0f;
     m.m[12] = 0.0f;
 
     //col 2
     m.m[1] = 0.0f;
-    m.m[5] = 1 / tan(halfFieldOfView);
+    m.m[5] = 1.0f / tanf(halfFieldOfView);
     m.m[9] = 0.0f;
     m.m[13] = 0.0f;
 
@@ -591,18 +573,14 @@ void UploadTexturesToGPU(
     int32_t index
     )
 {
-    int32_t textureWidth;
-    int32_t textureHeight;
-    uint8_t* texture = nullptr;
-
-    int32_t channels;
-    NOT_FAILED(texture = stbi_load(("../../assets/" + textureName).c_str(), &textureWidth, &textureHeight, &channels, 4), 0);
+    Renderer::Texture texture;
+    NOT_FAILED(Renderer::Load("../../assets/" + textureName, texture), false);
 
     D3D12_RESOURCE_DESC textureDesc = {};
     textureDesc.MipLevels = 1;
     textureDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-    textureDesc.Width = textureWidth;
-    textureDesc.Height = textureHeight;
+    textureDesc.Width = texture.GetWidth();
+    textureDesc.Height = static_cast<UINT>(texture.GetHeight());
     textureDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
     textureDesc.DepthOrArraySize = 1;
     textureDesc.SampleDesc.Count = 1;
@@ -641,7 +619,7 @@ void UploadTexturesToGPU(
 
     for (size_t i = 0; i < numRows; i++)
     {
-        memcpy(mappedData + footprint.Footprint.RowPitch * i, texture + rowSizeInBytes * i, rowSizeInBytes);
+        memcpy(mappedData + footprint.Footprint.RowPitch * i, texture.GetBuffer() + rowSizeInBytes * i, rowSizeInBytes);
     }
     dataUploadBuffer->Unmap(0, nullptr);
 
@@ -692,16 +670,16 @@ void UploadTexturesToGPU(
     D3D12_CPU_DESCRIPTOR_HANDLE secondConstantBufferHandle{ SIZE_T(INT64(rootDescriptorHeap->GetCPUDescriptorHandleForHeapStart().ptr) + INT64(device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV) * (index + 1)))};
     device->CreateShaderResourceView(dataBuffer, &srvDesc, secondConstantBufferHandle);
 
-    stbi_image_free(texture);
+    
 }
 
-uint8_t* DownloadTextureFromGPU(int32_t textureWidth, int32_t textureHeight, ID3D12Device* device, ID3D12CommandQueue* queue, ID3D12PipelineState* pso, ID3D12Resource* dataBuffer)
+bool DownloadTextureFromGPU(ID3D12Device* device, ID3D12CommandQueue* queue, ID3D12PipelineState* pso, ID3D12Resource* dataBuffer, Renderer::Texture& texture)
 {
     D3D12_RESOURCE_DESC textureDesc = {};
     textureDesc.MipLevels = 1;
     textureDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-    textureDesc.Width = textureWidth;
-    textureDesc.Height = textureHeight;
+    textureDesc.Width = texture.GetWidth();
+    textureDesc.Height = static_cast<UINT>(texture.GetHeight());
     textureDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
     textureDesc.DepthOrArraySize = 1;
     textureDesc.SampleDesc.Count = 1;
@@ -780,15 +758,13 @@ uint8_t* DownloadTextureFromGPU(int32_t textureWidth, int32_t textureHeight, ID3
     BYTE* mappedData = nullptr;
     readbackBuffer->Map(0, nullptr, (void**)&mappedData);
 
-    uint8_t* texture = new uint8_t[textureWidth * textureHeight * 4];
-
     for (size_t i = 0; i < numRows; i++)
     {
-        memcpy(texture + rowSizeInBytes * i, mappedData + footprint.Footprint.RowPitch * i, rowSizeInBytes);
+        memcpy(texture.GetBuffer() + rowSizeInBytes * i, mappedData + footprint.Footprint.RowPitch * i, rowSizeInBytes);
     }
     readbackBuffer->Unmap(0, nullptr);
 
-    return texture;
+    return true;
 }
 
 int CALLBACK WinMain(
@@ -830,8 +806,6 @@ int CALLBACK WinMain(
             0
         ), 0);
 
-        auto frameExpectedTime = chrono::milliseconds(1000 / FPS);
-
         Renderer::Scene scene;
         Renderer::Load("scene.sce", scene);
         const Renderer::Model& model = scene.models[0];
@@ -855,46 +829,14 @@ int CALLBACK WinMain(
         debugController->EnableDebugLayer();
         debugController->Release();
 
-        IDXGIFactory* factory = nullptr;
-        D3D_NOT_FAILED(CreateDXGIFactory(IID_PPV_ARGS(&factory)));
-
-        IDXGIAdapter* adapter = nullptr;
-        factory->EnumAdapters(0, &adapter);
-
         ID3D12Device* device = nullptr;
-        D3D_NOT_FAILED(D3D12CreateDevice(adapter, D3D_FEATURE_LEVEL_12_1, IID_PPV_ARGS(&device)));
+        D3D_NOT_FAILED(D3D12CreateDevice(NULL, D3D_FEATURE_LEVEL_12_1, IID_PPV_ARGS(&device)));
 
         ID3D12CommandQueue* queue = nullptr;
         D3D12_COMMAND_QUEUE_DESC queueDesc = {};
         queueDesc.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
         queueDesc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
         D3D_NOT_FAILED(device->CreateCommandQueue(&queueDesc, IID_PPV_ARGS(&queue)));
-
-        // unused swapchain for debug purposes (need to call present to capture snapshot in renderdoc)
-        DXGI_SWAP_CHAIN_DESC swapChainDescription;
-
-        swapChainDescription.BufferDesc.Width = GameWidth;
-        swapChainDescription.BufferDesc.Height = GameHeight;
-        swapChainDescription.BufferDesc.RefreshRate.Numerator = 60;
-        swapChainDescription.BufferDesc.RefreshRate.Denominator = 1;
-        swapChainDescription.BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-        swapChainDescription.BufferDesc.ScanlineOrdering = DXGI_MODE_SCANLINE_ORDER_UNSPECIFIED;
-        swapChainDescription.BufferDesc.Scaling = DXGI_MODE_SCALING_UNSPECIFIED;
-
-        swapChainDescription.SampleDesc.Count = 1;
-        swapChainDescription.SampleDesc.Quality = 0;
-
-        swapChainDescription.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
-        swapChainDescription.BufferCount = 2;
-
-        swapChainDescription.OutputWindow = window;
-        swapChainDescription.Windowed = true;
-
-        swapChainDescription.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
-        swapChainDescription.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
-
-        IDXGISwapChain* swapChain = nullptr;
-        D3D_NOT_FAILED(factory->CreateSwapChain(queue, &swapChainDescription, &swapChain));
 
         // rendering
         const UINT numberOfConstantStructs = UINT(1);
@@ -1003,7 +945,6 @@ int CALLBACK WinMain(
 
         //while (isRunning)
         //{
-            auto frameStart = chrono::steady_clock::now();
 
             MSG message;
             if (PeekMessageW(&message, 0, 0, 0, PM_REMOVE))
@@ -1172,24 +1113,15 @@ int CALLBACK WinMain(
             ID3D12CommandList* cmdsLists[1] = { commandList };
             queue->ExecuteCommandLists(1, cmdsLists);
 
-            swapChain->Present(0, 0);
-
             WaitForCommandListCompletion(device, queue);
 
             // clean stuff
             D3D_NOT_FAILED(allocator->Reset());
             D3D_NOT_FAILED(commandList->Reset(allocator, pso));
 
-            uint8_t* actualTexture = DownloadTextureFromGPU(WindowWidth, WindowHeight, device, queue, pso, currentBuffer);
-            stbi_write_jpg("output.jpg", WindowWidth, WindowHeight, 4, actualTexture, 100);
-
-            auto frameActualTime = frameStart - chrono::steady_clock::now();
-            auto timeLeft = frameExpectedTime - frameActualTime;
-
-            if (timeLeft > 0ms) 
-            {
-                this_thread::sleep_for(timeLeft);
-            }
+            Renderer::Texture result(WindowWidth, WindowHeight);
+            NOT_FAILED(DownloadTextureFromGPU(device, queue, pso, currentBuffer, result), false);
+            Renderer::Save("output.jpg", result);
         //}
 
         // release hepas and render targets

@@ -570,16 +570,20 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="renderer\renderer.h" />
+    <ClInclude Include="renderer\rendererdx12.h" />
+    <ClInclude Include="renderer\renderersoftware.h" />
     <ClInclude Include="renderer\scene.h" />
     <ClInclude Include="renderer\math.h" />
     <ClInclude Include="renderer\color.h" />
-    <ClInclude Include="renderer\swapchain.h" />
     <ClInclude Include="renderer\texture.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="color.cpp" />
+    <ClCompile Include="renderer\color.cpp" />
     <ClCompile Include="renderer\math.cpp" />
+    <ClCompile Include="renderer\rendererdx12.cpp" />
+    <ClCompile Include="renderer\renderersoftware.cpp" />
     <ClCompile Include="renderer\scene.cpp" />
+    <ClCompile Include="renderer\texture.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
