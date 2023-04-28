@@ -1121,10 +1121,10 @@ int CALLBACK WinMain(
 
             Renderer::Texture result(WindowWidth, WindowHeight);
             NOT_FAILED(DownloadTextureFromGPU(device, queue, pso, currentBuffer, result), false);
-            Renderer::Save("output.jpg", result);
+            Renderer::Save("output2.jpg", result);
         //}
 
-        // release hepas and render targets
+        // release heaps and render targets
         commandList->Release();
         allocator->Release();
         queue->Release();

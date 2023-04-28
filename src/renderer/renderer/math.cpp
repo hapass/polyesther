@@ -174,7 +174,7 @@ namespace Renderer
 
     const Matrix& transpose(const Matrix& m)
     {
-        static Matrix r;
+        static Matrix r; // todo: what if I multiply the results of two transposes?
 
         //col 1
         r.m[0] = m.m[0];

@@ -9,7 +9,6 @@
 
 namespace Renderer
 {
-
     Texture::Texture(size_t width, size_t height)
         : width(width)
         , height(height)
@@ -38,12 +37,12 @@ namespace Renderer
 
     size_t Texture::GetWidth() const
     {
-        return data.size();
+        return width;
     }
 
     size_t Texture::GetHeight() const
     {
-        return data.size();
+        return height;
     }
 
     size_t Texture::GetSize() const
