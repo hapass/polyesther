@@ -1,4 +1,8 @@
+#define _USE_MATH_DEFINES
+
 #include <renderer/scene.h>
+
+#include <renderer/utils.h>
 
 #include <fstream>
 #include <sstream>
@@ -20,7 +24,7 @@ namespace Renderer
             std::vector<Vec> textureCoords;
             std::vector<Vec> positions;
             std::vector<Vec> normals;
-            uint32_t currentMaterialId;
+            uint32_t currentMaterialId = 0;
         };
 
         bool Read(std::stringstream& lineStream, uint32_t elements, float def, Vec& vec)
@@ -141,6 +145,7 @@ namespace Renderer
                         }
                         else
                         {
+                            
                             return false;
                         }
                     }
@@ -238,7 +243,7 @@ namespace Renderer
                             {
                                 for (size_t i = 0; i < model.materials.size(); i++)
                                 {
-                                    loadContext.materials[model.materials[i].name] = i;
+                                    loadContext.materials[model.materials[i].name] = static_cast<uint32_t>(i);
                                 }
                             }
                             else
@@ -317,5 +322,65 @@ namespace Renderer
         }
 
         return file.is_open();
+    }
+
+    Matrix PerspectiveTransform(float width, float height)
+    {
+        static float Far = 400.0f;
+        static float Near = .1f;
+        static float FOV = 25;
+
+        float halfFieldOfView = FOV * (static_cast<float>(M_PI) / 180);
+        float aspect = width / height;
+
+        Matrix m;
+
+        //col 1
+        m.m[0] = 1.0f / (tanf(halfFieldOfView) * aspect);
+        m.m[4] = 0.0f;
+        m.m[8] = 0.0f;
+        m.m[12] = 0.0f;
+
+        //col 2
+        m.m[1] = 0.0f;
+        m.m[5] = 1.0f / tanf(halfFieldOfView);
+        m.m[9] = 0.0f;
+        m.m[13] = 0.0f;
+
+        //col 3
+        m.m[2] = 0.0f;
+        m.m[6] = 0.0f;
+        m.m[10] = Far / (Near - Far);
+        m.m[14] = -1.0f;
+
+        //col 4
+        m.m[3] = 0.0f;
+        m.m[7] = 0.0f;
+        m.m[11] = Near * Far / (Near - Far);
+        m.m[15] = 0.0f;
+
+        return m;
+    }
+
+    Matrix ViewTransform(const Camera& camera)
+    {
+        Matrix rTranslate = translate(-camera.position.x, -camera.position.y, -camera.position.z);
+        Matrix rYaw = transpose(rotateY(camera.yaw));
+        Matrix rPitch = transpose(rotateX(camera.pitch));
+
+        return rPitch * rYaw * rTranslate;
+    }
+
+    Matrix ModelTransform(const Model& model)
+    {
+        return translate(model.position.x, model.position.y, model.position.z);
+    }
+
+    Matrix CameraTransform(const Camera& camera)
+    {
+        Matrix rYaw = rotateY(camera.yaw);
+        Matrix rPitch = rotateX(camera.pitch);
+
+        return rYaw * rPitch;
     }
 }

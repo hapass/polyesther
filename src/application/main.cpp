@@ -1,126 +1,18 @@
 #define _USE_MATH_DEFINES
 
-//#include <Windows.h>
-#include <d3d12.h>
-#include <DirectXMath.h>
-#include <d3dcompiler.h>
-
-
+#include <Windows.h>
 
 #include <renderer/math.h>
-#include <renderer/renderer.h>
+#include <renderer/rendererdx12.h>
 #include <renderer/color.h>
 #include <renderer/scene.h>
 #include <renderer/texture.h>
-
-static const uint32_t GameWidth = 800;
-static const uint32_t GameHeight = 600;
-static const uint32_t FPS = 30;
+#include <renderer/utils.h>
 
 static int32_t WindowWidth = 800;
 static int32_t WindowHeight = 600;
 static BITMAPINFO BackBufferInfo;
 static uint32_t* BackBuffer;
-
-static float* ZBuffer;
-
-void DebugOut(const wchar_t* fmt, ...)
-{
-    va_list argp;
-    va_start(argp, fmt);
-    wchar_t dbg_out[4096];
-    vswprintf_s(dbg_out, fmt, argp);
-    va_end(argp);
-    OutputDebugString(dbg_out);
-}
-
-void PrintError(HRESULT result)
-{
-    DebugOut(L"D3D Result: 0x%08X \n", result);
-}
-
-#define CONCAT(a, b) CONCAT_INNER(a, b)
-#define CONCAT_INNER(a, b) a ## b
-
-#define NOT_FAILED(call, failureCode) \
-    if ((call) == failureCode) \
-    { \
-         assert(false); \
-         exit(1); \
-    } \
-
-#define D3D_NOT_FAILED(call) \
-    HRESULT CONCAT(result, __LINE__) = (call); \
-    if (CONCAT(result, __LINE__) != S_OK) \
-    { \
-        PrintError(CONCAT(result, __LINE__)); \
-        assert(false); \
-        exit(1); \
-    } \
-
-// In view space we are at 0 looking down the negative z axis.
-// Near plane of the camera frustum is at -Near, far plane of the camera frustum is at -Far.
-// As DirectX clip space z axis ranges from 0 to 1, we map -Near to 0 and -Far to 1.
-// The coordinate system is right handed.
-const Renderer::Matrix& perspective(float width, float height)
-{
-    static float Far = 400.0f;
-    static float Near = .1f;
-    static float FOV = 25;
-
-    float halfFieldOfView = FOV * (static_cast<float>(M_PI) / 180);
-    float aspect = width / height;
-
-    static Renderer::Matrix m;
-
-    //col 1
-    m.m[0] = 1.0f / (tanf(halfFieldOfView) * aspect);
-    m.m[4] = 0.0f;
-    m.m[8] = 0.0f;
-    m.m[12] = 0.0f;
-
-    //col 2
-    m.m[1] = 0.0f;
-    m.m[5] = 1.0f / tanf(halfFieldOfView);
-    m.m[9] = 0.0f;
-    m.m[13] = 0.0f;
-
-    //col 3
-    m.m[2] = 0.0f;
-    m.m[6] = 0.0f;
-    m.m[10] = Far / (Near - Far);
-    m.m[14] = -1.0f;
-
-    //col 4
-    m.m[3] = 0.0f;
-    m.m[7] = 0.0f;
-    m.m[11] = Near * Far / (Near - Far);
-    m.m[15] = 0.0f;
-
-    return m;
-}
-
-Renderer::Matrix view(const Renderer::Camera& camera)
-{
-    Renderer::Matrix rTranslate = Renderer::translate(-camera.position.x, -camera.position.y, -camera.position.z);
-    Renderer::Matrix rYaw = Renderer::transpose(Renderer::rotateY(camera.yaw));
-    Renderer::Matrix rPitch = Renderer::transpose(Renderer::rotateX(camera.pitch));
-
-    return rPitch * rYaw * rTranslate;
-}
-
-Renderer::Matrix modelMat(const Renderer::Model& model)
-{
-    return Renderer::translate(model.position.x, model.position.y, model.position.z);
-}
-
-Renderer::Matrix cam(const Renderer::Camera& camera)
-{
-    Renderer::Matrix rYaw = Renderer::rotateY(camera.yaw);
-    Renderer::Matrix rPitch = Renderer::rotateX(camera.pitch);
-
-    return rYaw * rPitch;
-}
 
 static bool KeyDown[256];
 
@@ -167,606 +59,6 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
     return DefWindowProc(hWnd, uMsg, wParam, lParam);
 }
 
-struct Constants
-{
-    DirectX::XMFLOAT4X4 worldViewProj = {
-        1.0f, 0.0f, 0.0f, 0.0f,
-        0.0f, 1.0f, 0.0f, 0.0f,
-        0.0f, 0.0f, 1.0f, 0.0f,
-        0.0f, 0.0f, 0.0f, 1.0f
-    };
-    DirectX::XMFLOAT4X4 worldView = {
-        1.0f, 0.0f, 0.0f, 0.0f,
-        0.0f, 1.0f, 0.0f, 0.0f,
-        0.0f, 0.0f, 1.0f, 0.0f,
-        0.0f, 0.0f, 0.0f, 1.0f
-    };
-    DirectX::XMFLOAT4 lightPos = { 0.0f, 0.0f, 0.0f, 0.0f };
-};
-
-struct XVertex
-{
-    DirectX::XMFLOAT3 Pos;
-    DirectX::XMFLOAT2 TextureCoord;
-    DirectX::XMFLOAT3 Normal;
-    UINT TextureIndex;
-};
-
-uint64_t AlignBytes(uint64_t size, uint64_t alignment = 256)
-{
-    const uint64_t upperBound = size + alignment - 1;
-    return upperBound - upperBound % alignment;
-}
-
-template<typename T>
-uint64_t AlignBytes(uint64_t alignment = 256)
-{
-    return AlignBytes(sizeof(T), alignment);
-}
-
-void SetModelViewProjection(ID3D12Resource* constantBuffer, const DirectX::XMMATRIX& mvp, const DirectX::XMMATRIX& mv, const DirectX::XMVECTOR& lightPos)
-{
-    Constants constantsStruct;
-    DirectX::XMStoreFloat4x4(&constantsStruct.worldViewProj, mvp);
-    DirectX::XMStoreFloat4x4(&constantsStruct.worldView, mv);
-    DirectX::XMStoreFloat4(&constantsStruct.lightPos, lightPos);
-
-    BYTE* mappedData = nullptr;
-    constantBuffer->Map(0, nullptr, (void**)&mappedData);
-    memcpy(mappedData, &constantsStruct, sizeof(Constants));
-    constantBuffer->Unmap(0, nullptr);
-}
-
-void WaitForCommandListCompletion(ID3D12Device* device, ID3D12CommandQueue* queue)
-{
-    static UINT64 currentFenceValue = 0;
-    static ID3D12Fence* fence = nullptr;
-    static HANDLE fenceEventHandle = 0;
-
-    if (fence == nullptr)
-    {
-        D3D_NOT_FAILED(device->CreateFence(currentFenceValue, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fence)));
-        NOT_FAILED(fenceEventHandle = CreateEventExW(nullptr, nullptr, CREATE_EVENT_MANUAL_RESET, EVENT_ALL_ACCESS), 0);
-    }
-
-    currentFenceValue++;
-    queue->Signal(fence, currentFenceValue);
-
-    if (fence->GetCompletedValue() != currentFenceValue)
-    {
-        D3D_NOT_FAILED(fence->SetEventOnCompletion(currentFenceValue, fenceEventHandle));
-        WaitForSingleObject(fenceEventHandle, INFINITE);
-        ResetEvent(fenceEventHandle);
-    }
-}
-
-
-ID3D12RootSignature* CreateRootSignature(ID3D12Device* device, UINT numberOfConstantStructs, UINT numberOfTextures)
-{
-    D3D12_DESCRIPTOR_RANGE constantBufferDescriptorRange;
-    constantBufferDescriptorRange.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_CBV;
-    constantBufferDescriptorRange.NumDescriptors = numberOfConstantStructs;
-    constantBufferDescriptorRange.BaseShaderRegister = 0;
-    constantBufferDescriptorRange.RegisterSpace = 0;
-    constantBufferDescriptorRange.OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
-
-    D3D12_DESCRIPTOR_RANGE textureDescriptorRange;
-    textureDescriptorRange.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
-    textureDescriptorRange.NumDescriptors = numberOfTextures;
-    textureDescriptorRange.BaseShaderRegister = 0;
-    textureDescriptorRange.RegisterSpace = 0;
-    textureDescriptorRange.OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
-
-    D3D12_DESCRIPTOR_RANGE descriptorRanges[2] = { constantBufferDescriptorRange, textureDescriptorRange };
-
-    D3D12_ROOT_PARAMETER constantBufferParameter;
-    constantBufferParameter.ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-    constantBufferParameter.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
-    constantBufferParameter.DescriptorTable.NumDescriptorRanges = 2;
-    constantBufferParameter.DescriptorTable.pDescriptorRanges = descriptorRanges;
-
-    D3D12_STATIC_SAMPLER_DESC sampler = {};
-    sampler.Filter = D3D12_FILTER_MIN_MAG_MIP_POINT;
-    sampler.AddressU = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
-    sampler.AddressV = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
-    sampler.AddressW = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
-    sampler.MipLODBias = 0;
-    sampler.MaxAnisotropy = 0;
-    sampler.ComparisonFunc = D3D12_COMPARISON_FUNC_NEVER;
-    sampler.BorderColor = D3D12_STATIC_BORDER_COLOR_TRANSPARENT_BLACK;
-    sampler.MinLOD = 0.0f;
-    sampler.MaxLOD = D3D12_FLOAT32_MAX;
-    sampler.ShaderRegister = 0;
-    sampler.RegisterSpace = 0;
-    sampler.ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-
-    D3D12_ROOT_SIGNATURE_DESC rootSignatureDescription;
-    rootSignatureDescription.NumParameters = 1;
-    rootSignatureDescription.pParameters = &constantBufferParameter;
-    rootSignatureDescription.NumStaticSamplers = 1;
-    rootSignatureDescription.pStaticSamplers = &sampler;
-    rootSignatureDescription.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
-
-    ID3DBlob* rootSignatureData = nullptr;
-    D3D_NOT_FAILED(D3D12SerializeRootSignature(&rootSignatureDescription, D3D_ROOT_SIGNATURE_VERSION_1, &rootSignatureData, nullptr));
-
-    ID3D12RootSignature* rootSignature = nullptr;
-    D3D_NOT_FAILED(device->CreateRootSignature(0, rootSignatureData->GetBufferPointer(), rootSignatureData->GetBufferSize(), IID_PPV_ARGS(&rootSignature)));
-
-    return rootSignature;
-}
-
-ID3D12PipelineState* CreatePSO(ID3D12Device* device, ID3D12RootSignature* rootSignature)
-{
-    UINT flags = D3DCOMPILE_ENABLE_UNBOUNDED_DESCRIPTOR_TABLES;
-
-    ID3DBlob* vertexShaderBlob = nullptr;
-    D3D_NOT_FAILED(D3DCompileFromFile(L"color.hlsl", nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE, "VS", "vs_5_1", flags, 0, &vertexShaderBlob, nullptr));
-
-    ID3DBlob* pixelShaderBlob = nullptr;
-    D3D_NOT_FAILED(D3DCompileFromFile(L"color.hlsl", nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE, "PS", "ps_5_1", flags, 0, &pixelShaderBlob, nullptr));
-
-    constexpr size_t vertexFieldsCount = 4;
-    D3D12_INPUT_ELEMENT_DESC inputElementDescription[vertexFieldsCount];
-
-    inputElementDescription[0].SemanticName = "POSITION";
-    inputElementDescription[0].SemanticIndex = 0;
-    inputElementDescription[0].Format = DXGI_FORMAT_R32G32B32_FLOAT;
-    inputElementDescription[0].InputSlot = 0;
-    inputElementDescription[0].AlignedByteOffset = 0;
-    inputElementDescription[0].InputSlotClass = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA;
-    inputElementDescription[0].InstanceDataStepRate = 0;
-
-    inputElementDescription[1].SemanticName = "TEXCOORD";
-    inputElementDescription[1].SemanticIndex = 0;
-    inputElementDescription[1].Format = DXGI_FORMAT_R32G32_FLOAT;
-    inputElementDescription[1].InputSlot = 0;
-    inputElementDescription[1].AlignedByteOffset = 12;
-    inputElementDescription[1].InputSlotClass = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA;
-    inputElementDescription[1].InstanceDataStepRate = 0;
-
-    inputElementDescription[2].SemanticName = "NORMALS";
-    inputElementDescription[2].SemanticIndex = 0;
-    inputElementDescription[2].Format = DXGI_FORMAT_R32G32B32_FLOAT;
-    inputElementDescription[2].InputSlot = 0;
-    inputElementDescription[2].AlignedByteOffset = 20;
-    inputElementDescription[2].InputSlotClass = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA;
-    inputElementDescription[2].InstanceDataStepRate = 0;
-
-    inputElementDescription[3].SemanticName = "TEXINDEX";
-    inputElementDescription[3].SemanticIndex = 0;
-    inputElementDescription[3].Format = DXGI_FORMAT_R32_UINT;
-    inputElementDescription[3].InputSlot = 0;
-    inputElementDescription[3].AlignedByteOffset = 32;
-    inputElementDescription[3].InputSlotClass = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA;
-    inputElementDescription[3].InstanceDataStepRate = 0;
-
-    D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDescription = {};
-    psoDescription.InputLayout = { inputElementDescription, vertexFieldsCount };
-    psoDescription.pRootSignature = rootSignature;
-    psoDescription.VS = { (BYTE*)vertexShaderBlob->GetBufferPointer(), vertexShaderBlob->GetBufferSize() };
-    psoDescription.PS = { (BYTE*)pixelShaderBlob->GetBufferPointer(), pixelShaderBlob->GetBufferSize() };
-
-    psoDescription.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
-    psoDescription.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
-    psoDescription.RasterizerState.FrontCounterClockwise = true;
-    psoDescription.RasterizerState.DepthBias = D3D12_DEFAULT_DEPTH_BIAS;
-    psoDescription.RasterizerState.DepthBiasClamp = D3D12_DEFAULT_DEPTH_BIAS_CLAMP;
-    psoDescription.RasterizerState.SlopeScaledDepthBias = D3D12_DEFAULT_SLOPE_SCALED_DEPTH_BIAS;
-    psoDescription.RasterizerState.DepthClipEnable = true;
-    psoDescription.RasterizerState.MultisampleEnable = false;
-    psoDescription.RasterizerState.AntialiasedLineEnable = false;
-    psoDescription.RasterizerState.ForcedSampleCount = 0;
-    psoDescription.RasterizerState.ConservativeRaster = D3D12_CONSERVATIVE_RASTERIZATION_MODE_OFF;
-
-    psoDescription.BlendState.AlphaToCoverageEnable = false;
-    psoDescription.BlendState.IndependentBlendEnable = false;
-    for (UINT i = 0; i < D3D12_SIMULTANEOUS_RENDER_TARGET_COUNT; ++i)
-    {
-        psoDescription.BlendState.RenderTarget[i].BlendEnable = false;
-        psoDescription.BlendState.RenderTarget[i].LogicOpEnable = false;
-        psoDescription.BlendState.RenderTarget[i].SrcBlend = D3D12_BLEND_ONE;
-        psoDescription.BlendState.RenderTarget[i].DestBlend = D3D12_BLEND_ZERO;
-        psoDescription.BlendState.RenderTarget[i].BlendOp = D3D12_BLEND_OP_ADD;
-        psoDescription.BlendState.RenderTarget[i].SrcBlendAlpha = D3D12_BLEND_ONE;
-        psoDescription.BlendState.RenderTarget[i].DestBlendAlpha = D3D12_BLEND_ZERO;
-        psoDescription.BlendState.RenderTarget[i].BlendOpAlpha = D3D12_BLEND_OP_ADD;
-        psoDescription.BlendState.RenderTarget[i].LogicOp = D3D12_LOGIC_OP_NOOP;
-        psoDescription.BlendState.RenderTarget[i].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
-    }
-
-    psoDescription.DepthStencilState.DepthEnable = true;
-    psoDescription.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL;
-    psoDescription.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_LESS;
-    psoDescription.DepthStencilState.StencilEnable = false;
-    psoDescription.DepthStencilState.StencilReadMask = D3D12_DEFAULT_STENCIL_READ_MASK;
-    psoDescription.DepthStencilState.StencilWriteMask = D3D12_DEFAULT_STENCIL_WRITE_MASK;
-
-    psoDescription.DepthStencilState.FrontFace.StencilFailOp = D3D12_STENCIL_OP_KEEP;
-    psoDescription.DepthStencilState.FrontFace.StencilDepthFailOp = D3D12_STENCIL_OP_KEEP;
-    psoDescription.DepthStencilState.FrontFace.StencilPassOp = D3D12_STENCIL_OP_KEEP;
-    psoDescription.DepthStencilState.FrontFace.StencilFunc = D3D12_COMPARISON_FUNC_ALWAYS;
-
-    psoDescription.DepthStencilState.BackFace.StencilFailOp = D3D12_STENCIL_OP_KEEP;
-    psoDescription.DepthStencilState.BackFace.StencilDepthFailOp = D3D12_STENCIL_OP_KEEP;
-    psoDescription.DepthStencilState.BackFace.StencilPassOp = D3D12_STENCIL_OP_KEEP;
-    psoDescription.DepthStencilState.BackFace.StencilFunc = D3D12_COMPARISON_FUNC_ALWAYS;
-
-    psoDescription.SampleMask = UINT_MAX;
-    psoDescription.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
-    psoDescription.NumRenderTargets = 1;
-    psoDescription.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
-    psoDescription.SampleDesc.Count = 1;
-    psoDescription.SampleDesc.Quality = 0;
-    psoDescription.DSVFormat = DXGI_FORMAT_D24_UNORM_S8_UINT;
-
-    ID3D12PipelineState* pso = nullptr;
-    D3D_NOT_FAILED(device->CreateGraphicsPipelineState(&psoDescription, IID_PPV_ARGS(&pso)));
-
-    return pso;
-}
-
-ID3D12DescriptorHeap* CreateRootDescriptorHeap(ID3D12Device* device, UINT descriptorsCount)
-{
-    D3D12_DESCRIPTOR_HEAP_DESC heapDescription;
-    heapDescription.Type = D3D12_DESCRIPTOR_HEAP_TYPE::D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
-    heapDescription.NumDescriptors = descriptorsCount;
-    heapDescription.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
-    heapDescription.NodeMask = 0;
-
-    ID3D12DescriptorHeap* heap = nullptr;
-    D3D_NOT_FAILED(device->CreateDescriptorHeap(&heapDescription, IID_PPV_ARGS(&heap)));
-
-    return heap;
-}
-
-ID3D12DescriptorHeap* CreateRTVDescriptorHeap(ID3D12Device* device)
-{
-    D3D12_DESCRIPTOR_HEAP_DESC heapDescription;
-    heapDescription.Type = D3D12_DESCRIPTOR_HEAP_TYPE::D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
-    heapDescription.NumDescriptors = 1;
-    heapDescription.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
-    heapDescription.NodeMask = 0;
-
-    ID3D12DescriptorHeap* heap = nullptr;
-    D3D_NOT_FAILED(device->CreateDescriptorHeap(&heapDescription, IID_PPV_ARGS(&heap)));
-
-    return heap;
-}
-
-D3D12_CPU_DESCRIPTOR_HANDLE CreateDepthBuffer(ID3D12Device* device, ID3D12CommandQueue* queue, ID3D12PipelineState* pso)
-{
-    D3D12_RESOURCE_DESC depthBufferDescription;
-    depthBufferDescription.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
-    depthBufferDescription.Alignment = 0;
-    depthBufferDescription.Width = GameWidth;
-    depthBufferDescription.Height = GameHeight;
-    depthBufferDescription.DepthOrArraySize = 1;
-    depthBufferDescription.MipLevels = 1;
-    depthBufferDescription.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
-
-    depthBufferDescription.SampleDesc.Count = 1;
-    depthBufferDescription.SampleDesc.Quality = 0;
-
-    depthBufferDescription.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
-    depthBufferDescription.Flags = D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
-
-    D3D12_CLEAR_VALUE clearValue;
-    clearValue.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
-    clearValue.DepthStencil.Depth = 1.0f;
-    clearValue.DepthStencil.Stencil = 0;
-
-    D3D12_HEAP_PROPERTIES defaultHeapProperties = device->GetCustomHeapProperties(0, D3D12_HEAP_TYPE_DEFAULT);
-    ID3D12Resource* depthStencilBuffer = nullptr;
-    D3D_NOT_FAILED(device->CreateCommittedResource(&defaultHeapProperties, D3D12_HEAP_FLAG_NONE, &depthBufferDescription, D3D12_RESOURCE_STATE_COMMON, &clearValue, IID_PPV_ARGS(&depthStencilBuffer)));
-
-    D3D12_DESCRIPTOR_HEAP_DESC depthStencilViewHeapDescription;
-    depthStencilViewHeapDescription.Type = D3D12_DESCRIPTOR_HEAP_TYPE::D3D12_DESCRIPTOR_HEAP_TYPE_DSV;
-    depthStencilViewHeapDescription.NumDescriptors = 1;
-    depthStencilViewHeapDescription.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
-    depthStencilViewHeapDescription.NodeMask = 0;
-
-    ID3D12DescriptorHeap* depthStencilViewHeap = nullptr;
-    D3D_NOT_FAILED(device->CreateDescriptorHeap(&depthStencilViewHeapDescription, IID_PPV_ARGS(&depthStencilViewHeap)));
-
-    D3D12_CPU_DESCRIPTOR_HANDLE depthBufferHandle(depthStencilViewHeap->GetCPUDescriptorHandleForHeapStart());
-    device->CreateDepthStencilView(depthStencilBuffer, nullptr, depthBufferHandle);
-
-    ID3D12CommandAllocator* allocator = nullptr;
-    D3D_NOT_FAILED(device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&allocator)));
-
-    ID3D12GraphicsCommandList* commandList = nullptr;
-    D3D_NOT_FAILED(device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, allocator, nullptr, IID_PPV_ARGS(&commandList)));
-
-    D3D12_RESOURCE_BARRIER depthBufferWriteTransition;
-    depthBufferWriteTransition.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-    depthBufferWriteTransition.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
-
-    depthBufferWriteTransition.Transition.pResource = depthStencilBuffer;
-    depthBufferWriteTransition.Transition.StateBefore = D3D12_RESOURCE_STATE_COMMON;
-    depthBufferWriteTransition.Transition.StateAfter = D3D12_RESOURCE_STATE_DEPTH_WRITE;
-    depthBufferWriteTransition.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-
-    commandList->ResourceBarrier(1, &depthBufferWriteTransition);
-
-    commandList->Close();
-
-    ID3D12CommandList* cmdsLists[1] = { commandList };
-    queue->ExecuteCommandLists(1, cmdsLists);
-
-    WaitForCommandListCompletion(device, queue);
-
-    D3D_NOT_FAILED(allocator->Reset());
-    D3D_NOT_FAILED(commandList->Reset(allocator, pso));
-
-    return depthBufferHandle;
-}
-
-template <typename T>
-ID3D12Resource* UploadDataToGPU(ID3D12Device* device, ID3D12CommandQueue* queue, ID3D12PipelineState* pso, std::vector<T>& data)
-{
-    D3D12_RESOURCE_DESC dataBufferDescription;
-    dataBufferDescription.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
-    dataBufferDescription.Alignment = 0;
-    dataBufferDescription.Height = 1;
-    dataBufferDescription.DepthOrArraySize = 1;
-    dataBufferDescription.MipLevels = 1;
-    dataBufferDescription.Format = DXGI_FORMAT_UNKNOWN;
-
-    dataBufferDescription.SampleDesc.Count = 1;
-    dataBufferDescription.SampleDesc.Quality = 0;
-
-    dataBufferDescription.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
-    dataBufferDescription.Flags = D3D12_RESOURCE_FLAG_NONE;
-    dataBufferDescription.Width = data.size() * sizeof(T);
-
-    D3D12_HEAP_PROPERTIES uploadHeapProperties = device->GetCustomHeapProperties(0, D3D12_HEAP_TYPE_UPLOAD);
-
-    ID3D12Resource* dataUploadBuffer = nullptr; // TODO: should be cleared later
-    D3D_NOT_FAILED(device->CreateCommittedResource(&uploadHeapProperties, D3D12_HEAP_FLAG_NONE, &dataBufferDescription, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&dataUploadBuffer)));
-
-    BYTE* mappedData = nullptr;
-    dataUploadBuffer->Map(0, nullptr, (void**)&mappedData);
-    memcpy(mappedData, data.data(), data.size() * sizeof(T));
-    dataUploadBuffer->Unmap(0, nullptr);
-
-    ID3D12CommandAllocator* allocator = nullptr;
-    D3D_NOT_FAILED(device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&allocator)));
-
-    ID3D12GraphicsCommandList* commandList = nullptr;
-    D3D_NOT_FAILED(device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, allocator, nullptr, IID_PPV_ARGS(&commandList)));
-
-    D3D12_HEAP_PROPERTIES defaultHeapProperties = device->GetCustomHeapProperties(0, D3D12_HEAP_TYPE_DEFAULT);
-
-    ID3D12Resource* dataBuffer = nullptr;
-    D3D_NOT_FAILED(device->CreateCommittedResource(&defaultHeapProperties, D3D12_HEAP_FLAG_NONE, &dataBufferDescription, D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&dataBuffer)));
-    commandList->CopyBufferRegion(dataBuffer, 0, dataUploadBuffer, 0, data.size() * sizeof(T));
-
-    D3D12_RESOURCE_BARRIER genericReadBufferTransition;
-    genericReadBufferTransition.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-    genericReadBufferTransition.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
-    genericReadBufferTransition.Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
-    genericReadBufferTransition.Transition.StateAfter = D3D12_RESOURCE_STATE_GENERIC_READ;
-    genericReadBufferTransition.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-    genericReadBufferTransition.Transition.pResource = dataBuffer;
-    commandList->ResourceBarrier(1, &genericReadBufferTransition);
-
-    commandList->Close();
-
-    ID3D12CommandList* cmdsLists[1] = { commandList };
-    queue->ExecuteCommandLists(1, cmdsLists);
-
-    WaitForCommandListCompletion(device, queue);
-
-    D3D_NOT_FAILED(allocator->Reset());
-    D3D_NOT_FAILED(commandList->Reset(allocator, pso));
-
-    return dataBuffer;
-}
-
-void UploadTexturesToGPU(
-    ID3D12Device* device,
-    ID3D12DescriptorHeap* rootDescriptorHeap,
-    ID3D12CommandQueue* queue,
-    ID3D12PipelineState* pso,
-    const std::string& textureName,
-    int32_t index
-    )
-{
-    Renderer::Texture texture;
-    NOT_FAILED(Renderer::Load("../../assets/" + textureName, texture), false);
-
-    D3D12_RESOURCE_DESC textureDesc = {};
-    textureDesc.MipLevels = 1;
-    textureDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-    textureDesc.Width = texture.GetWidth();
-    textureDesc.Height = static_cast<UINT>(texture.GetHeight());
-    textureDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
-    textureDesc.DepthOrArraySize = 1;
-    textureDesc.SampleDesc.Count = 1;
-    textureDesc.SampleDesc.Quality = 0;
-    textureDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
-
-    D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint = {};
-    UINT numRows = 0;
-    UINT64 rowSizeInBytes = 0;
-    UINT64 totalBytes = 0;
-    device->GetCopyableFootprints(&textureDesc, 0, 1, 0, &footprint, &numRows, &rowSizeInBytes, &totalBytes);
-
-    D3D12_RESOURCE_DESC uploadBufferDescription;
-    uploadBufferDescription.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
-    uploadBufferDescription.Alignment = 0;
-    uploadBufferDescription.Width = totalBytes;
-    uploadBufferDescription.Height = 1;
-    uploadBufferDescription.DepthOrArraySize = 1;
-    uploadBufferDescription.MipLevels = 1;
-    uploadBufferDescription.Format = DXGI_FORMAT_UNKNOWN;
-    uploadBufferDescription.SampleDesc.Count = 1;
-    uploadBufferDescription.SampleDesc.Quality = 0;
-    uploadBufferDescription.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
-    uploadBufferDescription.Flags = D3D12_RESOURCE_FLAG_NONE;
-
-    D3D12_HEAP_PROPERTIES uploadProperties = device->GetCustomHeapProperties(0, D3D12_HEAP_TYPE_UPLOAD);
-    ID3D12Resource* dataUploadBuffer = nullptr; // TODO: should be cleared later
-    D3D_NOT_FAILED(device->CreateCommittedResource(&uploadProperties, D3D12_HEAP_FLAG_NONE, &uploadBufferDescription, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&dataUploadBuffer)));
-
-    D3D12_HEAP_PROPERTIES defaultProperties = device->GetCustomHeapProperties(0, D3D12_HEAP_TYPE_DEFAULT);
-    ID3D12Resource* dataBuffer = nullptr;
-    D3D_NOT_FAILED(device->CreateCommittedResource(&defaultProperties, D3D12_HEAP_FLAG_NONE, &textureDesc, D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&dataBuffer)));
-
-    BYTE* mappedData = nullptr;
-    dataUploadBuffer->Map(0, nullptr, (void**)&mappedData);
-
-    for (size_t i = 0; i < numRows; i++)
-    {
-        memcpy(mappedData + footprint.Footprint.RowPitch * i, texture.GetBuffer() + rowSizeInBytes * i, rowSizeInBytes);
-    }
-    dataUploadBuffer->Unmap(0, nullptr);
-
-    D3D12_TEXTURE_COPY_LOCATION dest;
-    dest.pResource = dataBuffer;
-    dest.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
-    dest.PlacedFootprint = {};
-    dest.SubresourceIndex = 0;
-
-    D3D12_TEXTURE_COPY_LOCATION src;
-    src.pResource = dataUploadBuffer;
-    src.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
-    src.PlacedFootprint = footprint;
-
-    D3D12_RESOURCE_BARRIER genericReadBufferTransition;
-    genericReadBufferTransition.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-    genericReadBufferTransition.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
-    genericReadBufferTransition.Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
-    genericReadBufferTransition.Transition.StateAfter = D3D12_RESOURCE_STATE_GENERIC_READ;
-    genericReadBufferTransition.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-    genericReadBufferTransition.Transition.pResource = dataBuffer;
-
-    ID3D12CommandAllocator* allocator = nullptr;
-    D3D_NOT_FAILED(device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&allocator)));
-
-    ID3D12GraphicsCommandList* commandList = nullptr;
-    D3D_NOT_FAILED(device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, allocator, nullptr, IID_PPV_ARGS(&commandList)));
-
-    commandList->CopyTextureRegion(&dest, 0, 0, 0, &src, nullptr);
-    commandList->ResourceBarrier(1, &genericReadBufferTransition);
-    commandList->Close();
-
-    ID3D12CommandList* cmdsLists[1] = { commandList };
-    queue->ExecuteCommandLists(1, cmdsLists);
-
-    WaitForCommandListCompletion(device, queue);
-
-    D3D_NOT_FAILED(allocator->Reset());
-    D3D_NOT_FAILED(commandList->Reset(allocator, pso));
-
-    // Describe and create a SRV for the texture.
-    D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
-    srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-    srvDesc.Format = textureDesc.Format;
-    srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-    srvDesc.Texture2D.MipLevels = 1;
-
-    D3D12_CPU_DESCRIPTOR_HANDLE secondConstantBufferHandle{ SIZE_T(INT64(rootDescriptorHeap->GetCPUDescriptorHandleForHeapStart().ptr) + INT64(device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV) * (index + 1)))};
-    device->CreateShaderResourceView(dataBuffer, &srvDesc, secondConstantBufferHandle);
-
-    
-}
-
-bool DownloadTextureFromGPU(ID3D12Device* device, ID3D12CommandQueue* queue, ID3D12PipelineState* pso, ID3D12Resource* dataBuffer, Renderer::Texture& texture)
-{
-    D3D12_RESOURCE_DESC textureDesc = {};
-    textureDesc.MipLevels = 1;
-    textureDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-    textureDesc.Width = texture.GetWidth();
-    textureDesc.Height = static_cast<UINT>(texture.GetHeight());
-    textureDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
-    textureDesc.DepthOrArraySize = 1;
-    textureDesc.SampleDesc.Count = 1;
-    textureDesc.SampleDesc.Quality = 0;
-    textureDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
-
-    D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint = {};
-    UINT numRows = 0;
-    UINT64 rowSizeInBytes = 0;
-    UINT64 totalBytes = 0;
-    device->GetCopyableFootprints(&textureDesc, 0, 1, 0, &footprint, &numRows, &rowSizeInBytes, &totalBytes);
-
-    D3D12_RESOURCE_DESC readbackBufferDescription;
-    readbackBufferDescription.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
-    readbackBufferDescription.Alignment = 0;
-    readbackBufferDescription.Width = totalBytes;
-    readbackBufferDescription.Height = 1;
-    readbackBufferDescription.DepthOrArraySize = 1;
-    readbackBufferDescription.MipLevels = 1;
-    readbackBufferDescription.Format = DXGI_FORMAT_UNKNOWN;
-    readbackBufferDescription.SampleDesc.Count = 1;
-    readbackBufferDescription.SampleDesc.Quality = 0;
-    readbackBufferDescription.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
-    readbackBufferDescription.Flags = D3D12_RESOURCE_FLAG_NONE;
-
-    D3D12_HEAP_PROPERTIES readbackProperties = device->GetCustomHeapProperties(0, D3D12_HEAP_TYPE_READBACK);
-    ID3D12Resource* readbackBuffer = nullptr; // TODO: should be cleared later
-    D3D_NOT_FAILED(device->CreateCommittedResource(&readbackProperties, D3D12_HEAP_FLAG_NONE, &readbackBufferDescription, D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&readbackBuffer)));
-
-    D3D12_TEXTURE_COPY_LOCATION dest;
-    dest.pResource = readbackBuffer;
-    dest.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
-    dest.PlacedFootprint = footprint;
-
-    D3D12_TEXTURE_COPY_LOCATION src;
-    src.pResource = dataBuffer;
-    src.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
-    src.SubresourceIndex = 0;
-
-    D3D12_RESOURCE_BARRIER rtvBufferTransition;
-    rtvBufferTransition.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-    rtvBufferTransition.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
-    rtvBufferTransition.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
-    rtvBufferTransition.Transition.StateAfter = D3D12_RESOURCE_STATE_COPY_SOURCE;
-    rtvBufferTransition.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-    rtvBufferTransition.Transition.pResource = dataBuffer;
-
-    D3D12_RESOURCE_BARRIER rtvBufferTransitionBack;
-    rtvBufferTransitionBack.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-    rtvBufferTransitionBack.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
-    rtvBufferTransitionBack.Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_SOURCE;
-    rtvBufferTransitionBack.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
-    rtvBufferTransitionBack.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-    rtvBufferTransitionBack.Transition.pResource = dataBuffer;
-
-    ID3D12CommandAllocator* allocator = nullptr;
-    D3D_NOT_FAILED(device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&allocator)));
-
-    ID3D12GraphicsCommandList* commandList = nullptr;
-    D3D_NOT_FAILED(device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, allocator, nullptr, IID_PPV_ARGS(&commandList)));
-
-    commandList->ResourceBarrier(1, &rtvBufferTransition);
-    commandList->CopyTextureRegion(&dest, 0, 0, 0, &src, nullptr);
-    commandList->ResourceBarrier(1, &rtvBufferTransitionBack);
-    commandList->Close();
-
-    ID3D12CommandList* cmdsLists[1] = { commandList };
-    queue->ExecuteCommandLists(1, cmdsLists);
-
-    WaitForCommandListCompletion(device, queue);
-
-    D3D_NOT_FAILED(allocator->Reset());
-    D3D_NOT_FAILED(commandList->Reset(allocator, pso));
-
-    // copy from readback buffer to cpu
-    BYTE* mappedData = nullptr;
-    readbackBuffer->Map(0, nullptr, (void**)&mappedData);
-
-    for (size_t i = 0; i < numRows; i++)
-    {
-        memcpy(texture.GetBuffer() + rowSizeInBytes * i, mappedData + footprint.Footprint.RowPitch * i, rowSizeInBytes);
-    }
-    readbackBuffer->Unmap(0, nullptr);
-
-    return true;
-}
-
 int CALLBACK WinMain(
     _In_ HINSTANCE hInstance,
     _In_opt_ HINSTANCE hPrevInstance,
@@ -780,355 +72,139 @@ int CALLBACK WinMain(
     MainWindowClass.hInstance = hInstance;
     MainWindowClass.lpszClassName = L"MainWindow";
 
-    if (RegisterClassW(&MainWindowClass))
+    try
     {
-        RECT clientArea;
-        clientArea.left = 0;
-        clientArea.top = 0;
-        clientArea.right = WindowWidth;
-        clientArea.bottom = WindowHeight;
-
-        AdjustWindowRect(&clientArea, WS_OVERLAPPEDWINDOW | WS_VISIBLE, 0);
-
-        HWND window;
-        NOT_FAILED(window = CreateWindowExW(
-            0,
-            L"MainWindow",
-            L"Software Rasterizer",
-            WS_OVERLAPPEDWINDOW | WS_VISIBLE,
-            CW_USEDEFAULT,
-            CW_USEDEFAULT,
-            clientArea.right - clientArea.left,
-            clientArea.bottom - clientArea.top,
-            0,
-            0,
-            hInstance,
-            0
-        ), 0);
-
-        Renderer::Scene scene;
-        Renderer::Load("scene.sce", scene);
-        const Renderer::Model& model = scene.models[0];
-
-        Renderer::Camera camera;
-        camera.position.z = 2;
-        camera.position.x = 0;
-        camera.position.y = 0;
-
-        camera.pitch = 0.0f;
-        camera.yaw = 0.0f;
-
-        camera.forward = Renderer::Vec { 0.0f, 0.0f, -1.0f, 0.0f };
-        camera.left = Renderer::Vec { -1.0f, 0.0f, 0.0f, 0.0f };
-
-        Renderer::Light light;
-        light.position = Renderer::Vec { 100.0f, 100.0f, 100.0f, 1.0f };
-
-        ID3D12Debug* debugController = nullptr;
-        D3D_NOT_FAILED(D3D12GetDebugInterface(IID_PPV_ARGS(&debugController)));
-        debugController->EnableDebugLayer();
-        debugController->Release();
-
-        ID3D12Device* device = nullptr;
-        D3D_NOT_FAILED(D3D12CreateDevice(NULL, D3D_FEATURE_LEVEL_12_1, IID_PPV_ARGS(&device)));
-
-        ID3D12CommandQueue* queue = nullptr;
-        D3D12_COMMAND_QUEUE_DESC queueDesc = {};
-        queueDesc.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
-        queueDesc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
-        D3D_NOT_FAILED(device->CreateCommandQueue(&queueDesc, IID_PPV_ARGS(&queue)));
-
-        // rendering
-        const UINT numberOfConstantStructs = UINT(1);
-        const UINT numberOfTextures = UINT(model.materials.size());
-
-        ID3D12DescriptorHeap* rootDescriptorHeap = CreateRootDescriptorHeap(device, numberOfConstantStructs + numberOfTextures);
-
-        // Constant buffer
-        D3D12_RESOURCE_DESC uploadBufferDescription;
-        uploadBufferDescription.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
-        uploadBufferDescription.Alignment = 0;
-        uploadBufferDescription.Width = AlignBytes<Constants>();
-        uploadBufferDescription.Height = 1;
-        uploadBufferDescription.DepthOrArraySize = 1;
-        uploadBufferDescription.MipLevels = 1;
-        uploadBufferDescription.Format = DXGI_FORMAT_UNKNOWN;
-
-        uploadBufferDescription.SampleDesc.Count = 1;
-        uploadBufferDescription.SampleDesc.Quality = 0;
-
-        uploadBufferDescription.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
-        uploadBufferDescription.Flags = D3D12_RESOURCE_FLAG_NONE;
-
-        D3D12_HEAP_PROPERTIES uploadHeapProperties = device->GetCustomHeapProperties(0, D3D12_HEAP_TYPE_UPLOAD);
-        ID3D12Resource* constantBuffer = nullptr;
-        D3D_NOT_FAILED(device->CreateCommittedResource(&uploadHeapProperties, D3D12_HEAP_FLAG_NONE, &uploadBufferDescription, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&constantBuffer)));
-
-        D3D12_CONSTANT_BUFFER_VIEW_DESC constantBufferViewDescription;
-        constantBufferViewDescription.BufferLocation = constantBuffer->GetGPUVirtualAddress();
-        constantBufferViewDescription.SizeInBytes = static_cast<UINT>(uploadBufferDescription.Width);
-
-        device->CreateConstantBufferView(&constantBufferViewDescription, rootDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
-
-        // root signature
-        ID3D12RootSignature* rootSignature = CreateRootSignature(device, numberOfConstantStructs, numberOfTextures);
-
-        // pso
-        ID3D12PipelineState* pso = CreatePSO(device, rootSignature);
-
-        // depth
-        D3D12_CPU_DESCRIPTOR_HANDLE depthBufferHandle = CreateDepthBuffer(device, queue, pso);
-
-        // render target
-        ID3D12DescriptorHeap* renderTargetDescriptorHeap = CreateRTVDescriptorHeap(device);
-
-        D3D12_RESOURCE_DESC textureDesc = {};
-        textureDesc.MipLevels = 1;
-        textureDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-        textureDesc.Width = WindowWidth;
-        textureDesc.Height = WindowHeight;
-        textureDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
-        textureDesc.DepthOrArraySize = 1;
-        textureDesc.SampleDesc.Count = 1;
-        textureDesc.SampleDesc.Quality = 0;
-        textureDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
-
-        D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint = {};
-        UINT numRows = 0;
-        UINT64 rowSizeInBytes = 0;
-        UINT64 totalBytes = 0;
-        device->GetCopyableFootprints(&textureDesc, 0, 1, 0, &footprint, &numRows, &rowSizeInBytes, &totalBytes);
-
-        D3D12_HEAP_PROPERTIES defaultProperties = device->GetCustomHeapProperties(0, D3D12_HEAP_TYPE_DEFAULT);
-        ID3D12Resource* currentBuffer = nullptr;
-        D3D_NOT_FAILED(device->CreateCommittedResource(&defaultProperties, D3D12_HEAP_FLAG_NONE, &textureDesc, D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&currentBuffer)));
-
-        D3D12_CPU_DESCRIPTOR_HANDLE currentBufferHandle{ SIZE_T(INT64(renderTargetDescriptorHeap->GetCPUDescriptorHandleForHeapStart().ptr)) };
-        device->CreateRenderTargetView(currentBuffer, nullptr, currentBufferHandle);
-
-        // upload static geometry
-        std::vector<XVertex> vertexData;
-        for (const Renderer::Vertex& vert : model.vertices)
+        if (RegisterClassW(&MainWindowClass))
         {
-            vertexData.push_back(
-                XVertex({
-                    DirectX::XMFLOAT3(vert.position.x, vert.position.y, vert.position.z),
-                    DirectX::XMFLOAT2(vert.textureCoord.x, vert.textureCoord.y),
-                    DirectX::XMFLOAT3(vert.normal.x, vert.normal.y, vert.normal.z),
-                    UINT(vert.materialId)
-                    })
-            );
+            RECT clientArea;
+            clientArea.left = 0;
+            clientArea.top = 0;
+            clientArea.right = WindowWidth;
+            clientArea.bottom = WindowHeight;
+
+            AdjustWindowRect(&clientArea, WS_OVERLAPPEDWINDOW | WS_VISIBLE, 0);
+
+            HWND window;
+            NOT_FAILED(window = CreateWindowExW(
+                0,
+                L"MainWindow",
+                L"Software Rasterizer",
+                WS_OVERLAPPEDWINDOW | WS_VISIBLE,
+                CW_USEDEFAULT,
+                CW_USEDEFAULT,
+                clientArea.right - clientArea.left,
+                clientArea.bottom - clientArea.top,
+                0,
+                0,
+                hInstance,
+                0
+            ), 0);
+
+            Renderer::Scene scene;
+            Renderer::Load("scene.sce", scene);
+            const Renderer::Model& model = scene.models[0];
+
+            scene.camera.position.z = 2;
+            scene.camera.position.x = 0;
+            scene.camera.position.y = 0;
+            scene.camera.pitch = 0.0f;
+            scene.camera.yaw = 0.0f;
+            scene.camera.forward = Renderer::Vec{ 0.0f, 0.0f, -1.0f, 0.0f };
+            scene.camera.left = Renderer::Vec{ -1.0f, 0.0f, 0.0f, 0.0f };
+            scene.light.position = Renderer::Vec{ 100.0f, 100.0f, 100.0f, 1.0f };
+
+            Renderer::RendererDX12 renderer;
+
+            while (isRunning)
+            {
+                MSG message;
+                if (PeekMessageW(&message, 0, 0, 0, PM_REMOVE))
+                {
+                    if (message.message == WM_QUIT)
+                    {
+                        OutputDebugString(L"Quit message reached loop.");
+                        isRunning = false;
+                    }
+                    else
+                    {
+                        TranslateMessage(&message);
+                        DispatchMessageW(&message);
+                    }
+                }
+
+                Renderer::Vec forward = Renderer::CameraTransform(scene.camera) * scene.camera.forward;
+                Renderer::Vec left = Renderer::CameraTransform(scene.camera) * scene.camera.left;
+
+                if (KeyDown[UpKey])
+                {
+                    scene.camera.pitch -= 0.01f;
+                    if (scene.camera.pitch < 0)
+                    {
+                        scene.camera.pitch += static_cast<float>(M_PI) * 2;
+                    }
+                }
+
+                if (KeyDown[DownKey])
+                {
+                    scene.camera.pitch += 0.01f;
+                    if (scene.camera.pitch > static_cast<float>(M_PI) * 2)
+                    {
+                        scene.camera.pitch -= static_cast<float>(M_PI) * 2;
+                    }
+                }
+
+                if (KeyDown[RightKey])
+                {
+                    scene.camera.yaw -= 0.01f;
+                    if (scene.camera.yaw < 0)
+                    {
+                        scene.camera.yaw += static_cast<float>(M_PI) * 2;
+                    }
+                }
+
+                if (KeyDown[LeftKey])
+                {
+                    scene.camera.yaw += 0.01f;
+                    if (scene.camera.yaw > static_cast<float>(M_PI) * 2)
+                    {
+                        scene.camera.yaw -= static_cast<float>(M_PI) * 2;
+                    }
+                }
+
+                if (KeyDown[WKey])
+                {
+                    scene.camera.position = scene.camera.position + forward * 0.1f;
+                }
+
+                if (KeyDown[AKey])
+                {
+                    scene.camera.position = scene.camera.position + left * 0.1f;
+                }
+
+                if (KeyDown[SKey])
+                {
+                    scene.camera.position = scene.camera.position - forward * 0.1f;
+                }
+
+                if (KeyDown[DKey])
+                {
+                    scene.camera.position = scene.camera.position - left * 0.1f;
+                }
+
+                // calculate light's position in view space
+                scene.light.position_view = Renderer::ViewTransform(scene.camera) * scene.light.position;
+
+                Renderer::Texture result(WindowWidth, WindowHeight);
+                renderer.Render(scene, result);
+            }
         }
-
-        ID3D12Resource* vertexBuffer = UploadDataToGPU(device, queue, pso, vertexData);
-
-        std::vector<std::uint16_t> indexData;
-        for (uint32_t i : model.indices)
-        {
-            indexData.push_back(static_cast<uint16_t>(i));
-        }
-
-        ID3D12Resource* indexBuffer = UploadDataToGPU(device, queue, pso, indexData);
-
-        for (size_t i = 0; i < model.materials.size(); i++)
-        {
-            UploadTexturesToGPU(device, rootDescriptorHeap, queue, pso, model.materials[i].textureName, static_cast<int32_t>(i));
-        }
-
-        ID3D12CommandAllocator* allocator = nullptr;
-        D3D_NOT_FAILED(device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&allocator)));
-
-        ID3D12GraphicsCommandList* commandList = nullptr;
-        D3D_NOT_FAILED(device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, allocator, nullptr, IID_PPV_ARGS(&commandList)));
-
-        commandList->SetPipelineState(pso);
-
-        //while (isRunning)
-        //{
-
-            MSG message;
-            if (PeekMessageW(&message, 0, 0, 0, PM_REMOVE))
-            {
-                if (message.message == WM_QUIT)
-                {
-                    OutputDebugString(L"Quit message reached loop.");
-                    isRunning = false;
-                }
-                else
-                {
-                    TranslateMessage(&message);
-                    DispatchMessageW(&message);
-                }
-            }
-
-            Renderer::Vec forward = cam(camera) * camera.forward;
-            Renderer::Vec left = cam(camera) * camera.left;
-
-            if (KeyDown[UpKey])
-            {
-                camera.pitch -= 0.01f;
-                if (camera.pitch < 0)
-                {
-                    camera.pitch += static_cast<float>(M_PI) * 2;
-                }
-            }
-
-            if (KeyDown[DownKey])
-            {
-                camera.pitch += 0.01f;
-                if (camera.pitch > static_cast<float>(M_PI) * 2)
-                {
-                    camera.pitch -= static_cast<float>(M_PI) * 2;
-                }
-            }
-
-            if (KeyDown[RightKey])
-            {
-                camera.yaw -= 0.01f;
-                if (camera.yaw < 0)
-                {
-                    camera.yaw += static_cast<float>(M_PI) * 2;
-                }
-            }
-
-            if (KeyDown[LeftKey])
-            {
-                camera.yaw += 0.01f;
-                if (camera.yaw > static_cast<float>(M_PI) * 2)
-                {
-                    camera.yaw -= static_cast<float>(M_PI) * 2;
-                }
-            }
-
-            if (KeyDown[WKey]) 
-            {
-                camera.position = camera.position + forward * 0.1f;
-            }
-
-            if (KeyDown[AKey])
-            {
-                camera.position = camera.position + left * 0.1f;
-            }
-
-            if (KeyDown[SKey])
-            {
-                camera.position = camera.position - forward * 0.1f;
-            }
-
-            if (KeyDown[DKey])
-            {
-                camera.position = camera.position - left * 0.1f;
-            }
-
-            // calculate light's position in view space
-            light.position_view = view(camera) * light.position;
-
-            // upload mvp matrix
-            {
-                // Build the view matrix.
-                Renderer::Matrix mvp = perspective(static_cast<float>(WindowWidth), static_cast<float>(WindowHeight)) * view(camera);
-
-                Renderer::Matrix mv = view(camera);
-
-                DirectX::XMMATRIX mvpX
-                {
-                    {mvp.m[0], mvp.m[1], mvp.m[2], mvp.m[3]},
-                    {mvp.m[4], mvp.m[5], mvp.m[6], mvp.m[7]},
-                    {mvp.m[8], mvp.m[9], mvp.m[10], mvp.m[11]},
-                    {mvp.m[12], mvp.m[13], mvp.m[14], mvp.m[15]}
-                };
-
-                DirectX::XMMATRIX mvX
-                {
-                    {mv.m[0], mv.m[1], mv.m[2], mv.m[3]},
-                    {mv.m[4], mv.m[5], mv.m[6], mv.m[7]},
-                    {mv.m[8], mv.m[9], mv.m[10], mv.m[11]},
-                    {mv.m[12], mv.m[13], mv.m[14], mv.m[15]}
-                };
-
-                DirectX::XMVECTOR lightPos = { light.position_view.x, light.position_view.y, light.position_view.z, light.position_view.w };
-
-                SetModelViewProjection(constantBuffer, mvpX, mvX, lightPos);
-            }
-
-            D3D12_VIEWPORT viewport;
-            viewport.TopLeftX = 0.0f;
-            viewport.TopLeftY = 0.0f;
-            viewport.Width = GameWidth;
-            viewport.Height = GameHeight;
-            viewport.MinDepth = 0.0f;
-            viewport.MaxDepth = 1.0f;
-
-            commandList->RSSetViewports(1, &viewport);
-
-            D3D12_RECT scissor;
-            scissor.left = 0;
-            scissor.top = 0;
-            scissor.bottom = GameHeight;
-            scissor.right = GameWidth;
-
-            commandList->RSSetScissorRects(1, &scissor);
-
-            D3D12_RESOURCE_BARRIER renderTargetBufferTransition;
-            renderTargetBufferTransition.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-            renderTargetBufferTransition.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
-
-            renderTargetBufferTransition.Transition.pResource = currentBuffer;
-            renderTargetBufferTransition.Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
-            renderTargetBufferTransition.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
-            renderTargetBufferTransition.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-
-            commandList->ResourceBarrier(1, &renderTargetBufferTransition);
-
-            FLOAT clearColor[4] = { 0.0f, 0.f, 0.f, 1.000000000f };
-            commandList->ClearRenderTargetView(currentBufferHandle, clearColor, 0, nullptr);
-            commandList->ClearDepthStencilView(depthBufferHandle, D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, 1.0f, 0, 0, nullptr);
-
-            commandList->OMSetRenderTargets(1, &currentBufferHandle, true, &depthBufferHandle);
-
-            ID3D12DescriptorHeap* descriptorHeaps[] = { rootDescriptorHeap };
-            commandList->SetDescriptorHeaps(1, descriptorHeaps);
-            commandList->SetGraphicsRootSignature(rootSignature);
-
-            D3D12_VERTEX_BUFFER_VIEW vertexBufferView;
-            vertexBufferView.BufferLocation = vertexBuffer->GetGPUVirtualAddress();
-            vertexBufferView.StrideInBytes = sizeof(XVertex);
-            vertexBufferView.SizeInBytes = sizeof(XVertex) * static_cast<UINT>(model.vertices.size());
-            commandList->IASetVertexBuffers(0, 1, &vertexBufferView);
-
-            D3D12_INDEX_BUFFER_VIEW indexBufferView;
-            indexBufferView.BufferLocation = indexBuffer->GetGPUVirtualAddress();
-            indexBufferView.Format = DXGI_FORMAT_R16_UINT;
-            indexBufferView.SizeInBytes = sizeof(std::uint16_t) * static_cast<UINT>(model.indices.size());
-            commandList->IASetIndexBuffer(&indexBufferView);
-
-            commandList->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-
-            commandList->SetGraphicsRootDescriptorTable(0, rootDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
-
-            commandList->DrawIndexedInstanced((UINT)model.indices.size(), 1, 0, 0, 0);
-
-            commandList->Close();
-
-            ID3D12CommandList* cmdsLists[1] = { commandList };
-            queue->ExecuteCommandLists(1, cmdsLists);
-
-            WaitForCommandListCompletion(device, queue);
-
-            // clean stuff
-            D3D_NOT_FAILED(allocator->Reset());
-            D3D_NOT_FAILED(commandList->Reset(allocator, pso));
-
-            Renderer::Texture result(WindowWidth, WindowHeight);
-            NOT_FAILED(DownloadTextureFromGPU(device, queue, pso, currentBuffer, result), false);
-            Renderer::Save("output2.jpg", result);
-        //}
-
-        // release heaps and render targets
-        commandList->Release();
-        allocator->Release();
-        queue->Release();
-        device->Release();
+    }
+    catch (std::exception& e)
+    {
+        std::string message(e.what());
+        std::wstring error(message.begin(), message.end());
+        DebugOut(error.c_str());
+        DebugBreak();
     }
 
     return 0;

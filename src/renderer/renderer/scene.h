@@ -7,16 +7,6 @@
 
 namespace Renderer
 {
-    struct Camera
-    {
-        Vec position;
-        float pitch = 0.0f; // around x while at 0
-        float yaw = 0.0f; // around z while at 0
-
-        Vec forward;
-        Vec left;
-    };
-
     struct Vertex
     {
         uint32_t materialId = 0;
@@ -54,10 +44,34 @@ namespace Renderer
         Color color = Color::White;
     };
 
+    struct Camera
+    {
+        Vec position;
+        float pitch = 0.0f; // around x while at 0
+        float yaw = 0.0f; // around z while at 0
+
+        Vec forward;
+        Vec left;
+    };
+
     struct Scene
     {
+        Light light;
+        Camera camera;
         std::vector<Model> models;
     };
 
     bool Load(const std::string& fileName, Scene& scene);
+
+    // In view space we are at 0 looking down the negative z axis.
+    // Near plane of the camera frustum is at -Near, far plane of the camera frustum is at -Far.
+    // As DirectX clip space z axis ranges from 0 to 1, we map -Near to 0 and -Far to 1.
+    // The coordinate system is right handed.
+    Matrix PerspectiveTransform(float width, float height);
+
+    Matrix ViewTransform(const Camera& camera);
+
+    Matrix ModelTransform(const Model& model);
+
+    Matrix CameraTransform(const Camera& camera);
 }

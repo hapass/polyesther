@@ -13,7 +13,7 @@ namespace tests
 		TEST_METHOD(LoadShouldSucceedWhenThereIsSceneFile)
 		{
 			Renderer::Scene scene;
-			bool success = Renderer::Load("scene.sce", scene);
+			bool success = Renderer::Load("tests\\scene.sce", scene);
 
 			// everything is loaded
 			Assert::IsTrue(success);

@@ -576,14 +576,17 @@
     <ClInclude Include="renderer\math.h" />
     <ClInclude Include="renderer\color.h" />
     <ClInclude Include="renderer\texture.h" />
+    <ClInclude Include="renderer\utils.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="renderer\color.cpp" />
     <ClCompile Include="renderer\math.cpp" />
+    <ClCompile Include="renderer\renderer.cpp" />
     <ClCompile Include="renderer\rendererdx12.cpp" />
     <ClCompile Include="renderer\renderersoftware.cpp" />
     <ClCompile Include="renderer\scene.cpp" />
     <ClCompile Include="renderer\texture.cpp" />
+    <ClCompile Include="renderer\utils.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

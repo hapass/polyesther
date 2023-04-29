@@ -39,6 +39,9 @@
     <ClInclude Include="renderer\renderersoftware.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="renderer\utils.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="renderer\math.cpp">
@@ -57,6 +60,12 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="renderer\texture.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="renderer\renderer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="renderer\utils.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
