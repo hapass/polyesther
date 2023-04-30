@@ -59,6 +59,68 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
     return DefWindowProc(hWnd, uMsg, wParam, lParam);
 }
 
+void HandleInput(Renderer::Scene& scene)
+{
+    Renderer::Vec forward = Renderer::CameraTransform(scene.camera) * scene.camera.forward;
+    Renderer::Vec left = Renderer::CameraTransform(scene.camera) * scene.camera.left;
+
+    if (KeyDown[UpKey])
+    {
+        scene.camera.pitch -= 0.01f;
+        if (scene.camera.pitch < 0)
+        {
+            scene.camera.pitch += static_cast<float>(M_PI) * 2;
+        }
+    }
+
+    if (KeyDown[DownKey])
+    {
+        scene.camera.pitch += 0.01f;
+        if (scene.camera.pitch > static_cast<float>(M_PI) * 2)
+        {
+            scene.camera.pitch -= static_cast<float>(M_PI) * 2;
+        }
+    }
+
+    if (KeyDown[RightKey])
+    {
+        scene.camera.yaw -= 0.01f;
+        if (scene.camera.yaw < 0)
+        {
+            scene.camera.yaw += static_cast<float>(M_PI) * 2;
+        }
+    }
+
+    if (KeyDown[LeftKey])
+    {
+        scene.camera.yaw += 0.01f;
+        if (scene.camera.yaw > static_cast<float>(M_PI) * 2)
+        {
+            scene.camera.yaw -= static_cast<float>(M_PI) * 2;
+        }
+    }
+
+    if (KeyDown[WKey])
+    {
+        scene.camera.position = scene.camera.position + forward * 0.1f;
+    }
+
+    if (KeyDown[AKey])
+    {
+        scene.camera.position = scene.camera.position + left * 0.1f;
+    }
+
+    if (KeyDown[SKey])
+    {
+        scene.camera.position = scene.camera.position - forward * 0.1f;
+    }
+
+    if (KeyDown[DKey])
+    {
+        scene.camera.position = scene.camera.position - left * 0.1f;
+    }
+}
+
 int CALLBACK WinMain(
     _In_ HINSTANCE hInstance,
     _In_opt_ HINSTANCE hPrevInstance,
@@ -101,7 +163,7 @@ int CALLBACK WinMain(
             ), 0);
 
             Renderer::Scene scene;
-            Renderer::Load("scene.sce", scene);
+            Renderer::Load("C:\\Users\\hapas\\Documents\\Code\\software_rasterizer\\assets\\scene.sce", scene);
             const Renderer::Model& model = scene.models[0];
 
             scene.camera.position.z = 2;
@@ -122,7 +184,7 @@ int CALLBACK WinMain(
                 {
                     if (message.message == WM_QUIT)
                     {
-                        OutputDebugString(L"Quit message reached loop.");
+                        LOG("Quit message reached loop.");
                         isRunning = false;
                     }
                     else
@@ -132,67 +194,7 @@ int CALLBACK WinMain(
                     }
                 }
 
-                Renderer::Vec forward = Renderer::CameraTransform(scene.camera) * scene.camera.forward;
-                Renderer::Vec left = Renderer::CameraTransform(scene.camera) * scene.camera.left;
-
-                if (KeyDown[UpKey])
-                {
-                    scene.camera.pitch -= 0.01f;
-                    if (scene.camera.pitch < 0)
-                    {
-                        scene.camera.pitch += static_cast<float>(M_PI) * 2;
-                    }
-                }
-
-                if (KeyDown[DownKey])
-                {
-                    scene.camera.pitch += 0.01f;
-                    if (scene.camera.pitch > static_cast<float>(M_PI) * 2)
-                    {
-                        scene.camera.pitch -= static_cast<float>(M_PI) * 2;
-                    }
-                }
-
-                if (KeyDown[RightKey])
-                {
-                    scene.camera.yaw -= 0.01f;
-                    if (scene.camera.yaw < 0)
-                    {
-                        scene.camera.yaw += static_cast<float>(M_PI) * 2;
-                    }
-                }
-
-                if (KeyDown[LeftKey])
-                {
-                    scene.camera.yaw += 0.01f;
-                    if (scene.camera.yaw > static_cast<float>(M_PI) * 2)
-                    {
-                        scene.camera.yaw -= static_cast<float>(M_PI) * 2;
-                    }
-                }
-
-                if (KeyDown[WKey])
-                {
-                    scene.camera.position = scene.camera.position + forward * 0.1f;
-                }
-
-                if (KeyDown[AKey])
-                {
-                    scene.camera.position = scene.camera.position + left * 0.1f;
-                }
-
-                if (KeyDown[SKey])
-                {
-                    scene.camera.position = scene.camera.position - forward * 0.1f;
-                }
-
-                if (KeyDown[DKey])
-                {
-                    scene.camera.position = scene.camera.position - left * 0.1f;
-                }
-
-                // calculate light's position in view space
-                scene.light.position_view = Renderer::ViewTransform(scene.camera) * scene.light.position;
+                HandleInput(scene);
 
                 Renderer::Texture result(WindowWidth, WindowHeight);
                 renderer.Render(scene, result);

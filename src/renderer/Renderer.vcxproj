@@ -581,7 +581,6 @@
   <ItemGroup>
     <ClCompile Include="renderer\color.cpp" />
     <ClCompile Include="renderer\math.cpp" />
-    <ClCompile Include="renderer\renderer.cpp" />
     <ClCompile Include="renderer\rendererdx12.cpp" />
     <ClCompile Include="renderer\renderersoftware.cpp" />
     <ClCompile Include="renderer\scene.cpp" />

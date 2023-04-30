@@ -771,7 +771,9 @@ namespace Renderer
                     {mv.m[12], mv.m[13], mv.m[14], mv.m[15]}
                 };
 
-                DirectX::XMVECTOR lightPos = { scene.light.position_view.x, scene.light.position_view.y, scene.light.position_view.z, scene.light.position_view.w };
+                // calculate light's position in view space
+                Vec position_view = ViewTransform(scene.camera) * scene.light.position;
+                DirectX::XMVECTOR lightPos = { position_view.x, position_view.y, position_view.z, position_view.w };
 
                 SetModelViewProjection(mvpX, mvX, lightPos);
             }

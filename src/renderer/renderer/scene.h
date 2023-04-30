@@ -36,7 +36,6 @@ namespace Renderer
     struct Light
     {
         Vec position;
-        Vec position_view;
 
         float ambientStrength = 0.1f;
         float specularStrength = 0.5f;
