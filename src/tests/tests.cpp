@@ -2,18 +2,31 @@
 #include "CppUnitTest.h"
 
 #include <renderer/scene.h>
+#include <renderer/utils.h>
 
 using namespace Microsoft::VisualStudio::CppUnitTestFramework;
 
-namespace tests
+namespace Tests
 {
+	TEST_MODULE_INITIALIZE(TestsInitialize)
+	{
+		Utils::DebugUtils::GetInstance().AddOutput([](const std::string& message) {
+			Logger::WriteMessage(message.c_str());
+			});
+	}
+
+	TEST_MODULE_CLEANUP(TestsCleanup)
+	{
+		Utils::DebugUtils::GetInstance().RemoveOutputs();
+	}
+
 	TEST_CLASS(Scene)
 	{
 	public:
 		TEST_METHOD(LoadShouldSucceedWhenThereIsSceneFile)
 		{
 			Renderer::Scene scene;
-			bool success = Renderer::Load("tests\\scene.sce", scene);
+			bool success = Renderer::Load("C:\\Users\\hapas\\Documents\\Code\\software_rasterizer\\assets\\tests\\scene.sce", scene);
 
 			// everything is loaded
 			Assert::IsTrue(success);

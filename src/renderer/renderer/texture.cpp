@@ -67,6 +67,6 @@ namespace Renderer
 
     bool Save(const std::string& path, const Texture& texture)
     {
-        return static_cast<bool>(stbi_write_jpg(path.c_str(), texture.GetWidth(), texture.GetHeight(), Texture::BytesPerColor, texture.GetBuffer(), 100));
+        return static_cast<bool>(stbi_write_jpg(path.c_str(), static_cast<int>(texture.GetWidth()), static_cast<int>(texture.GetHeight()), Texture::BytesPerColor, texture.GetBuffer(), 100));
     }
 }

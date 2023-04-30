@@ -199,11 +199,8 @@ int CALLBACK WinMain(
             }
         }
     }
-    catch (std::exception& e)
+    catch (std::exception&)
     {
-        std::string message(e.what());
-        std::wstring error(message.begin(), message.end());
-        DebugOut(error.c_str());
         DebugBreak();
     }
 

@@ -16,8 +16,6 @@ namespace Renderer
 {
     namespace
     {
-        const char* RootFolder = "C:\\Users\\hapas\\Documents\\Code\\software_rasterizer\\assets\\";
-
         struct Context
         {
             std::map<std::string, uint32_t> materials;
@@ -26,6 +24,19 @@ namespace Renderer
             std::vector<Vec> normals;
             uint32_t currentMaterialId = 0;
         };
+
+        std::string ReplaceFileNameInFullPath(const std::string& fullFileName, const std::string& newFileName)
+        {
+            std::string result(fullFileName);
+            size_t pos = result.rfind('\\');
+            if (pos == std::string::npos || pos == result.size() - 1)
+            {
+                return std::string();
+            }
+
+            result.replace(pos + 1, std::string::npos, newFileName);
+            return result;
+        }
 
         bool Read(std::stringstream& lineStream, uint32_t elements, float def, Vec& vec)
         {
@@ -41,7 +52,7 @@ namespace Renderer
                     }
                     else
                     {
-                        return false;
+                        REPORT_ERROR();
                     }
                 }
                 else
@@ -71,7 +82,7 @@ namespace Renderer
                 }
                 else
                 {
-                    return false;
+                    REPORT_ERROR();
                 }
 
                 faceDescriptionStream.ignore(1);
@@ -83,7 +94,7 @@ namespace Renderer
                 }
                 else
                 {
-                    return false;
+                    REPORT_ERROR();
                 }
 
                 faceDescriptionStream.ignore(1);
@@ -95,7 +106,7 @@ namespace Renderer
                 }
                 else
                 {
-                    return false;
+                    REPORT_ERROR();
                 }
 
                 vert.materialId = loadContext.currentMaterialId;
@@ -105,12 +116,12 @@ namespace Renderer
             return true;
         }
 
-        bool Load(const std::string& fileName, std::vector<Material>& materials)
+        bool Load(const std::string& fullFileName, std::vector<Material>& materials)
         {
             const char* TYPE_MATERIAL= "newmtl";
             const char* TYPE_TEXTURE_FILENAME = "map_Kd";
 
-            std::fstream file(RootFolder + fileName);
+            std::fstream file(fullFileName);
             std::string line;
 
             std::string currentMaterialName;
@@ -130,7 +141,7 @@ namespace Renderer
                         }
                         else
                         {
-                            return false;
+                            REPORT_ERROR();
                         }
                     }
                     else if (primitiveType == TYPE_TEXTURE_FILENAME)
@@ -145,17 +156,16 @@ namespace Renderer
                         }
                         else
                         {
-                            
-                            return false;
+                            REPORT_ERROR();
                         }
                     }
                 }
             }
 
-            return file.is_open();
+            REPORT_ERROR_IF_FALSE(file.is_open());
         }
 
-        bool Load(const std::string& fileName, Model& model)
+        bool Load(const std::string& fullFileName, Model& model)
         {
             const char* TYPE_VERTEX = "v";
             const char* TYPE_NORMAL = "vn";
@@ -168,7 +178,7 @@ namespace Renderer
 
             std::map<Vertex, uint32_t> vertexIndices;
 
-            std::fstream file(RootFolder + fileName);
+            std::fstream file(fullFileName);
             std::string line;
 
             while (std::getline(file, line))
@@ -186,7 +196,7 @@ namespace Renderer
                         }
                         else
                         {
-                            return false;
+                            REPORT_ERROR();
                         }
                     }
                     else if (primitiveType == TYPE_NORMAL)
@@ -198,7 +208,7 @@ namespace Renderer
                         }
                         else
                         {
-                            return false;
+                            REPORT_ERROR();
                         }
                     }
                     else if (primitiveType == TYPE_TEXTURE_COORDS)
@@ -210,7 +220,7 @@ namespace Renderer
                         }
                         else
                         {
-                            return false;
+                            REPORT_ERROR();
                         }
                     }
                     else if (primitiveType == TYPE_FACE)
@@ -231,15 +241,15 @@ namespace Renderer
                         }
                         else
                         {
-                            return false;
+                            REPORT_ERROR();
                         }
                     }
                     else if (primitiveType == TYPE_MATERIAL_LIB)
                     {
-                        std::string fileName;
-                        if (lineStream >> fileName)
+                        std::string materialFileName;
+                        if (lineStream >> materialFileName)
                         {
-                            if (Load(fileName, model.materials))
+                            if (Load(ReplaceFileNameInFullPath(fullFileName, materialFileName), model.materials))
                             {
                                 for (size_t i = 0; i < model.materials.size(); i++)
                                 {
@@ -248,12 +258,12 @@ namespace Renderer
                             }
                             else
                             {
-                                return false;
+                                REPORT_ERROR();
                             }
                         }
                         else
                         {
-                            return false;
+                            REPORT_ERROR();
                         }
                     }
                     else if (primitiveType == TYPE_MATERIAL)
@@ -265,13 +275,13 @@ namespace Renderer
                         }
                         else
                         {
-                            return false;
+                            REPORT_ERROR();
                         }
                     }
                 }
             }
-
-            return file.is_open();
+            
+            REPORT_ERROR_IF_FALSE(file.is_open());
         }
     }
 
@@ -286,9 +296,9 @@ namespace Renderer
         return !(lhs < rhs) && !(rhs < lhs);
     }
 
-    bool Load(const std::string& fileName, Scene& scene)
+    bool Load(const std::string& fullFileName, Scene& scene)
     {
-        std::fstream file(RootFolder + fileName);
+        std::fstream file(fullFileName);
         std::string line;
 
         while (std::getline(file, line))
@@ -301,27 +311,27 @@ namespace Renderer
                 std::string modelFileName;
                 if (lineStream >> modelFileName)
                 {
-                    if (Load(modelFileName, model))
+                    if (Load(ReplaceFileNameInFullPath(fullFileName, modelFileName), model))
                     {
                         scene.models.push_back(std::move(model));
                     }
                     else
                     {
-                        return false;
+                        REPORT_ERROR();
                     }
                 }
                 else
                 {
-                    return false;
+                    REPORT_ERROR();
                 }
             }
             else
             {
-                return false;
+                REPORT_ERROR();
             }
         }
 
-        return file.is_open();
+        REPORT_ERROR_IF_FALSE(file.is_open());
     }
 
     Matrix PerspectiveTransform(float width, float height)

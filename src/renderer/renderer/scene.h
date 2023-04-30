@@ -61,7 +61,7 @@ namespace Renderer
         std::vector<Model> models;
     };
 
-    bool Load(const std::string& fileName, Scene& scene);
+    bool Load(const std::string& fullFileName, Scene& scene);
 
     // In view space we are at 0 looking down the negative z axis.
     // Near plane of the camera frustum is at -Near, far plane of the camera frustum is at -Far.
