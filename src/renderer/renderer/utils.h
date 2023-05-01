@@ -40,7 +40,7 @@ namespace Utils
 
         void LogError(long error)
         {
-            Log(std::stringstream() << "Error: " << "0x" << std::hex << std::setw(8) << std::setfill('0') << error);
+            Log(std::stringstream() << "Error: " << "0x" << std::hex << std::setw(8) << std::setfill('0') << error << "\n");
         }
 
     private:
@@ -66,7 +66,7 @@ namespace Utils
        throw std::exception(); \
    } \
 
-#define LOG(message) Utils::DebugUtils::GetInstance().Log(std::stringstream() << "File: " << __FILE__ << "|Line: " << __LINE__ << "|" << message)
+#define LOG(message) Utils::DebugUtils::GetInstance().Log(std::stringstream() << "File: " << __FILE__ << "|Line: " << __LINE__ << "|" << message << "\n")
 
 #define REPORT_ERROR() LOG("Error."); return false
 

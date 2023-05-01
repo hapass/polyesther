@@ -127,6 +127,10 @@ int CALLBACK WinMain(
 {
     bool isRunning = true;
 
+    Utils::DebugUtils::GetInstance().AddOutput([](const std::string& message) {
+        OutputDebugStringA(message.c_str());
+    });
+
     WNDCLASS MainWindowClass = {};
     MainWindowClass.lpfnWndProc = MainWindowProc;
     MainWindowClass.hInstance = hInstance;
@@ -213,7 +217,7 @@ int CALLBACK WinMain(
 
                 for (size_t i = 0; i < result.GetSize(); i++)
                 {
-                    BackBuffer[i] = result.GetColorAt(i).rgba;
+                    BackBuffer[result.GetWidth() * (result.GetHeight() - 1 - (i / result.GetWidth())) + i % result.GetWidth()] = result.GetColorAt(i).rgba;
                 }
 
                 // swap buffers
