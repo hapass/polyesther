@@ -1,6 +1,7 @@
 #pragma once
 
 #include <renderer/texture.h>
+#include <renderer/color.h>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include <renderer/thirdparty/stb_image.h>
@@ -43,6 +44,11 @@ namespace Renderer
     size_t Texture::GetHeight() const
     {
         return height;
+    }
+
+    Color Texture::GetColorAt(size_t index) const
+    {
+        return Color(data.at(index * BytesPerColor), data.at(index * BytesPerColor + 1), data.at(index * BytesPerColor + 2));
     }
 
     size_t Texture::GetSize() const

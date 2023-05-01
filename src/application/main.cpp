@@ -11,8 +11,6 @@
 
 static int32_t WindowWidth = 800;
 static int32_t WindowHeight = 600;
-static BITMAPINFO BackBufferInfo;
-static uint32_t* BackBuffer;
 
 static bool KeyDown[256];
 
@@ -162,6 +160,20 @@ int CALLBACK WinMain(
                 0
             ), 0);
 
+            HDC screenContext;
+            NOT_FAILED(screenContext = GetDC(window), 0);
+
+            BITMAPINFO BackBufferInfo;
+            BackBufferInfo.bmiHeader.biSize = sizeof(BackBufferInfo.bmiHeader);
+            BackBufferInfo.bmiHeader.biWidth = WindowWidth;
+            BackBufferInfo.bmiHeader.biHeight = WindowHeight;
+            BackBufferInfo.bmiHeader.biPlanes = 1;
+            BackBufferInfo.bmiHeader.biBitCount = sizeof(uint32_t) * CHAR_BIT;
+            BackBufferInfo.bmiHeader.biCompression = BI_RGB;
+
+            uint32_t* BackBuffer = nullptr;
+            NOT_FAILED(BackBuffer = (uint32_t*)VirtualAlloc(0, WindowWidth * WindowHeight * sizeof(uint32_t), MEM_COMMIT, PAGE_READWRITE), 0);
+
             Renderer::Scene scene;
             Renderer::Load("C:\\Users\\hapas\\Documents\\Code\\software_rasterizer\\assets\\scene.sce", scene);
             const Renderer::Model& model = scene.models[0];
@@ -198,6 +210,28 @@ int CALLBACK WinMain(
 
                 Renderer::Texture result(WindowWidth, WindowHeight);
                 renderer.Render(scene, result);
+
+                for (size_t i = 0; i < result.GetSize(); i++)
+                {
+                    BackBuffer[i] = result.GetColorAt(i).rgba;
+                }
+
+                // swap buffers
+                StretchDIBits(
+                    screenContext,
+                    0,
+                    0,
+                    WindowWidth,
+                    WindowHeight,
+                    0,
+                    0,
+                    WindowWidth,
+                    WindowHeight,
+                    BackBuffer,
+                    &BackBufferInfo,
+                    DIB_RGB_COLORS,
+                    SRCCOPY
+                );
             }
         }
     }

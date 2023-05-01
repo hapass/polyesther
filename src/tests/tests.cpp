@@ -10,9 +10,10 @@ namespace Tests
 {
 	TEST_MODULE_INITIALIZE(TestsInitialize)
 	{
-		Utils::DebugUtils::GetInstance().AddOutput([](const std::string& message) {
+		Utils::DebugUtils::GetInstance().AddOutput([](const std::string& message)
+		{
 			Logger::WriteMessage(message.c_str());
-			});
+		});
 	}
 
 	TEST_MODULE_CLEANUP(TestsCleanup)

@@ -287,8 +287,8 @@ namespace Renderer
 
     bool operator<(const Vertex& lhs, const Vertex& rhs)
     {
-        return std::tie(lhs.materialId, lhs.color.rgb_vec, lhs.normal, lhs.position, lhs.textureCoord) <
-            std::tie(rhs.materialId, rhs.color.rgb_vec, rhs.normal, rhs.position, rhs.textureCoord);
+        return std::tie(lhs.materialId, lhs.color.rgba_vec, lhs.normal, lhs.position, lhs.textureCoord) <
+            std::tie(rhs.materialId, rhs.color.rgba_vec, rhs.normal, rhs.position, rhs.textureCoord);
     }
 
     bool operator==(const Vertex& lhs, const Vertex& rhs)

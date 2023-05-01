@@ -6,6 +6,8 @@
 
 namespace Renderer
 {
+    struct Color;
+
     struct Texture
     {
         constexpr static size_t BytesPerColor = 4;
@@ -18,6 +20,8 @@ namespace Renderer
         size_t GetByteSize() const;
         size_t GetWidth() const;
         size_t GetHeight() const;
+
+        Color GetColorAt(size_t index) const;
         size_t GetSize() const;
 
     private:
