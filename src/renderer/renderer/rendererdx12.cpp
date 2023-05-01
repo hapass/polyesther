@@ -791,8 +791,8 @@ namespace Renderer
             D3D12_RECT scissor;
             scissor.left = 0;
             scissor.top = 0;
-            scissor.bottom = static_cast<LONG>(texture.GetWidth());
-            scissor.right = static_cast<LONG>(texture.GetHeight());
+            scissor.right = static_cast<LONG>(texture.GetWidth());
+            scissor.bottom = static_cast<LONG>(texture.GetHeight());
 
             mainCommandList->RSSetScissorRects(1, &scissor);
 
