@@ -7,12 +7,203 @@
 
 namespace Renderer
 {
+    struct Queue
+    {
+        Queue(ID3D12Device* device)
+        {
+            D3D12_COMMAND_QUEUE_DESC queueDesc = {};
+            queueDesc.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
+            queueDesc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
+            D3D_NOT_FAILED(device->CreateCommandQueue(&queueDesc, IID_PPV_ARGS(&queue)));
+
+            D3D_NOT_FAILED(device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&allocator)));
+            D3D_NOT_FAILED(device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, allocator, nullptr, IID_PPV_ARGS(&commandList)));
+
+            D3D_NOT_FAILED(device->CreateFence(currentFenceValue, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fence)));
+            NOT_FAILED(fenceEventHandle = CreateEventExW(nullptr, nullptr, CREATE_EVENT_MANUAL_RESET, EVENT_ALL_ACCESS), 0);
+        }
+
+        Queue(const Queue& other) = delete;
+        Queue(Queue && other) noexcept = delete;
+        Queue& operator=(const Queue& other) = delete;
+        Queue& operator=(Queue&& other) noexcept = delete;
+
+        ~Queue()
+        {
+            fence->Release();
+            commandList->Release();
+            allocator->Release();
+            queue->Release();
+        }
+
+        ID3D12GraphicsCommandList* GetList()
+        {
+            return commandList;
+        }
+
+        void AddBarrierToList(ID3D12Resource* resource, D3D12_RESOURCE_STATES from, D3D12_RESOURCE_STATES to)
+        {
+            D3D12_RESOURCE_BARRIER barrier;
+            barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+            barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+            barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+
+            barrier.Transition.StateBefore = from;
+            barrier.Transition.StateAfter = to;
+            barrier.Transition.pResource = resource;
+
+            commandList->ResourceBarrier(1, &barrier);
+        }
+
+        void Execute(ID3D12PipelineState* pso)
+        {
+            commandList->Close();
+
+            ID3D12CommandList* cmdsLists[1] = { commandList };
+            queue->ExecuteCommandLists(1, cmdsLists);
+
+            WaitForCommandListCompletion();
+
+            D3D_NOT_FAILED(allocator->Reset());
+            D3D_NOT_FAILED(commandList->Reset(allocator, pso));
+        }
+
+    private:
+        void WaitForCommandListCompletion()
+        {
+            currentFenceValue++;
+            queue->Signal(fence, currentFenceValue);
+
+            if (fence->GetCompletedValue() != currentFenceValue)
+            {
+                D3D_NOT_FAILED(fence->SetEventOnCompletion(currentFenceValue, fenceEventHandle));
+                WaitForSingleObject(fenceEventHandle, INFINITE);
+                ResetEvent(fenceEventHandle);
+            }
+        }
+
+        ID3D12CommandAllocator* allocator = nullptr;
+        ID3D12GraphicsCommandList* commandList = nullptr;
+        ID3D12CommandQueue* queue = nullptr;
+        ID3D12Fence* fence = nullptr;
+
+        UINT64 currentFenceValue = 0;
+        HANDLE fenceEventHandle = 0;
+    };
+
     struct RendererDX12Context
     {
         RendererDX12Context(const Scene& scene, const Texture& texture)
             : scene(scene)
             , texture(texture)
         {
+            const Model& model = scene.models[0];
+
+            ID3D12Debug* debugController = nullptr;
+            D3D_NOT_FAILED(D3D12GetDebugInterface(IID_PPV_ARGS(&debugController)));
+            debugController->EnableDebugLayer();
+            debugController->Release();
+
+            D3D_NOT_FAILED(D3D12CreateDevice(NULL, D3D_FEATURE_LEVEL_12_1, IID_PPV_ARGS(&device)));
+
+            // rendering
+            const UINT numberOfConstantStructs = UINT(1);
+            const UINT numberOfTextures = UINT(model.materials.size());
+
+            rootDescriptorHeap = CreateRootDescriptorHeap(numberOfConstantStructs + numberOfTextures);
+
+            // Constant buffer
+            D3D12_RESOURCE_DESC uploadBufferDescription;
+            uploadBufferDescription.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+            uploadBufferDescription.Alignment = 0;
+            uploadBufferDescription.Width = AlignBytes<Constants>();
+            uploadBufferDescription.Height = 1;
+            uploadBufferDescription.DepthOrArraySize = 1;
+            uploadBufferDescription.MipLevels = 1;
+            uploadBufferDescription.Format = DXGI_FORMAT_UNKNOWN;
+
+            uploadBufferDescription.SampleDesc.Count = 1;
+            uploadBufferDescription.SampleDesc.Quality = 0;
+
+            uploadBufferDescription.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+            uploadBufferDescription.Flags = D3D12_RESOURCE_FLAG_NONE;
+
+            D3D12_HEAP_PROPERTIES uploadHeapProperties = device->GetCustomHeapProperties(0, D3D12_HEAP_TYPE_UPLOAD);
+            D3D_NOT_FAILED(device->CreateCommittedResource(&uploadHeapProperties, D3D12_HEAP_FLAG_NONE, &uploadBufferDescription, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&constantBuffer)));
+
+            D3D12_CONSTANT_BUFFER_VIEW_DESC constantBufferViewDescription;
+            constantBufferViewDescription.BufferLocation = constantBuffer->GetGPUVirtualAddress();
+            constantBufferViewDescription.SizeInBytes = static_cast<UINT>(uploadBufferDescription.Width);
+
+            device->CreateConstantBufferView(&constantBufferViewDescription, rootDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
+
+            // root signature
+            rootSignature = CreateRootSignature(numberOfConstantStructs, numberOfTextures);
+
+            // pso
+            pso = CreatePSO(); // todo: keep arguments? it seems to be easier when the state is not shared at all
+
+            // queue
+            queue = std::make_unique<Queue>(device);
+            queue->GetList()->SetPipelineState(pso);
+
+            // depth
+            depthBufferHandle = CreateDepthBuffer(texture.GetWidth(), texture.GetHeight());
+
+            // render target
+            ID3D12DescriptorHeap* renderTargetDescriptorHeap = CreateRTVDescriptorHeap();
+
+            D3D12_RESOURCE_DESC textureDesc = {};
+            textureDesc.MipLevels = 1;
+            textureDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+            textureDesc.Width = texture.GetWidth();
+            textureDesc.Height = static_cast<UINT>(texture.GetHeight());
+            textureDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+            textureDesc.DepthOrArraySize = 1;
+            textureDesc.SampleDesc.Count = 1;
+            textureDesc.SampleDesc.Quality = 0;
+            textureDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+
+            D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint = {};
+            UINT numRows = 0;
+            UINT64 rowSizeInBytes = 0;
+            UINT64 totalBytes = 0;
+            device->GetCopyableFootprints(&textureDesc, 0, 1, 0, &footprint, &numRows, &rowSizeInBytes, &totalBytes);
+
+            D3D12_HEAP_PROPERTIES defaultProperties = device->GetCustomHeapProperties(0, D3D12_HEAP_TYPE_DEFAULT);
+            D3D_NOT_FAILED(device->CreateCommittedResource(&defaultProperties, D3D12_HEAP_FLAG_NONE, &textureDesc, D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&currentBuffer)));
+
+            currentBufferHandle = { SIZE_T(INT64(renderTargetDescriptorHeap->GetCPUDescriptorHandleForHeapStart().ptr)) };
+            device->CreateRenderTargetView(currentBuffer, nullptr, currentBufferHandle);
+
+            // upload static geometry
+            std::vector<XVertex> vertexData;
+            for (const Vertex& vert : model.vertices)
+            {
+                vertexData.push_back(
+                    XVertex({
+                        DirectX::XMFLOAT3(vert.position.x, vert.position.y, vert.position.z),
+                        DirectX::XMFLOAT2(vert.textureCoord.x, vert.textureCoord.y),
+                        DirectX::XMFLOAT3(vert.normal.x, vert.normal.y, vert.normal.z),
+                        UINT(vert.materialId)
+                        })
+                );
+            }
+
+            vertexBufferView = UploadDataToGPU<XVertex, D3D12_VERTEX_BUFFER_VIEW>(vertexData);
+
+            std::vector<std::uint16_t> indexData;
+            for (uint32_t i : model.indices)
+            {
+                indexData.push_back(static_cast<uint16_t>(i));
+            }
+
+            indexBufferView = UploadDataToGPU<uint16_t, D3D12_INDEX_BUFFER_VIEW>(indexData);
+
+            for (size_t i = 0; i < model.materials.size(); i++)
+            {
+                UploadTexturesToGPU(model.materials[i].textureName, static_cast<int32_t>(i));
+            }
         }
 
         struct Constants
@@ -63,29 +254,6 @@ namespace Renderer
             constantBuffer->Map(0, nullptr, (void**)&mappedData);
             memcpy(mappedData, &constantsStruct, sizeof(Constants));
             constantBuffer->Unmap(0, nullptr);
-        }
-
-        void WaitForCommandListCompletion()
-        {
-            static UINT64 currentFenceValue = 0;
-            static ID3D12Fence* fence = nullptr;
-            static HANDLE fenceEventHandle = 0;
-
-            if (fence == nullptr)
-            {
-                D3D_NOT_FAILED(device->CreateFence(currentFenceValue, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fence)));
-                NOT_FAILED(fenceEventHandle = CreateEventExW(nullptr, nullptr, CREATE_EVENT_MANUAL_RESET, EVENT_ALL_ACCESS), 0);
-            }
-
-            currentFenceValue++;
-            queue->Signal(fence, currentFenceValue);
-
-            if (fence->GetCompletedValue() != currentFenceValue)
-            {
-                D3D_NOT_FAILED(fence->SetEventOnCompletion(currentFenceValue, fenceEventHandle));
-                WaitForSingleObject(fenceEventHandle, INFINITE);
-                ResetEvent(fenceEventHandle);
-            }
         }
 
         ID3D12RootSignature* CreateRootSignature(UINT numberOfConstantStructs, UINT numberOfTextures)
@@ -318,33 +486,9 @@ namespace Renderer
 
             D3D12_CPU_DESCRIPTOR_HANDLE resultHandle(depthStencilViewHeap->GetCPUDescriptorHandleForHeapStart());
             device->CreateDepthStencilView(depthStencilBuffer, nullptr, resultHandle);
+            queue->AddBarrierToList(depthStencilBuffer, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_DEPTH_WRITE);
 
-            ID3D12CommandAllocator* allocator = nullptr;
-            D3D_NOT_FAILED(device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&allocator)));
-
-            ID3D12GraphicsCommandList* commandList = nullptr;
-            D3D_NOT_FAILED(device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, allocator, nullptr, IID_PPV_ARGS(&commandList)));
-
-            D3D12_RESOURCE_BARRIER depthBufferWriteTransition;
-            depthBufferWriteTransition.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-            depthBufferWriteTransition.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
-
-            depthBufferWriteTransition.Transition.pResource = depthStencilBuffer;
-            depthBufferWriteTransition.Transition.StateBefore = D3D12_RESOURCE_STATE_COMMON;
-            depthBufferWriteTransition.Transition.StateAfter = D3D12_RESOURCE_STATE_DEPTH_WRITE;
-            depthBufferWriteTransition.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-
-            commandList->ResourceBarrier(1, &depthBufferWriteTransition);
-
-            commandList->Close();
-
-            ID3D12CommandList* cmdsLists[1] = { commandList };
-            queue->ExecuteCommandLists(1, cmdsLists);
-
-            WaitForCommandListCompletion();
-
-            D3D_NOT_FAILED(allocator->Reset());
-            D3D_NOT_FAILED(commandList->Reset(allocator, pso));
+            queue->Execute(pso);
 
             return resultHandle;
         }
@@ -394,36 +538,14 @@ namespace Renderer
             memcpy(mappedData, data.data(), data.size() * sizeof(T));
             dataUploadBuffer->Unmap(0, nullptr);
 
-            ID3D12CommandAllocator* allocator = nullptr;
-            D3D_NOT_FAILED(device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&allocator)));
-
-            ID3D12GraphicsCommandList* commandList = nullptr;
-            D3D_NOT_FAILED(device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, allocator, nullptr, IID_PPV_ARGS(&commandList)));
-
             D3D12_HEAP_PROPERTIES defaultHeapProperties = device->GetCustomHeapProperties(0, D3D12_HEAP_TYPE_DEFAULT);
 
             ID3D12Resource* dataBuffer = nullptr;
             D3D_NOT_FAILED(device->CreateCommittedResource(&defaultHeapProperties, D3D12_HEAP_FLAG_NONE, &dataBufferDescription, D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&dataBuffer)));
-            commandList->CopyBufferRegion(dataBuffer, 0, dataUploadBuffer, 0, data.size() * sizeof(T));
-
-            D3D12_RESOURCE_BARRIER genericReadBufferTransition;
-            genericReadBufferTransition.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-            genericReadBufferTransition.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
-            genericReadBufferTransition.Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
-            genericReadBufferTransition.Transition.StateAfter = D3D12_RESOURCE_STATE_GENERIC_READ;
-            genericReadBufferTransition.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-            genericReadBufferTransition.Transition.pResource = dataBuffer;
-            commandList->ResourceBarrier(1, &genericReadBufferTransition);
-
-            commandList->Close();
-
-            ID3D12CommandList* cmdsLists[1] = { commandList };
-            queue->ExecuteCommandLists(1, cmdsLists);
-
-            WaitForCommandListCompletion();
-
-            D3D_NOT_FAILED(allocator->Reset());
-            D3D_NOT_FAILED(commandList->Reset(allocator, pso));
+            
+            queue->GetList()->CopyBufferRegion(dataBuffer, 0, dataUploadBuffer, 0, data.size() * sizeof(T));
+            queue->AddBarrierToList(dataBuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_GENERIC_READ);
+            queue->Execute(pso);
 
             R bufferView;
             bufferView.BufferLocation = dataBuffer->GetGPUVirtualAddress();
@@ -496,31 +618,10 @@ namespace Renderer
             src.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
             src.PlacedFootprint = footprint;
 
-            D3D12_RESOURCE_BARRIER genericReadBufferTransition;
-            genericReadBufferTransition.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-            genericReadBufferTransition.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
-            genericReadBufferTransition.Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
-            genericReadBufferTransition.Transition.StateAfter = D3D12_RESOURCE_STATE_GENERIC_READ;
-            genericReadBufferTransition.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-            genericReadBufferTransition.Transition.pResource = dataBuffer;
-
-            ID3D12CommandAllocator* allocator = nullptr;
-            D3D_NOT_FAILED(device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&allocator)));
-
-            ID3D12GraphicsCommandList* commandList = nullptr;
-            D3D_NOT_FAILED(device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, allocator, nullptr, IID_PPV_ARGS(&commandList)));
-
-            commandList->CopyTextureRegion(&dest, 0, 0, 0, &src, nullptr);
-            commandList->ResourceBarrier(1, &genericReadBufferTransition);
-            commandList->Close();
-
-            ID3D12CommandList* cmdsLists[1] = { commandList };
-            queue->ExecuteCommandLists(1, cmdsLists);
-
-            WaitForCommandListCompletion();
-
-            D3D_NOT_FAILED(allocator->Reset());
-            D3D_NOT_FAILED(commandList->Reset(allocator, pso));
+            queue->GetList()->CopyTextureRegion(&dest, 0, 0, 0, &src, nullptr);
+            queue->AddBarrierToList(dataBuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_GENERIC_READ);
+            
+            queue->Execute(pso);
 
             // Describe and create a SRV for the texture.
             D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
@@ -579,40 +680,11 @@ namespace Renderer
             src.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
             src.SubresourceIndex = 0;
 
-            D3D12_RESOURCE_BARRIER rtvBufferTransition;
-            rtvBufferTransition.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-            rtvBufferTransition.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
-            rtvBufferTransition.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
-            rtvBufferTransition.Transition.StateAfter = D3D12_RESOURCE_STATE_COPY_SOURCE;
-            rtvBufferTransition.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-            rtvBufferTransition.Transition.pResource = dataBuffer;
+            queue->AddBarrierToList(dataBuffer, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_COPY_SOURCE);
+            queue->GetList()->CopyTextureRegion(&dest, 0, 0, 0, &src, nullptr);
+            queue->AddBarrierToList(dataBuffer, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET);
 
-            D3D12_RESOURCE_BARRIER rtvBufferTransitionBack;
-            rtvBufferTransitionBack.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-            rtvBufferTransitionBack.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
-            rtvBufferTransitionBack.Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_SOURCE;
-            rtvBufferTransitionBack.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
-            rtvBufferTransitionBack.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-            rtvBufferTransitionBack.Transition.pResource = dataBuffer;
-
-            ID3D12CommandAllocator* allocator = nullptr;
-            D3D_NOT_FAILED(device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&allocator)));
-
-            ID3D12GraphicsCommandList* commandList = nullptr;
-            D3D_NOT_FAILED(device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, allocator, nullptr, IID_PPV_ARGS(&commandList)));
-
-            commandList->ResourceBarrier(1, &rtvBufferTransition);
-            commandList->CopyTextureRegion(&dest, 0, 0, 0, &src, nullptr);
-            commandList->ResourceBarrier(1, &rtvBufferTransitionBack);
-            commandList->Close();
-
-            ID3D12CommandList* cmdsLists[1] = { commandList };
-            queue->ExecuteCommandLists(1, cmdsLists);
-
-            WaitForCommandListCompletion();
-
-            D3D_NOT_FAILED(allocator->Reset());
-            D3D_NOT_FAILED(commandList->Reset(allocator, pso));
+            queue->Execute(pso);
 
             // copy from readback buffer to cpu
             BYTE* mappedData = nullptr;
@@ -623,125 +695,6 @@ namespace Renderer
                 memcpy(texture.GetBuffer() + rowSizeInBytes * i, mappedData + footprint.Footprint.RowPitch * i, rowSizeInBytes);
             }
             readbackBuffer->Unmap(0, nullptr);
-
-            return true;
-        }
-
-        bool Initialize()
-        {
-            const Model& model = scene.models[0];
-
-            ID3D12Debug* debugController = nullptr;
-            D3D_NOT_FAILED(D3D12GetDebugInterface(IID_PPV_ARGS(&debugController)));
-            debugController->EnableDebugLayer();
-            debugController->Release();
-
-            D3D_NOT_FAILED(D3D12CreateDevice(NULL, D3D_FEATURE_LEVEL_12_1, IID_PPV_ARGS(&device)));
-
-            D3D12_COMMAND_QUEUE_DESC queueDesc = {};
-            queueDesc.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
-            queueDesc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
-            D3D_NOT_FAILED(device->CreateCommandQueue(&queueDesc, IID_PPV_ARGS(&queue)));
-
-            // rendering
-            const UINT numberOfConstantStructs = UINT(1);
-            const UINT numberOfTextures = UINT(model.materials.size());
-
-            rootDescriptorHeap = CreateRootDescriptorHeap(numberOfConstantStructs + numberOfTextures);
-
-            // Constant buffer
-            D3D12_RESOURCE_DESC uploadBufferDescription;
-            uploadBufferDescription.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
-            uploadBufferDescription.Alignment = 0;
-            uploadBufferDescription.Width = AlignBytes<Constants>();
-            uploadBufferDescription.Height = 1;
-            uploadBufferDescription.DepthOrArraySize = 1;
-            uploadBufferDescription.MipLevels = 1;
-            uploadBufferDescription.Format = DXGI_FORMAT_UNKNOWN;
-
-            uploadBufferDescription.SampleDesc.Count = 1;
-            uploadBufferDescription.SampleDesc.Quality = 0;
-
-            uploadBufferDescription.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
-            uploadBufferDescription.Flags = D3D12_RESOURCE_FLAG_NONE;
-
-            D3D12_HEAP_PROPERTIES uploadHeapProperties = device->GetCustomHeapProperties(0, D3D12_HEAP_TYPE_UPLOAD);
-            D3D_NOT_FAILED(device->CreateCommittedResource(&uploadHeapProperties, D3D12_HEAP_FLAG_NONE, &uploadBufferDescription, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&constantBuffer)));
-
-            D3D12_CONSTANT_BUFFER_VIEW_DESC constantBufferViewDescription;
-            constantBufferViewDescription.BufferLocation = constantBuffer->GetGPUVirtualAddress();
-            constantBufferViewDescription.SizeInBytes = static_cast<UINT>(uploadBufferDescription.Width);
-
-            device->CreateConstantBufferView(&constantBufferViewDescription, rootDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
-
-            // root signature
-            rootSignature = CreateRootSignature(numberOfConstantStructs, numberOfTextures);
-
-            // pso
-            pso = CreatePSO(); // todo: keep arguments? it seems to be easier when the state is not shared at all
-
-            // depth
-            depthBufferHandle = CreateDepthBuffer(texture.GetWidth(), texture.GetHeight());
-
-            // render target
-            ID3D12DescriptorHeap* renderTargetDescriptorHeap = CreateRTVDescriptorHeap();
-
-            D3D12_RESOURCE_DESC textureDesc = {};
-            textureDesc.MipLevels = 1;
-            textureDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-            textureDesc.Width = texture.GetWidth();
-            textureDesc.Height = static_cast<UINT>(texture.GetHeight());
-            textureDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
-            textureDesc.DepthOrArraySize = 1;
-            textureDesc.SampleDesc.Count = 1;
-            textureDesc.SampleDesc.Quality = 0;
-            textureDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
-
-            D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint = {};
-            UINT numRows = 0;
-            UINT64 rowSizeInBytes = 0;
-            UINT64 totalBytes = 0;
-            device->GetCopyableFootprints(&textureDesc, 0, 1, 0, &footprint, &numRows, &rowSizeInBytes, &totalBytes);
-
-            D3D12_HEAP_PROPERTIES defaultProperties = device->GetCustomHeapProperties(0, D3D12_HEAP_TYPE_DEFAULT);
-            D3D_NOT_FAILED(device->CreateCommittedResource(&defaultProperties, D3D12_HEAP_FLAG_NONE, &textureDesc, D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&currentBuffer)));
-
-            currentBufferHandle = { SIZE_T(INT64(renderTargetDescriptorHeap->GetCPUDescriptorHandleForHeapStart().ptr)) };
-            device->CreateRenderTargetView(currentBuffer, nullptr, currentBufferHandle);
-
-            // upload static geometry
-            std::vector<XVertex> vertexData;
-            for (const Vertex& vert : model.vertices)
-            {
-                vertexData.push_back(
-                    XVertex({
-                        DirectX::XMFLOAT3(vert.position.x, vert.position.y, vert.position.z),
-                        DirectX::XMFLOAT2(vert.textureCoord.x, vert.textureCoord.y),
-                        DirectX::XMFLOAT3(vert.normal.x, vert.normal.y, vert.normal.z),
-                        UINT(vert.materialId)
-                        })
-                );
-            }
-
-            vertexBufferView = UploadDataToGPU<XVertex, D3D12_VERTEX_BUFFER_VIEW>(vertexData);
-
-            std::vector<std::uint16_t> indexData;
-            for (uint32_t i : model.indices)
-            {
-                indexData.push_back(static_cast<uint16_t>(i));
-            }
-
-            indexBufferView = UploadDataToGPU<uint16_t, D3D12_INDEX_BUFFER_VIEW>(indexData);
-
-            for (size_t i = 0; i < model.materials.size(); i++)
-            {
-                UploadTexturesToGPU(model.materials[i].textureName, static_cast<int32_t>(i));
-            }
-
-            D3D_NOT_FAILED(device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&mainAllocator)));
-            D3D_NOT_FAILED(device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, mainAllocator, nullptr, IID_PPV_ARGS(&mainCommandList)));
-
-            mainCommandList->SetPipelineState(pso);
 
             return true;
         }
@@ -786,7 +739,7 @@ namespace Renderer
             viewport.MinDepth = 0.0f;
             viewport.MaxDepth = 1.0f;
 
-            mainCommandList->RSSetViewports(1, &viewport);
+            queue->GetList()->RSSetViewports(1, &viewport);
 
             D3D12_RECT scissor;
             scissor.left = 0;
@@ -794,48 +747,31 @@ namespace Renderer
             scissor.right = static_cast<LONG>(texture.GetWidth());
             scissor.bottom = static_cast<LONG>(texture.GetHeight());
 
-            mainCommandList->RSSetScissorRects(1, &scissor);
+            queue->GetList()->RSSetScissorRects(1, &scissor);
 
-            D3D12_RESOURCE_BARRIER renderTargetBufferTransition;
-            renderTargetBufferTransition.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-            renderTargetBufferTransition.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
-
-            renderTargetBufferTransition.Transition.pResource = currentBuffer;
-            renderTargetBufferTransition.Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
-            renderTargetBufferTransition.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
-            renderTargetBufferTransition.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-
-            mainCommandList->ResourceBarrier(1, &renderTargetBufferTransition);
+            // todo: when does it become copy dest?
+            queue->AddBarrierToList(currentBuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_RENDER_TARGET);
 
             FLOAT clearColor[4] = { 0.0f, 0.f, 0.f, 1.000000000f };
-            mainCommandList->ClearRenderTargetView(currentBufferHandle, clearColor, 0, nullptr);
-            mainCommandList->ClearDepthStencilView(depthBufferHandle, D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, 1.0f, 0, 0, nullptr);
+            queue->GetList()->ClearRenderTargetView(currentBufferHandle, clearColor, 0, nullptr);
+            queue->GetList()->ClearDepthStencilView(depthBufferHandle, D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, 1.0f, 0, 0, nullptr);
 
-            mainCommandList->OMSetRenderTargets(1, &currentBufferHandle, true, &depthBufferHandle);
+            queue->GetList()->OMSetRenderTargets(1, &currentBufferHandle, true, &depthBufferHandle);
 
             ID3D12DescriptorHeap* descriptorHeaps[] = { rootDescriptorHeap };
-            mainCommandList->SetDescriptorHeaps(1, descriptorHeaps);
-            mainCommandList->SetGraphicsRootSignature(rootSignature);
+            queue->GetList()->SetDescriptorHeaps(1, descriptorHeaps);
+            queue->GetList()->SetGraphicsRootSignature(rootSignature);
 
-            mainCommandList->IASetVertexBuffers(0, 1, &vertexBufferView);
-            mainCommandList->IASetIndexBuffer(&indexBufferView);
+            queue->GetList()->IASetVertexBuffers(0, 1, &vertexBufferView);
+            queue->GetList()->IASetIndexBuffer(&indexBufferView);
 
-            mainCommandList->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+            queue->GetList()->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
-            mainCommandList->SetGraphicsRootDescriptorTable(0, rootDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
+            queue->GetList()->SetGraphicsRootDescriptorTable(0, rootDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
 
-            mainCommandList->DrawIndexedInstanced((UINT)scene.models[0].indices.size(), 1, 0, 0, 0);
+            queue->GetList()->DrawIndexedInstanced((UINT)scene.models[0].indices.size(), 1, 0, 0, 0);
 
-            mainCommandList->Close();
-
-            ID3D12CommandList* cmdsLists[1] = { mainCommandList };
-            queue->ExecuteCommandLists(1, cmdsLists);
-
-            WaitForCommandListCompletion();
-
-            // clean stuff
-            D3D_NOT_FAILED(mainAllocator->Reset());
-            D3D_NOT_FAILED(mainCommandList->Reset(mainAllocator, pso));
+            queue->Execute(pso);
 
             NOT_FAILED(DownloadTextureFromGPU(currentBuffer, output), false);
 
@@ -845,8 +781,6 @@ namespace Renderer
         ID3D12DescriptorHeap* rootDescriptorHeap = nullptr;
         ID3D12Device* device = nullptr;
         ID3D12Resource* constantBuffer = nullptr;
-        ID3D12CommandAllocator* mainAllocator = nullptr;
-        ID3D12GraphicsCommandList* mainCommandList = nullptr;
         ID3D12Resource* currentBuffer = nullptr; // render target
         D3D12_CPU_DESCRIPTOR_HANDLE currentBufferHandle {};
         D3D12_CPU_DESCRIPTOR_HANDLE depthBufferHandle {};
@@ -854,7 +788,8 @@ namespace Renderer
         D3D12_VERTEX_BUFFER_VIEW vertexBufferView {};
         D3D12_INDEX_BUFFER_VIEW indexBufferView {};
         ID3D12PipelineState* pso = nullptr;
-        ID3D12CommandQueue* queue = nullptr;
+
+        std::unique_ptr<Queue> queue;
 
         const Scene& scene;
         const Texture& texture;
@@ -865,7 +800,6 @@ namespace Renderer
         if (!context)
         {
             context = std::make_shared<RendererDX12Context>(scene, texture);
-            NOT_FAILED(context->Initialize(), false);
         }
 
         return context->Render(texture);

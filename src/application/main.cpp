@@ -180,7 +180,6 @@ int CALLBACK WinMain(
 
             Renderer::Scene scene;
             Renderer::Load("C:\\Users\\hapas\\Documents\\Code\\software_rasterizer\\assets\\scene.sce", scene);
-            const Renderer::Model& model = scene.models[0];
 
             scene.camera.position.z = 2;
             scene.camera.position.x = 0;
