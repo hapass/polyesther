@@ -7,9 +7,9 @@
 
 namespace Renderer
 {
-    struct Queue
+    struct GraphicsQueue
     {
-        Queue(ID3D12Device* device)
+        GraphicsQueue(ID3D12Device* device)
         {
             D3D12_COMMAND_QUEUE_DESC queueDesc = {};
             queueDesc.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
@@ -23,12 +23,12 @@ namespace Renderer
             NOT_FAILED(fenceEventHandle = CreateEventExW(nullptr, nullptr, CREATE_EVENT_MANUAL_RESET, EVENT_ALL_ACCESS), 0);
         }
 
-        Queue(const Queue& other) = delete;
-        Queue(Queue && other) noexcept = delete;
-        Queue& operator=(const Queue& other) = delete;
-        Queue& operator=(Queue&& other) noexcept = delete;
+        GraphicsQueue(const GraphicsQueue& other) = delete;
+        GraphicsQueue(GraphicsQueue && other) noexcept = delete;
+        GraphicsQueue& operator=(const GraphicsQueue& other) = delete;
+        GraphicsQueue& operator=(GraphicsQueue&& other) noexcept = delete;
 
-        ~Queue()
+        ~GraphicsQueue()
         {
             fence->Release();
             commandList->Release();
@@ -144,7 +144,7 @@ namespace Renderer
             pso = CreatePSO(); // todo: keep arguments? it seems to be easier when the state is not shared at all
 
             // queue
-            queue = std::make_unique<Queue>(device);
+            queue = std::make_unique<GraphicsQueue>(device);
             queue->GetList()->SetPipelineState(pso);
 
             // depth
@@ -696,40 +696,39 @@ namespace Renderer
             }
             readbackBuffer->Unmap(0, nullptr);
 
+            readbackBuffer->Release();
+
             return true;
         }
 
         bool Render(Texture& output)
         {
-            // upload mvp matrix
+            // Build the view matrix.
+            Matrix mvp = PerspectiveTransform(static_cast<float>(texture.GetWidth()), static_cast<float>(texture.GetHeight())) * ViewTransform(scene.camera);
+
+            Matrix mv = ViewTransform(scene.camera);
+
+            DirectX::XMMATRIX mvpX
             {
-                // Build the view matrix.
-                Matrix mvp = PerspectiveTransform(static_cast<float>(texture.GetWidth()), static_cast<float>(texture.GetHeight())) * ViewTransform(scene.camera);
+                {mvp.m[0], mvp.m[1], mvp.m[2], mvp.m[3]},
+                {mvp.m[4], mvp.m[5], mvp.m[6], mvp.m[7]},
+                {mvp.m[8], mvp.m[9], mvp.m[10], mvp.m[11]},
+                {mvp.m[12], mvp.m[13], mvp.m[14], mvp.m[15]}
+            };
 
-                Matrix mv = ViewTransform(scene.camera);
+            DirectX::XMMATRIX mvX
+            {
+                {mv.m[0], mv.m[1], mv.m[2], mv.m[3]},
+                {mv.m[4], mv.m[5], mv.m[6], mv.m[7]},
+                {mv.m[8], mv.m[9], mv.m[10], mv.m[11]},
+                {mv.m[12], mv.m[13], mv.m[14], mv.m[15]}
+            };
 
-                DirectX::XMMATRIX mvpX
-                {
-                    {mvp.m[0], mvp.m[1], mvp.m[2], mvp.m[3]},
-                    {mvp.m[4], mvp.m[5], mvp.m[6], mvp.m[7]},
-                    {mvp.m[8], mvp.m[9], mvp.m[10], mvp.m[11]},
-                    {mvp.m[12], mvp.m[13], mvp.m[14], mvp.m[15]}
-                };
+            // calculate light's position in view space
+            Vec position_view = ViewTransform(scene.camera) * scene.light.position;
+            DirectX::XMVECTOR lightPos = { position_view.x, position_view.y, position_view.z, position_view.w };
 
-                DirectX::XMMATRIX mvX
-                {
-                    {mv.m[0], mv.m[1], mv.m[2], mv.m[3]},
-                    {mv.m[4], mv.m[5], mv.m[6], mv.m[7]},
-                    {mv.m[8], mv.m[9], mv.m[10], mv.m[11]},
-                    {mv.m[12], mv.m[13], mv.m[14], mv.m[15]}
-                };
-
-                // calculate light's position in view space
-                Vec position_view = ViewTransform(scene.camera) * scene.light.position;
-                DirectX::XMVECTOR lightPos = { position_view.x, position_view.y, position_view.z, position_view.w };
-
-                SetModelViewProjection(mvpX, mvX, lightPos);
-            }
+            SetModelViewProjection(mvpX, mvX, lightPos);
 
             D3D12_VIEWPORT viewport;
             viewport.TopLeftX = 0.0f;
@@ -789,7 +788,7 @@ namespace Renderer
         D3D12_INDEX_BUFFER_VIEW indexBufferView {};
         ID3D12PipelineState* pso = nullptr;
 
-        std::unique_ptr<Queue> queue;
+        std::unique_ptr<GraphicsQueue> queue;
 
         const Scene& scene;
         const Texture& texture;
