@@ -153,7 +153,7 @@ int CALLBACK WinMain(
                 0,
                 L"MainWindow",
                 L"Software Rasterizer",
-                WS_OVERLAPPEDWINDOW | WS_VISIBLE,
+                WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_VISIBLE,
                 CW_USEDEFAULT,
                 CW_USEDEFAULT,
                 clientArea.right - clientArea.left,
