@@ -93,7 +93,7 @@ namespace Renderer
 
     struct RendererDX12Context
     {
-        RendererDX12Context(const Scene& scene, const Texture& texture)
+        RendererDX12Context(const Scene& scene, const Texture& texture, const std::wstring& shaderPath)
             : scene(scene)
             , texture(texture)
         {
@@ -141,7 +141,7 @@ namespace Renderer
             rootSignature = CreateRootSignature(numberOfConstantStructs, numberOfTextures);
 
             // pso
-            pso = CreatePSO(); // todo: keep arguments? it seems to be easier when the state is not shared at all
+            pso = CreatePSO(shaderPath); // todo: keep arguments? it seems to be easier when the state is not shared at all
 
             // queue
             queue = std::make_unique<GraphicsQueue>(device);
@@ -311,15 +311,15 @@ namespace Renderer
             return result;
         }
 
-        ID3D12PipelineState* CreatePSO()
+        ID3D12PipelineState* CreatePSO(const std::wstring& shaderPath)
         {
             UINT flags = D3DCOMPILE_ENABLE_UNBOUNDED_DESCRIPTOR_TABLES;
 
             ID3DBlob* vertexShaderBlob = nullptr;
-            D3D_NOT_FAILED(D3DCompileFromFile(L"color.hlsl", nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE, "VS", "vs_5_1", flags, 0, &vertexShaderBlob, nullptr));
+            D3D_NOT_FAILED(D3DCompileFromFile(shaderPath.c_str(), nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE, "VS", "vs_5_1", flags, 0, &vertexShaderBlob, nullptr));
 
             ID3DBlob* pixelShaderBlob = nullptr;
-            D3D_NOT_FAILED(D3DCompileFromFile(L"color.hlsl", nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE, "PS", "ps_5_1", flags, 0, &pixelShaderBlob, nullptr));
+            D3D_NOT_FAILED(D3DCompileFromFile(shaderPath.c_str(), nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE, "PS", "ps_5_1", flags, 0, &pixelShaderBlob, nullptr));
 
             constexpr size_t vertexFieldsCount = 4;
             D3D12_INPUT_ELEMENT_DESC inputElementDescription[vertexFieldsCount];
@@ -798,7 +798,7 @@ namespace Renderer
     {
         if (!context)
         {
-            context = std::make_shared<RendererDX12Context>(scene, texture);
+            context = std::make_shared<RendererDX12Context>(scene, texture, std::wstring(shaderPath.begin(), shaderPath.end()));
         }
 
         return context->Render(texture);

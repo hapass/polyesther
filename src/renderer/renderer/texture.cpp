@@ -56,6 +56,11 @@ namespace Renderer
         return width * height;
     }
 
+    bool Texture::operator==(const Texture& other)
+    {
+        return this->width == other.width && this->height == other.height && this->data == other.data;
+    }
+
     bool Load(const std::string& path, Texture& texture)
     {
         int32_t width, height, channels;
@@ -73,6 +78,6 @@ namespace Renderer
 
     bool Save(const std::string& path, const Texture& texture)
     {
-        return static_cast<bool>(stbi_write_jpg(path.c_str(), static_cast<int>(texture.GetWidth()), static_cast<int>(texture.GetHeight()), Texture::BytesPerColor, texture.GetBuffer(), 100));
+        return static_cast<bool>(stbi_write_bmp(path.c_str(), static_cast<int>(texture.GetWidth()), static_cast<int>(texture.GetHeight()), Texture::BytesPerColor, texture.GetBuffer()));
     }
 }

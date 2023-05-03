@@ -24,11 +24,15 @@ namespace Renderer
         Color GetColorAt(size_t index) const;
         size_t GetSize() const;
 
+        bool operator==(const Texture& rhs);
+
     private:
         size_t width = 0;
         size_t height = 0;
         std::vector<uint8_t> data;
     };
+
+    
 
     bool Load(const std::string& path, Texture& texture);
 

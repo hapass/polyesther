@@ -190,7 +190,7 @@ int CALLBACK WinMain(
             scene.camera.left = Renderer::Vec{ -1.0f, 0.0f, 0.0f, 0.0f };
             scene.light.position = Renderer::Vec{ 100.0f, 100.0f, 100.0f, 1.0f };
 
-            Renderer::RendererDX12 renderer;
+            Renderer::RendererDX12 renderer("C:\\Users\\hapas\\Documents\\Code\\software_rasterizer\\assets\\color.hlsl");
 
             while (isRunning)
             {
