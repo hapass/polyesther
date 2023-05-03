@@ -558,7 +558,7 @@ namespace Renderer
         void UploadTexturesToGPU(const std::string& textureName, int32_t index)
         {
             Texture texture;
-            NOT_FAILED(Load("../../assets/" + textureName, texture), false);
+            NOT_FAILED(Load(textureName, texture), false);
 
             D3D12_RESOURCE_DESC textureDesc = {};
             textureDesc.MipLevels = 1;

@@ -146,12 +146,12 @@ namespace Renderer
                     }
                     else if (primitiveType == TYPE_TEXTURE_FILENAME)
                     {
-                        std::string materialFileName;
-                        if (lineStream >> materialFileName)
+                        std::string textureFileName;
+                        if (lineStream >> textureFileName)
                         {
                             Material material;
                             material.name = currentMaterialName;
-                            material.textureName = materialFileName;
+                            material.textureName = ReplaceFileNameInFullPath(fullFileName, textureFileName);
                             materials.push_back(std::move(material));
                         }
                         else
