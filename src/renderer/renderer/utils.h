@@ -64,7 +64,7 @@ namespace Utils
 #define NOT_FAILED(call, failureCode) \
    if ((call) == failureCode) \
    { \
-        LOG("Failed with code" << failureCode); \
+        LOG("Failed with " << failureCode); \
         throw std::exception(); \
    } \
 

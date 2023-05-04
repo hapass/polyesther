@@ -21,7 +21,9 @@ namespace Renderer
         size_t GetWidth() const;
         size_t GetHeight() const;
 
-        Color GetColorAt(size_t index) const;
+        Color GetColor(size_t index) const;
+        void SetColor(size_t index, uint32_t rgba);
+
         size_t GetSize() const;
 
         bool operator==(const Texture& rhs);

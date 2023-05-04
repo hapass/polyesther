@@ -4,6 +4,7 @@
 #include <renderer/scene.h>
 #include <renderer/utils.h>
 #include <renderer/rendererdx12.h>
+#include <renderer/renderersoftware.h>
 
 using namespace Microsoft::VisualStudio::CppUnitTestFramework;
 
@@ -179,6 +180,34 @@ namespace Tests
 
             Renderer::Texture reference;
             Renderer::Load("C:\\Users\\hapas\\Documents\\Code\\software_rasterizer\\assets\\tests\\reference.jpg", reference);
+
+            Assert::IsTrue(texture == reference);
+        }
+    };
+
+    TEST_CLASS(RendererSoftware)
+    {
+        TEST_METHOD(RenderShouldProperlyRenderSimpleScene)
+        {
+            Renderer::Scene scene;
+            bool success = Renderer::Load("C:\\Users\\hapas\\Documents\\Code\\software_rasterizer\\assets\\tests\\scene.sce", scene);
+
+            scene.camera.position.z = 2;
+            scene.camera.position.x = 0;
+            scene.camera.position.y = 0;
+            scene.camera.pitch = 0.0f;
+            scene.camera.yaw = 0.0f;
+            scene.camera.forward = Renderer::Vec{ 0.0f, 0.0f, -1.0f, 0.0f };
+            scene.camera.left = Renderer::Vec{ -1.0f, 0.0f, 0.0f, 0.0f };
+            scene.light.position = Renderer::Vec{ 100.0f, 100.0f, 100.0f, 1.0f };
+
+            Renderer::RendererSoftware renderer;
+
+            Renderer::Texture texture(200, 150); // todo: test error if texture has no dimensions and passed to render
+            renderer.Render(scene, texture);
+
+            Renderer::Texture reference;
+            Renderer::Load("C:\\Users\\hapas\\Documents\\Code\\software_rasterizer\\assets\\tests\\reference_software.bmp", reference);
 
             Assert::IsTrue(texture == reference);
         }

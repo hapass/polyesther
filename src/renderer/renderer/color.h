@@ -17,7 +17,7 @@ namespace Renderer
 
         Color() : Color(0, 0, 0) {}
 
-        const Vec& GetVec() { return rgba_vec; }
+        const Vec& GetVec() const { return rgba_vec; }
 
         uint32_t rgba;
         Vec rgba_vec;

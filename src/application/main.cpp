@@ -146,7 +146,7 @@ int CALLBACK WinMain(
             clientArea.right = WindowWidth;
             clientArea.bottom = WindowHeight;
 
-            AdjustWindowRect(&clientArea, WS_OVERLAPPEDWINDOW | WS_VISIBLE, 0);
+            AdjustWindowRect(&clientArea, WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_VISIBLE, 0);
 
             HWND window;
             NOT_FAILED(window = CreateWindowExW(
@@ -191,6 +191,7 @@ int CALLBACK WinMain(
             scene.light.position = Renderer::Vec{ 100.0f, 100.0f, 100.0f, 1.0f };
 
             Renderer::RendererDX12 renderer("C:\\Users\\hapas\\Documents\\Code\\software_rasterizer\\assets\\color.hlsl");
+            Renderer::Texture result(WindowWidth, WindowHeight);
 
             while (isRunning)
             {
@@ -211,12 +212,11 @@ int CALLBACK WinMain(
 
                 HandleInput(scene);
 
-                Renderer::Texture result(WindowWidth, WindowHeight);
                 renderer.Render(scene, result);
 
                 for (size_t i = 0; i < result.GetSize(); i++)
                 {
-                    BackBuffer[result.GetWidth() * (result.GetHeight() - 1 - (i / result.GetWidth())) + i % result.GetWidth()] = result.GetColorAt(i).rgba;
+                    BackBuffer[result.GetWidth() * (result.GetHeight() - 1 - (i / result.GetWidth())) + i % result.GetWidth()] = result.GetColor(i).rgba;
                 }
 
                 // swap buffers
@@ -236,6 +236,9 @@ int CALLBACK WinMain(
                     SRCCOPY
                 );
             }
+
+            NOT_FAILED(VirtualFree(BackBuffer, 0, MEM_RELEASE), 0);
+            NOT_FAILED(ReleaseDC(window, screenContext), 1);
         }
     }
     catch (std::exception&)
