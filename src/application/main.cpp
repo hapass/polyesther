@@ -9,25 +9,25 @@
 #include <renderer/texture.h>
 #include <renderer/utils.h>
 
-static int32_t WindowWidth = 800;
-static int32_t WindowHeight = 600;
-
-static bool KeyDown[256];
-
-static uint8_t WKey = 87;
-static uint8_t AKey = 65;
-static uint8_t SKey = 83;
-static uint8_t DKey = 68;
-
-static uint8_t UpKey = 38;
-static uint8_t LeftKey = 37;
-static uint8_t DownKey = 40;
-static uint8_t RightKey = 39;
-
 namespace
 {
-    std::string SolutionDir;
-    std::string AssetsDir;
+    int32_t WindowWidth = 800;
+    int32_t WindowHeight = 600;
+
+    bool KeyDown[256];
+
+    uint8_t WKey = 87;
+    uint8_t AKey = 65;
+    uint8_t SKey = 83;
+    uint8_t DKey = 68;
+
+    uint8_t UpKey = 38;
+    uint8_t LeftKey = 37;
+    uint8_t DownKey = 40;
+    uint8_t RightKey = 39;
+
+    std::string SolutionDir = _SOLUTIONDIR;
+    std::string AssetsDir = SolutionDir + "assets\\";
 }
 
 LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
@@ -132,9 +132,6 @@ int CALLBACK WinMain(
     _In_ int nShowCmd)
 {
     bool isRunning = true;
-
-    SolutionDir = _SOLUTIONDIR;
-    AssetsDir = SolutionDir + "assets\\";
 
     Utils::DebugUtils::GetInstance().AddOutput([](const std::string& message) {
         OutputDebugStringA(message.c_str());

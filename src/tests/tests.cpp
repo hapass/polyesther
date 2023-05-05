@@ -12,17 +12,13 @@ namespace Tests
 {
     namespace
     {
-        std::string SolutionDir;
-        std::string AssetsDir;
-        std::string TestsDir;
+        std::string SolutionDir = _SOLUTIONDIR;
+        std::string AssetsDir = SolutionDir + "assets\\";
+        std::string TestsDir = AssetsDir + "tests\\";
     }
 
     TEST_MODULE_INITIALIZE(TestsInitialize)
     {
-        SolutionDir = _SOLUTIONDIR;
-        AssetsDir = SolutionDir + "assets\\";
-        TestsDir = AssetsDir + "tests\\";
-
         Utils::DebugUtils::GetInstance().AddOutput([](const std::string& message)
         {
             Logger::WriteMessage(message.c_str());
