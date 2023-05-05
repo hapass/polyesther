@@ -34,8 +34,6 @@ namespace Renderer
         std::vector<uint8_t> data;
     };
 
-    
-
     bool Load(const std::string& path, Texture& texture);
 
     bool Save(const std::string& path, const Texture& texture);
