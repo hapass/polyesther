@@ -446,10 +446,7 @@ namespace Renderer
 
         for (size_t i = 0; i < BackBuffer.size(); i++)
         {
-            if (BackBuffer[i] != 0)
-            {
-                texture.SetColor(i, Color(BackBuffer[i]));
-            }
+            texture.SetColor(i, Color(BackBuffer[i]));
         }
 
         return true;
