@@ -51,17 +51,12 @@ namespace Renderer
         return Color(data.at(index * BytesPerColor), data.at(index * BytesPerColor + 1), data.at(index * BytesPerColor + 2));
     }
 
-    void Texture::SetColor(size_t index, uint32_t rgba)
+    void Texture::SetColor(size_t index, Color color)
     {
-        uint8_t r = static_cast<uint8_t>(rgba & 0x000000FF);
-        uint8_t g = static_cast<uint8_t>(rgba & 0x0000FF00 >> 8);
-        uint8_t b = static_cast<uint8_t>(rgba & 0x00FF0000 >> 16);
-        uint8_t a = static_cast<uint8_t>(rgba & 0xFF000000 >> 24);
-
-        data[index * BytesPerColor] = r;
-        data[index * BytesPerColor + 1] = g;
-        data[index * BytesPerColor + 2] = b;
-        data[index * BytesPerColor + 3] = a;
+        data[index * BytesPerColor] = color.GetVal(0);
+        data[index * BytesPerColor + 1] = color.GetVal(1);
+        data[index * BytesPerColor + 2] = color.GetVal(2);
+        data[index * BytesPerColor + 3] = color.GetVal(3);
     }
 
     size_t Texture::GetSize() const

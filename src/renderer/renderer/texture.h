@@ -22,7 +22,7 @@ namespace Renderer
         size_t GetHeight() const;
 
         Color GetColor(size_t index) const;
-        void SetColor(size_t index, uint32_t rgba);
+        void SetColor(size_t index, Color color);
 
         size_t GetSize() const;
 

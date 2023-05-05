@@ -259,7 +259,7 @@ namespace Renderer
             v.v.position.z /= v.v.position.w;
         }
 
-        // backface culling
+        // todo: backface culling
         //if (cross(vertices[1].pos_view - vertices[0].pos_view, vertices[1].pos_view - vertices[2].pos_view).z >= 0)
         //{
         //    return;
@@ -446,7 +446,10 @@ namespace Renderer
 
         for (size_t i = 0; i < BackBuffer.size(); i++)
         {
-            texture.SetColor(i, BackBuffer[i]);
+            if (BackBuffer[i] != 0)
+            {
+                texture.SetColor(i, Color(BackBuffer[i]));
+            }
         }
 
         return true;

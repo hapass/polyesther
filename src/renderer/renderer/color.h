@@ -7,17 +7,36 @@ namespace Renderer
 {
     struct Color
     {
-        Color(uint8_t r, uint8_t g, uint8_t b, uint8_t a = 0) : rgba(0u), rgba_vec{ r / 255.0f, g / 255.0f, b / 255.0f, a / 255.0f }
+        Color(uint8_t r, uint8_t g, uint8_t b, uint8_t a = 255) : rgba(0u), rgba_vec{ r / 255.0f, g / 255.0f, b / 255.0f, a / 255.0f }
         {
-            rgba |= a << 24;
-            rgba |= r << 16;
-            rgba |= g << 8;
-            rgba |= b << 0;
+            rgba |= r << 24;
+            rgba |= g << 16;
+            rgba |= b << 8;
+            rgba |= a << 0;
+        }
+
+        Color(uint32_t rgba) : rgba(rgba)
+        {
+            rgba_vec = { GetVal(0) / 255.0f, GetVal(1) / 255.0f, GetVal(2) / 255.0f, GetVal(3) / 255.0f };
         }
 
         Color() : Color(0, 0, 0) {}
 
-        const Vec& GetVec() const { return rgba_vec; }
+        const Vec& GetVec() const 
+        { 
+            return rgba_vec;
+        }
+
+        const uint8_t GetVal(size_t index) const
+        {
+            switch (index)
+            {
+                case 0: return static_cast<uint8_t>((rgba & 0xFF000000) >> 24);
+                case 1: return static_cast<uint8_t>((rgba & 0x00FF0000) >> 16);
+                case 2: return static_cast<uint8_t>((rgba & 0x0000FF00) >> 8);
+                default: return static_cast<uint8_t>((rgba & 0x000000FF) >> 0);
+            }
+        }
 
         uint32_t rgba;
         Vec rgba_vec;
