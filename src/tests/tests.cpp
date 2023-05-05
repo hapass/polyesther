@@ -10,8 +10,19 @@ using namespace Microsoft::VisualStudio::CppUnitTestFramework;
 
 namespace Tests
 {
+    namespace
+    {
+        std::string SolutionDir;
+        std::string AssetsDir;
+        std::string TestsDir;
+    }
+
     TEST_MODULE_INITIALIZE(TestsInitialize)
     {
+        SolutionDir = _SOLUTIONDIR;
+        AssetsDir = SolutionDir + "assets\\";
+        TestsDir = AssetsDir + "tests\\";
+
         Utils::DebugUtils::GetInstance().AddOutput([](const std::string& message)
         {
             Logger::WriteMessage(message.c_str());
@@ -29,7 +40,7 @@ namespace Tests
         TEST_METHOD(LoadShouldSucceedWhenThereIsSceneFile)
         {
             Renderer::Scene scene;
-            bool success = Renderer::Load("C:\\Users\\hapas\\Documents\\Code\\software_rasterizer\\assets\\tests\\scene.sce", scene);
+            bool success = Renderer::Load(TestsDir + "scene.sce", scene);
 
             // everything is loaded
             Assert::IsTrue(success);
@@ -80,7 +91,7 @@ namespace Tests
 
             Assert::IsTrue(std::vector<uint32_t>{0, 1, 2, 2, 3, 0} == firstModel.indices);
             Assert::IsTrue(firstModel.materials.size() == 1);
-            Assert::IsTrue(firstModel.materials[0].textureName == "C:\\Users\\hapas\\Documents\\Code\\software_rasterizer\\assets\\tests\\quad_0.jpg");
+            Assert::IsTrue(firstModel.materials[0].textureName == (TestsDir + "quad_0.jpg"));
             Assert::IsTrue(firstModel.materials[0].name == "quad_material_0");
 
             // second model is correctly loaded
@@ -142,9 +153,9 @@ namespace Tests
 
             Assert::IsTrue(std::vector<uint32_t>{0, 1, 2, 3, 4, 5} == secondModel.indices);
             Assert::IsTrue(secondModel.materials.size() == 2);
-            Assert::IsTrue(secondModel.materials[0].textureName == "C:\\Users\\hapas\\Documents\\Code\\software_rasterizer\\assets\\tests\\quad_0.jpg");
+            Assert::IsTrue(secondModel.materials[0].textureName == (TestsDir + "quad_0.jpg"));
             Assert::IsTrue(secondModel.materials[0].name == "quad_material_0");
-            Assert::IsTrue(secondModel.materials[1].textureName == "C:\\Users\\hapas\\Documents\\Code\\software_rasterizer\\assets\\tests\\quad_1.png");
+            Assert::IsTrue(secondModel.materials[1].textureName == (TestsDir + "quad_1.png"));
             Assert::IsTrue(secondModel.materials[1].name == "quad_material_1");
         }
 
@@ -162,7 +173,7 @@ namespace Tests
         TEST_METHOD(RenderShouldProperlyRenderSimpleScene)
         {
             Renderer::Scene scene;
-            bool success = Renderer::Load("C:\\Users\\hapas\\Documents\\Code\\software_rasterizer\\assets\\tests\\scene.sce", scene);
+            bool success = Renderer::Load(TestsDir + "scene.sce", scene);
 
             scene.camera.position.z = 2;
             scene.camera.position.x = 0;
@@ -173,13 +184,13 @@ namespace Tests
             scene.camera.left = Renderer::Vec{ -1.0f, 0.0f, 0.0f, 0.0f };
             scene.light.position = Renderer::Vec{ 100.0f, 100.0f, 100.0f, 1.0f };
 
-            Renderer::RendererDX12 renderer("C:\\Users\\hapas\\Documents\\Code\\software_rasterizer\\assets\\color.hlsl");
+            Renderer::RendererDX12 renderer(AssetsDir + "color.hlsl");
 
             Renderer::Texture texture(200, 150); // todo: test error if texture has no dimensions and passed to render
             renderer.Render(scene, texture);
 
             Renderer::Texture reference;
-            Renderer::Load("C:\\Users\\hapas\\Documents\\Code\\software_rasterizer\\assets\\tests\\reference.jpg", reference);
+            Renderer::Load(TestsDir + "reference.bmp", reference);
 
             Assert::IsTrue(texture == reference);
         }
@@ -190,7 +201,7 @@ namespace Tests
         TEST_METHOD(RenderShouldProperlyRenderSimpleScene)
         {
             Renderer::Scene scene;
-            bool success = Renderer::Load("C:\\Users\\hapas\\Documents\\Code\\software_rasterizer\\assets\\tests\\scene.sce", scene);
+            bool success = Renderer::Load(TestsDir + "scene.sce", scene);
 
             scene.camera.position.z = 2;
             scene.camera.position.x = 0;
@@ -207,7 +218,7 @@ namespace Tests
             renderer.Render(scene, texture);
 
             Renderer::Texture reference;
-            Renderer::Load("C:\\Users\\hapas\\Documents\\Code\\software_rasterizer\\assets\\tests\\reference_software.bmp", reference);
+            Renderer::Load(TestsDir + "reference_software.bmp", reference);
 
             Assert::IsTrue(texture == reference);
         }

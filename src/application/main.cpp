@@ -24,6 +24,12 @@ static uint8_t LeftKey = 37;
 static uint8_t DownKey = 40;
 static uint8_t RightKey = 39;
 
+namespace
+{
+    std::string SolutionDir;
+    std::string AssetsDir;
+}
+
 LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
     switch (uMsg)
@@ -127,6 +133,9 @@ int CALLBACK WinMain(
 {
     bool isRunning = true;
 
+    SolutionDir = _SOLUTIONDIR;
+    AssetsDir = SolutionDir + "assets\\";
+
     Utils::DebugUtils::GetInstance().AddOutput([](const std::string& message) {
         OutputDebugStringA(message.c_str());
     });
@@ -179,7 +188,7 @@ int CALLBACK WinMain(
             NOT_FAILED(BackBuffer = (uint32_t*)VirtualAlloc(0, WindowWidth * WindowHeight * sizeof(uint32_t), MEM_COMMIT, PAGE_READWRITE), 0);
 
             Renderer::Scene scene;
-            Renderer::Load("C:\\Users\\hapas\\Documents\\Code\\software_rasterizer\\assets\\scene.sce", scene);
+            Renderer::Load(AssetsDir + "scene.sce", scene);
 
             scene.camera.position.z = 2;
             scene.camera.position.x = 0;
@@ -190,7 +199,7 @@ int CALLBACK WinMain(
             scene.camera.left = Renderer::Vec{ -1.0f, 0.0f, 0.0f, 0.0f };
             scene.light.position = Renderer::Vec{ 100.0f, 100.0f, 100.0f, 1.0f };
 
-            Renderer::RendererDX12 renderer("C:\\Users\\hapas\\Documents\\Code\\software_rasterizer\\assets\\color.hlsl");
+            Renderer::RendererDX12 renderer(AssetsDir + "color.hlsl");
             Renderer::Texture result(WindowWidth, WindowHeight);
 
             while (isRunning)
@@ -216,7 +225,8 @@ int CALLBACK WinMain(
 
                 for (size_t i = 0; i < result.GetSize(); i++)
                 {
-                    BackBuffer[result.GetWidth() * (result.GetHeight() - 1 - (i / result.GetWidth())) + i % result.GetWidth()] = result.GetColor(i).rgba;
+                    // invert texture along y axis and shift alpha outside
+                    BackBuffer[result.GetWidth() * (result.GetHeight() - 1 - (i / result.GetWidth())) + i % result.GetWidth()] = (result.GetColor(i).rgba >> 8);
                 }
 
                 // swap buffers
