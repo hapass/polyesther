@@ -11,12 +11,15 @@
 
 namespace Renderer
 {
-    static int32_t OutputWidth;
-    static int32_t OutputHeight;
+    namespace
+    {
+        int32_t OutputWidth;
+        int32_t OutputHeight;
 
-    static std::vector<uint32_t> BackBuffer;
-    static std::vector<float> ZBuffer;
-    static std::vector<Texture> Textures;
+        std::vector<uint32_t> BackBuffer;
+        std::vector<float> ZBuffer;
+        std::vector<Texture> Textures;
+    }
 
     struct LightS
     {
@@ -24,7 +27,10 @@ namespace Renderer
         Vec position_view;
     };
 
-    static LightS light;
+    namespace
+    {
+        LightS light;
+    }
 
     struct VertexS
     {

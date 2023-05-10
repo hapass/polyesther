@@ -15,6 +15,8 @@ namespace Tests
         std::string SolutionDir = _SOLUTIONDIR;
         std::string AssetsDir = SolutionDir + "assets\\";
         std::string TestsDir = AssetsDir + "tests\\";
+        std::string QuadsDir = TestsDir + "quads\\";
+        std::string TriangleDir = TestsDir + "triangle\\";
     }
 
     TEST_MODULE_INITIALIZE(TestsInitialize)
@@ -36,7 +38,7 @@ namespace Tests
         TEST_METHOD(LoadShouldSucceedWhenThereIsSceneFile)
         {
             Renderer::Scene scene;
-            bool success = Renderer::Load(TestsDir + "scene.sce", scene);
+            bool success = Renderer::Load(QuadsDir + "scene.sce", scene);
 
             // everything is loaded
             Assert::IsTrue(success);
@@ -87,7 +89,7 @@ namespace Tests
 
             Assert::IsTrue(std::vector<uint32_t>{0, 1, 2, 2, 3, 0} == firstModel.indices);
             Assert::IsTrue(firstModel.materials.size() == 1);
-            Assert::IsTrue(firstModel.materials[0].textureName == (TestsDir + "quad_0.jpg"));
+            Assert::IsTrue(firstModel.materials[0].textureName == (QuadsDir + "quad_0.jpg"));
             Assert::IsTrue(firstModel.materials[0].name == "quad_material_0");
 
             // second model is correctly loaded
@@ -149,9 +151,9 @@ namespace Tests
 
             Assert::IsTrue(std::vector<uint32_t>{0, 1, 2, 3, 4, 5} == secondModel.indices);
             Assert::IsTrue(secondModel.materials.size() == 2);
-            Assert::IsTrue(secondModel.materials[0].textureName == (TestsDir + "quad_0.jpg"));
+            Assert::IsTrue(secondModel.materials[0].textureName == (QuadsDir + "quad_0.jpg"));
             Assert::IsTrue(secondModel.materials[0].name == "quad_material_0");
-            Assert::IsTrue(secondModel.materials[1].textureName == (TestsDir + "quad_1.png"));
+            Assert::IsTrue(secondModel.materials[1].textureName == (QuadsDir + "quad_1.png"));
             Assert::IsTrue(secondModel.materials[1].name == "quad_material_1");
         }
 
@@ -169,7 +171,7 @@ namespace Tests
         TEST_METHOD(RenderShouldProperlyRenderSimpleScene)
         {
             Renderer::Scene scene;
-            bool success = Renderer::Load(TestsDir + "scene.sce", scene);
+            bool success = Renderer::Load(QuadsDir + "scene.sce", scene);
 
             scene.camera.position.z = 2;
             scene.camera.position.x = 0;
@@ -197,7 +199,7 @@ namespace Tests
         TEST_METHOD(RenderShouldProperlyRenderSimpleScene)
         {
             Renderer::Scene scene;
-            bool success = Renderer::Load(TestsDir + "scene.sce", scene);
+            bool success = Renderer::Load(QuadsDir + "scene.sce", scene);
 
             scene.camera.position.z = 2;
             scene.camera.position.x = 0;

@@ -185,7 +185,7 @@ int CALLBACK WinMain(
             NOT_FAILED(BackBuffer = (uint32_t*)VirtualAlloc(0, WindowWidth * WindowHeight * sizeof(uint32_t), MEM_COMMIT, PAGE_READWRITE), 0);
 
             Renderer::Scene scene;
-            Renderer::Load(AssetsDir + "scene.sce", scene);
+            Renderer::Load(AssetsDir + "cars\\scene.sce", scene);
 
             scene.camera.position.z = 2;
             scene.camera.position.x = 0;
