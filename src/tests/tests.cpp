@@ -171,7 +171,7 @@ namespace Tests
         TEST_METHOD(RenderShouldProperlyRenderSimpleScene)
         {
             Renderer::Scene scene;
-            bool success = Renderer::Load(QuadsDir + "scene.sce", scene);
+            bool success = Renderer::Load(AssetsDir + "cars\\scene.sce", scene);
 
             scene.camera.position.z = 2;
             scene.camera.position.x = 0;
@@ -186,6 +186,7 @@ namespace Tests
 
             Renderer::Texture texture(200, 150); // todo: test error if texture has no dimensions and passed to render
             renderer.Render(scene, texture);
+            Renderer::Save(TestsDir + "reference.bmp", texture);
 
             Renderer::Texture reference;
             Renderer::Load(TestsDir + "reference.bmp", reference);
@@ -199,7 +200,7 @@ namespace Tests
         TEST_METHOD(RenderShouldProperlyRenderSimpleScene)
         {
             Renderer::Scene scene;
-            bool success = Renderer::Load(QuadsDir + "scene.sce", scene);
+            bool success = Renderer::Load(AssetsDir + "cars\\scene.sce", scene);
 
             scene.camera.position.z = 2;
             scene.camera.position.x = 0;
@@ -214,6 +215,7 @@ namespace Tests
 
             Renderer::Texture texture(200, 150); // todo: test error if texture has no dimensions and passed to render
             renderer.Render(scene, texture);
+            Renderer::Save(TestsDir + "reference_software.bmp", texture);
 
             Renderer::Texture reference;
             Renderer::Load(TestsDir + "reference_software.bmp", reference);

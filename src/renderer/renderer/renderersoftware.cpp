@@ -452,7 +452,7 @@ namespace Renderer
 
         for (size_t i = 0; i < BackBuffer.size(); i++)
         {
-            texture.SetColor(i, Color(BackBuffer[i]));
+            texture.SetColor(OutputWidth * (OutputHeight - 1 - (i / OutputWidth)) + i % OutputWidth, Color(BackBuffer[i]));
         }
 
         return true;

@@ -4,6 +4,7 @@
 
 #include <renderer/math.h>
 #include <renderer/rendererdx12.h>
+#include <renderer/renderersoftware.h>
 #include <renderer/color.h>
 #include <renderer/scene.h>
 #include <renderer/texture.h>
@@ -196,8 +197,8 @@ int CALLBACK WinMain(
             scene.camera.left = Renderer::Vec{ -1.0f, 0.0f, 0.0f, 0.0f };
             scene.light.position = Renderer::Vec{ 100.0f, 100.0f, 100.0f, 1.0f };
 
-            Renderer::RendererDX12 renderer(AssetsDir + "color.hlsl");
-            Renderer::Texture result(WindowWidth, WindowHeight);
+            Renderer::RendererSoftware renderer;
+            //Renderer::RendererDX12 renderer(AssetsDir + "color.hlsl");
 
             while (isRunning)
             {
@@ -218,6 +219,7 @@ int CALLBACK WinMain(
 
                 HandleInput(scene);
 
+                Renderer::Texture result(WindowWidth, WindowHeight);
                 renderer.Render(scene, result);
 
                 for (size_t i = 0; i < result.GetSize(); i++)
