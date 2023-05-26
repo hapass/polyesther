@@ -8,6 +8,7 @@
 #include <cmath>
 #include <cassert>
 #include <iostream>
+#include "utils.h"
 
 namespace Renderer
 {
@@ -19,6 +20,7 @@ namespace Renderer
         std::vector<uint32_t> BackBuffer;
         std::vector<float> ZBuffer;
         std::vector<Texture> Textures;
+        uint32_t CurrentTexture = 0;
     }
 
     struct LightS
@@ -36,6 +38,8 @@ namespace Renderer
     {
         Vertex v;
         Vec pos_view;
+
+        // todo: need to get rid of these, just needed for easier interpolation
         float red;
         float green;
         float blue;
@@ -186,6 +190,7 @@ namespace Renderer
                 float viewY = interpolants_raw[11] / interpolants_raw[5];
                 float viewZ = interpolants_raw[12] / interpolants_raw[5];
 
+
                 Vec pos_view{ viewX, viewY, viewZ, 1.0f };
                 Vec normal_vec = normalize({ normalX, normalY, normalZ, 0.0f });
                 Vec light_vec = normalize(light.position_view - pos_view);
@@ -196,15 +201,19 @@ namespace Renderer
                 float specAmount = static_cast<float>(std::max(dot(normalize(pos_view), reflect(normal_vec, light_vec * -1.0f)), 0.0f));
                 Vec specular = light.light.color.GetVec() * pow(specAmount, light.light.specularShininess) * light.light.specularStrength;
 
+                uint32_t materialId = CurrentTexture;
+
                 // From 0 to TextureWidth - 1 (TextureWidth pixels in total)
-                int32_t textureX = static_cast<int32_t>((interpolants_raw[3] / interpolants_raw[5]) * (Textures[0].GetWidth() - 1));
+                int32_t textureX = static_cast<int32_t>((interpolants_raw[3] / interpolants_raw[5]) * (Textures[materialId].GetWidth() - 1));
                 // From 0 to TextureHeight - 1 (TextureHeight pixels in total)
-                int32_t textureY = static_cast<int32_t>((interpolants_raw[4] / interpolants_raw[5]) * (Textures[0].GetHeight() - 1));
+                int32_t textureY = static_cast<int32_t>((interpolants_raw[4] / interpolants_raw[5]) * (Textures[materialId].GetHeight() - 1));
 
-                assert(textureY < Textures[0].GetHeight() && textureX < Textures[0].GetWidth());
-                int32_t texelBase = textureY * Textures[0].GetWidth() + textureX;
+                textureY = (Textures[materialId].GetHeight() - 1) - textureY; // invert texture coords
 
-                Color texture_color = Textures[0].GetColor(texelBase);
+                assert(textureY < Textures[materialId].GetHeight() && textureX < Textures[materialId].GetWidth());
+                int32_t texelBase = textureY * Textures[materialId].GetWidth() + textureX;
+
+                Color texture_color = Textures[materialId].GetColor(texelBase);
 
                 Vec frag_color = texture_color.GetVec();
                 Vec final_color = (diffuse + ambient + specular) * frag_color;
@@ -435,13 +444,15 @@ namespace Renderer
 
         if (Textures.size() == 0)
         {
-            Textures.resize(1);
+            Textures.resize(2);
             Load(scene.models[0].materials[0].textureName, Textures[0]);
+            Load(scene.models[0].materials[1].textureName, Textures[1]);
         }
 
         const Model& model = scene.models[0];
         for (uint32_t i = 0; i < model.indices.size() / 3; i++)
         {
+            CurrentTexture = model.vertices[model.indices[i * 3 + 0]].materialId;
             DrawTriangle(
                 model.vertices[model.indices[i * 3 + 0]],
                 model.vertices[model.indices[i * 3 + 1]],

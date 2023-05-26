@@ -186,7 +186,6 @@ namespace Tests
 
             Renderer::Texture texture(200, 150); // todo: test error if texture has no dimensions and passed to render
             renderer.Render(scene, texture);
-            Renderer::Save(TestsDir + "reference.bmp", texture);
 
             Renderer::Texture reference;
             Renderer::Load(TestsDir + "reference.bmp", reference);
@@ -215,7 +214,6 @@ namespace Tests
 
             Renderer::Texture texture(200, 150); // todo: test error if texture has no dimensions and passed to render
             renderer.Render(scene, texture);
-            Renderer::Save(TestsDir + "reference_software.bmp", texture);
 
             Renderer::Texture reference;
             Renderer::Load(TestsDir + "reference_software.bmp", reference);
