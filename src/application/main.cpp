@@ -15,12 +15,15 @@ namespace
     int32_t WindowWidth = 800;
     int32_t WindowHeight = 600;
 
+    bool KeyPressed[256];
     bool KeyDown[256];
 
     uint8_t WKey = 87;
     uint8_t AKey = 65;
     uint8_t SKey = 83;
     uint8_t DKey = 68;
+
+    uint8_t RKey = 82;
 
     uint8_t UpKey = 38;
     uint8_t LeftKey = 37;
@@ -57,7 +60,11 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
     case WM_KEYUP:
     {
         uint8_t code = static_cast<uint8_t>(wParam);
-        KeyDown[code] = false;
+        if (KeyDown[code])
+        {
+            KeyDown[code] = false;
+            KeyPressed[code] = true;
+        }
         break;
     }
     }
@@ -197,8 +204,10 @@ int CALLBACK WinMain(
             scene.camera.left = Renderer::Vec{ -1.0f, 0.0f, 0.0f, 0.0f };
             scene.light.position = Renderer::Vec{ 100.0f, 100.0f, 100.0f, 1.0f };
 
-            Renderer::RendererSoftware renderer;
-            //Renderer::RendererDX12 renderer(AssetsDir + "color.hlsl");
+            Renderer::RendererSoftware softwareRenderer;
+            Renderer::RendererDX12 hardwareRenderer(AssetsDir + "color.hlsl");
+
+            Renderer::Renderer* renderer = &hardwareRenderer;
 
             while (isRunning)
             {
@@ -219,8 +228,21 @@ int CALLBACK WinMain(
 
                 HandleInput(scene);
 
+                if (KeyPressed[RKey])
+                {
+                    if (renderer == &hardwareRenderer)
+                    {
+                        renderer = &softwareRenderer;
+                    }
+                    else
+                    {
+                        renderer = &hardwareRenderer;
+                    }
+                    KeyPressed[RKey] = false;
+                }
+
                 Renderer::Texture result(WindowWidth, WindowHeight);
-                renderer.Render(scene, result);
+                renderer->Render(scene, result);
 
                 for (size_t i = 0; i < result.GetSize(); i++)
                 {
@@ -241,7 +263,7 @@ int CALLBACK WinMain(
                     WindowHeight,
                     BackBuffer,
                     &BackBufferInfo,
-                    DIB_RGB_COLORS,
+                    DIB_RGB_COLORS, 
                     SRCCOPY
                 );
             }
