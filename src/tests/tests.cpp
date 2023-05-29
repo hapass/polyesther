@@ -59,7 +59,7 @@ namespace Tests
                     Renderer::Vec {-0.5, -0.5, 0.0, 1.0},
                     Renderer::Vec {0.0, 0.0, 1.0, 0.0},
                     Renderer::Vec {0.0, 0.0, 0.0, 0.0},
-                    Renderer::Color()
+                    Renderer::Color(255, 0, 0)
                 },
                 Renderer::Vertex
                 {
@@ -67,7 +67,7 @@ namespace Tests
                     Renderer::Vec {-0.5, 0.5, 0.0, 1.0},
                     Renderer::Vec {0.0, 0.0, 1.0, 0.0},
                     Renderer::Vec {0.0, 1.0, 0.0, 0.0},
-                    Renderer::Color()
+                    Renderer::Color(0, 255, 0)
                 },
                 Renderer::Vertex
                 {
@@ -75,7 +75,7 @@ namespace Tests
                     Renderer::Vec {0.5, 0.5, 0.0, 1.0},
                     Renderer::Vec {0.0, 0.0, 1.0, 0.0},
                     Renderer::Vec {1.0, 1.0, 0.0, 0.0},
-                    Renderer::Color()
+                    Renderer::Color(0, 0, 255)
                 },
                 Renderer::Vertex
                 {
@@ -83,7 +83,7 @@ namespace Tests
                     Renderer::Vec {0.5, -0.5, 0.0, 1.0},
                     Renderer::Vec {0.0, 0.0, 1.0, 0.0},
                     Renderer::Vec {1.0, 0.0, 0.0, 0.0},
-                    Renderer::Color()
+                    Renderer::Color(255, 255, 255)
                 }
             } == firstModel.vertices);
 
@@ -105,7 +105,7 @@ namespace Tests
                     Renderer::Vec {-0.5, -0.5, 0.0, 1.0},
                     Renderer::Vec {0.0, 0.0, 1.0, 0.0},
                     Renderer::Vec {0.0, 0.0, 0.0, 0.0},
-                    Renderer::Color()
+                    Renderer::Color(255, 0, 0)
                 },
                 Renderer::Vertex
                 {
@@ -113,7 +113,7 @@ namespace Tests
                     Renderer::Vec {-0.5, 0.5, 0.0, 1.0},
                     Renderer::Vec {0.0, 0.0, 1.0, 0.0},
                     Renderer::Vec {0.0, 1.0, 0.0, 0.0},
-                    Renderer::Color()
+                    Renderer::Color(0, 255, 0)
                 },
                 Renderer::Vertex
                 {
@@ -121,7 +121,7 @@ namespace Tests
                     Renderer::Vec {0.5, 0.5, 0.0, 1.0},
                     Renderer::Vec {0.0, 0.0, 1.0, 0.0},
                     Renderer::Vec {1.0, 1.0, 0.0, 0.0},
-                    Renderer::Color()
+                    Renderer::Color(0, 0, 255)
                 },
                 Renderer::Vertex
                 {
@@ -129,7 +129,7 @@ namespace Tests
                     Renderer::Vec {0.5, 0.5, 0.0, 1.0},
                     Renderer::Vec {0.0, 0.0, 1.0, 0.0},
                     Renderer::Vec {1.0, 1.0, 0.0, 0.0},
-                    Renderer::Color()
+                    Renderer::Color(0, 0, 255)
                 },
                 Renderer::Vertex
                 {
@@ -137,7 +137,7 @@ namespace Tests
                     Renderer::Vec {0.5, -0.5, 0.0, 1.0},
                     Renderer::Vec {0.0, 0.0, 1.0, 0.0},
                     Renderer::Vec {1.0, 0.0, 0.0, 0.0},
-                    Renderer::Color()
+                    Renderer::Color(255, 255, 255)
                 },
                 Renderer::Vertex
                 {
@@ -145,7 +145,7 @@ namespace Tests
                     Renderer::Vec {-0.5, -0.5, 0.0, 1.0},
                     Renderer::Vec {0.0, 0.0, 1.0, 0.0},
                     Renderer::Vec {0.0, 0.0, 0.0, 0.0},
-                    Renderer::Color()
+                    Renderer::Color(255, 0, 0)
                 }
             } == secondModel.vertices);
 

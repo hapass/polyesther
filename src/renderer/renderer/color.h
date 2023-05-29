@@ -20,6 +20,14 @@ namespace Renderer
             rgba_vec = { GetVal(0) / 255.0f, GetVal(1) / 255.0f, GetVal(2) / 255.0f, GetVal(3) / 255.0f };
         }
 
+        Color(const Vec& rgba_vec) : rgba(0u), rgba_vec(rgba_vec)
+        {
+            rgba |= uint8_t(rgba_vec.x * 255) << 24;
+            rgba |= uint8_t(rgba_vec.y * 255) << 16;
+            rgba |= uint8_t(rgba_vec.z * 255) << 8;
+            rgba |= uint8_t(rgba_vec.w * 255) << 0;
+        }
+
         Color() : Color(0, 0, 0) {}
 
         const Vec& GetVec() const 

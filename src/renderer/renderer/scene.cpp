@@ -21,6 +21,7 @@ namespace Renderer
             std::map<std::string, uint32_t> materials;
             std::vector<Vec> textureCoords;
             std::vector<Vec> positions;
+            std::vector<Color> colors;
             std::vector<Vec> normals;
             uint32_t currentMaterialId = 0;
         };
@@ -78,7 +79,9 @@ namespace Renderer
                 int32_t positionIndex;
                 if (faceDescriptionStream >> positionIndex)
                 {
-                    vert.position = loadContext.positions.at(--positionIndex);
+                    int32_t index = --positionIndex;
+                    vert.position = loadContext.positions.at(index);
+                    vert.color = loadContext.colors.at(index);
                 }
                 else
                 {
@@ -193,6 +196,16 @@ namespace Renderer
                         if (Read(lineStream, 3, 1.0f, position))
                         {
                             loadContext.positions.push_back(position);
+
+                            Vec color;
+                            if (Read(lineStream, 3, 1.0f, color))
+                            {
+                                loadContext.colors.push_back(Color(color));
+                            }
+                            else
+                            {
+                                loadContext.colors.push_back(Color());
+                            }
                         }
                         else
                         {
