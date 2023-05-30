@@ -201,31 +201,34 @@ namespace Renderer
                 float specAmount = static_cast<float>(std::max(dot(normalize(pos_view), reflect(normal_vec, light_vec * -1.0f)), 0.0f));
                 Vec specular = light.light.color.GetVec() * pow(specAmount, light.light.specularShininess) * light.light.specularStrength;
 
-                uint32_t materialId = CurrentTexture;
+                Vec final_color { tintRed, tintGreen, tintBlue, 1.0f };
+                if (Textures.size() > 0)
+                {
+                    uint32_t materialId = CurrentTexture;
 
-                // From 0 to TextureWidth - 1 (TextureWidth pixels in total)
-                int32_t textureX = static_cast<int32_t>((interpolants_raw[3] / interpolants_raw[5]) * (Textures[materialId].GetWidth() - 1));
-                // From 0 to TextureHeight - 1 (TextureHeight pixels in total)
-                int32_t textureY = static_cast<int32_t>((interpolants_raw[4] / interpolants_raw[5]) * (Textures[materialId].GetHeight() - 1));
+                    // From 0 to TextureWidth - 1 (TextureWidth pixels in total)
+                    int32_t textureX = static_cast<int32_t>((interpolants_raw[3] / interpolants_raw[5]) * (Textures[materialId].GetWidth() - 1));
+                    // From 0 to TextureHeight - 1 (TextureHeight pixels in total)
+                    int32_t textureY = static_cast<int32_t>((interpolants_raw[4] / interpolants_raw[5]) * (Textures[materialId].GetHeight() - 1));
 
-                textureY = (Textures[materialId].GetHeight() - 1) - textureY; // invert texture coords
+                    textureY = (Textures[materialId].GetHeight() - 1) - textureY; // invert texture coords
 
-                assert(textureY < Textures[materialId].GetHeight() && textureX < Textures[materialId].GetWidth());
-                int32_t texelBase = textureY * Textures[materialId].GetWidth() + textureX;
+                    assert(textureY < Textures[materialId].GetHeight() && textureX < Textures[materialId].GetWidth());
+                    int32_t texelBase = textureY * Textures[materialId].GetWidth() + textureX;
 
-                Color texture_color = Textures[materialId].GetColor(texelBase);
+                    Color texture_color = Textures[materialId].GetColor(texelBase);
 
-                Vec frag_color = texture_color.GetVec();
-                Vec final_color = (diffuse + ambient + specular) * frag_color;
-                final_color.x = std::clamp(final_color.x, 0.0f, 1.0f);
-                final_color.y = std::clamp(final_color.y, 0.0f, 1.0f);
-                final_color.z = std::clamp(final_color.z, 0.0f, 1.0f);
-                final_color = final_color * 255.0f;
+                    Vec frag_color = texture_color.GetVec();
+                    final_color = (diffuse + ambient + specular) * frag_color;
+                    final_color.x = std::clamp(final_color.x, 0.0f, 1.0f);
+                    final_color.y = std::clamp(final_color.y, 0.0f, 1.0f);
+                    final_color.z = std::clamp(final_color.z, 0.0f, 1.0f);
+                }
 
                 DrawPixel(x, y, Color(
-                    static_cast<uint8_t>(final_color.x),
-                    static_cast<uint8_t>(final_color.y),
-                    static_cast<uint8_t>(final_color.z)
+                    static_cast<uint8_t>(final_color.x * 255.0f),
+                    static_cast<uint8_t>(final_color.y * 255.0f),
+                    static_cast<uint8_t>(final_color.z * 255.0f)
                 ));
             }
         }
@@ -274,8 +277,9 @@ namespace Renderer
             v.v.position.z /= v.v.position.w;
         }
 
-        // todo: backface culling
-        //if (cross(vertices[1].pos_view - vertices[0].pos_view, vertices[1].pos_view - vertices[2].pos_view).z >= 0)
+        // todo: bad culling, also need to configure to get the winding order correctly
+        //float crossProductZ = cross(vertices[1].pos_view - vertices[0].pos_view, vertices[1].pos_view - vertices[2].pos_view).z;
+        //if (crossProductZ > 0 && abs(crossProductZ) >= 0.1)
         //{
         //    return;
         //}
@@ -444,9 +448,11 @@ namespace Renderer
 
         if (Textures.size() == 0)
         {
-            Textures.resize(2);
-            Load(scene.models[0].materials[0].textureName, Textures[0]);
-            Load(scene.models[0].materials[1].textureName, Textures[1]);
+            Textures.resize(scene.models[0].materials.size());
+            for (size_t i = 0; i < Textures.size(); i++)
+            {
+                Load(scene.models[0].materials[i].textureName, Textures[i]);
+            }
         }
 
         const Model& model = scene.models[0];

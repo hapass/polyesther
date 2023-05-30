@@ -220,5 +220,33 @@ namespace Tests
 
             Assert::IsTrue(texture == reference);
         }
+
+        TEST_METHOD(RenderShouldProperlyRenderColoredTriangleScene)
+        {
+            Renderer::Scene scene;
+            bool success = Renderer::Load(TriangleDir + "scene.sce", scene);
+
+            // todo: split camera and light into separate files in the scene, make so that I can export current camera from the application,
+            // to feed back into the tests, then fix backface culling for software
+            // todo: add color triangle rendering test and implementation for dx12 renderer
+            scene.camera.position.z = 2;
+            scene.camera.position.x = 0;
+            scene.camera.position.y = 0;
+            scene.camera.pitch = 0.0f;
+            scene.camera.yaw = 0.0f;
+            scene.camera.forward = Renderer::Vec{ 0.0f, 0.0f, -1.0f, 0.0f };
+            scene.camera.left = Renderer::Vec{ -1.0f, 0.0f, 0.0f, 0.0f };
+            scene.light.position = Renderer::Vec{ 100.0f, 100.0f, 100.0f, 1.0f };
+
+            Renderer::RendererSoftware renderer;
+
+            Renderer::Texture texture(200, 150); // todo: test error if texture has no dimensions and passed to render
+            renderer.Render(scene, texture);
+
+            Renderer::Texture reference;
+            Renderer::Load(TestsDir + "reference_backface_culling.bmp", reference);
+
+            Assert::IsTrue(texture == reference);
+        }
     };
 }

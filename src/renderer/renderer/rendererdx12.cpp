@@ -363,7 +363,7 @@ namespace Renderer
             psoDescription.PS = { (BYTE*)pixelShaderBlob->GetBufferPointer(), pixelShaderBlob->GetBufferSize() };
 
             psoDescription.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
-            psoDescription.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
+            psoDescription.RasterizerState.CullMode = D3D12_CULL_MODE_BACK;
             psoDescription.RasterizerState.FrontCounterClockwise = true;
             psoDescription.RasterizerState.DepthBias = D3D12_DEFAULT_DEPTH_BIAS;
             psoDescription.RasterizerState.DepthBiasClamp = D3D12_DEFAULT_DEPTH_BIAS_CLAMP;
