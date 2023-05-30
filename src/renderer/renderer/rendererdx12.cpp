@@ -108,7 +108,7 @@ namespace Renderer
 
             // rendering
             const UINT numberOfConstantStructs = UINT(1);
-            const UINT numberOfTextures = UINT(model.materials.size());
+            const UINT numberOfTextures = UINT(model.materials.size() + 1); // add one extra texture for 0 texture case to even work, and we can use that as an error texture in the future
 
             rootDescriptorHeap = CreateRootDescriptorHeap(numberOfConstantStructs + numberOfTextures);
 
@@ -221,6 +221,7 @@ namespace Renderer
                 0.0f, 0.0f, 0.0f, 1.0f
             };
             DirectX::XMFLOAT4 lightPos = { 0.0f, 0.0f, 0.0f, 0.0f };
+            UINT textureCount = 0;
         };
 
         struct XVertex
@@ -243,12 +244,14 @@ namespace Renderer
             return AlignBytes(sizeof(T), alignment);
         }
 
-        void SetModelViewProjection(const DirectX::XMMATRIX& mvp, const DirectX::XMMATRIX& mv, const DirectX::XMVECTOR& lightPos)
+        void SetConstants(const DirectX::XMMATRIX& mvp, const DirectX::XMMATRIX& mv, const DirectX::XMVECTOR& lightPos, UINT numberOfTextures)
         {
             Constants constantsStruct;
             DirectX::XMStoreFloat4x4(&constantsStruct.worldViewProj, mvp);
             DirectX::XMStoreFloat4x4(&constantsStruct.worldView, mv);
             DirectX::XMStoreFloat4(&constantsStruct.lightPos, lightPos);
+
+            constantsStruct.textureCount = numberOfTextures;
 
             BYTE* mappedData = nullptr;
             constantBuffer->Map(0, nullptr, (void**)&mappedData);
@@ -363,7 +366,7 @@ namespace Renderer
             psoDescription.PS = { (BYTE*)pixelShaderBlob->GetBufferPointer(), pixelShaderBlob->GetBufferSize() };
 
             psoDescription.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
-            psoDescription.RasterizerState.CullMode = D3D12_CULL_MODE_BACK;
+            psoDescription.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
             psoDescription.RasterizerState.FrontCounterClockwise = true;
             psoDescription.RasterizerState.DepthBias = D3D12_DEFAULT_DEPTH_BIAS;
             psoDescription.RasterizerState.DepthBiasClamp = D3D12_DEFAULT_DEPTH_BIAS_CLAMP;
@@ -728,7 +731,7 @@ namespace Renderer
             Vec position_view = ViewTransform(scene.camera) * scene.light.position;
             DirectX::XMVECTOR lightPos = { position_view.x, position_view.y, position_view.z, position_view.w };
 
-            SetModelViewProjection(mvpX, mvX, lightPos);
+            SetConstants(mvpX, mvX, lightPos, (UINT)scene.models[0].materials.size());
 
             D3D12_VIEWPORT viewport;
             viewport.TopLeftX = 0.0f;

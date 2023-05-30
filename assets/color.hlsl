@@ -3,6 +3,7 @@ cbuffer cbPerObject : register(b0)
     float4x4 gWorldViewProj;
     float4x4 gWorldView;
     float4 gLightPos;
+    uint gTextureCount;
 };
 
 SamplerState g_sampler : register(s0);
@@ -64,7 +65,7 @@ float4 PS(VertexOut pin) : SV_Target
 
     float2 texCoord = float2(pin.TexCoord.x, 1.0 - pin.TexCoord.y); 
 
-    float4 frag_color = g_texture[pin.TexIndex].Sample(g_sampler, texCoord);
+    float4 frag_color = gTextureCount == 0 ? float4(1.0, 1.0, 1.0, 1.0) : g_texture[pin.TexIndex].Sample(g_sampler, texCoord);
     float4 res = (diffuse + ambient + specular) * frag_color;
     return clamp(res, 0.0f, 1.0f);
 }
