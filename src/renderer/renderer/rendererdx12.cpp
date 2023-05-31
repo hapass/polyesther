@@ -185,6 +185,7 @@ namespace Renderer
                         DirectX::XMFLOAT3(vert.position.x, vert.position.y, vert.position.z),
                         DirectX::XMFLOAT2(vert.textureCoord.x, vert.textureCoord.y),
                         DirectX::XMFLOAT3(vert.normal.x, vert.normal.y, vert.normal.z),
+                        DirectX::XMFLOAT3(vert.color.GetVec().x, vert.color.GetVec().y, vert.color.GetVec().z),
                         UINT(vert.materialId)
                         })
                 );
@@ -229,6 +230,7 @@ namespace Renderer
             DirectX::XMFLOAT3 Pos;
             DirectX::XMFLOAT2 TextureCoord;
             DirectX::XMFLOAT3 Normal;
+            DirectX::XMFLOAT3 Color;
             UINT TextureIndex;
         };
 
@@ -318,13 +320,20 @@ namespace Renderer
         {
             UINT flags = D3DCOMPILE_ENABLE_UNBOUNDED_DESCRIPTOR_TABLES;
 
+            //ID3DBlob* errorBlob = nullptr;
             ID3DBlob* vertexShaderBlob = nullptr;
             D3D_NOT_FAILED(D3DCompileFromFile(shaderPath.c_str(), nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE, "VS", "vs_5_1", flags, 0, &vertexShaderBlob, nullptr));
+
+            //if (errorBlob)
+            //{
+            //    LOG((char*)errorBlob->GetBufferPointer());
+            //    errorBlob->Release();
+            //}
 
             ID3DBlob* pixelShaderBlob = nullptr;
             D3D_NOT_FAILED(D3DCompileFromFile(shaderPath.c_str(), nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE, "PS", "ps_5_1", flags, 0, &pixelShaderBlob, nullptr));
 
-            constexpr size_t vertexFieldsCount = 4;
+            constexpr size_t vertexFieldsCount = 5;
             D3D12_INPUT_ELEMENT_DESC inputElementDescription[vertexFieldsCount];
 
             inputElementDescription[0].SemanticName = "POSITION";
@@ -351,13 +360,21 @@ namespace Renderer
             inputElementDescription[2].InputSlotClass = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA;
             inputElementDescription[2].InstanceDataStepRate = 0;
 
-            inputElementDescription[3].SemanticName = "TEXINDEX";
+            inputElementDescription[3].SemanticName = "COLOR";
             inputElementDescription[3].SemanticIndex = 0;
-            inputElementDescription[3].Format = DXGI_FORMAT_R32_UINT;
+            inputElementDescription[3].Format = DXGI_FORMAT_R32G32B32_FLOAT;
             inputElementDescription[3].InputSlot = 0;
             inputElementDescription[3].AlignedByteOffset = 32;
             inputElementDescription[3].InputSlotClass = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA;
             inputElementDescription[3].InstanceDataStepRate = 0;
+
+            inputElementDescription[4].SemanticName = "TEXINDEX";
+            inputElementDescription[4].SemanticIndex = 0;
+            inputElementDescription[4].Format = DXGI_FORMAT_R32_UINT;
+            inputElementDescription[4].InputSlot = 0;
+            inputElementDescription[4].AlignedByteOffset = 44;
+            inputElementDescription[4].InputSlotClass = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA;
+            inputElementDescription[4].InstanceDataStepRate = 0;
 
             D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDescription = {};
             psoDescription.InputLayout = { inputElementDescription, vertexFieldsCount };

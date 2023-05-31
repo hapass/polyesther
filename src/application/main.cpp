@@ -166,7 +166,7 @@ int CALLBACK WinMain(
             NOT_FAILED(window = CreateWindowExW(
                 0,
                 L"MainWindow",
-                L"Software Rasterizer",
+                L"Hardware Rasterizer",
                 WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_VISIBLE,
                 CW_USEDEFAULT,
                 CW_USEDEFAULT,
@@ -232,10 +232,12 @@ int CALLBACK WinMain(
                 {
                     if (renderer == &hardwareRenderer)
                     {
+                        SetWindowText(window, L"Software Rasterizer");
                         renderer = &softwareRenderer;
                     }
                     else
                     {
+                        SetWindowText(window, L"Hardware Rasterizer"); // todo: make it so that initial setting of the name is not conflicting with this one
                         renderer = &hardwareRenderer;
                     }
                     KeyPressed[RKey] = false;

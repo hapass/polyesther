@@ -14,6 +14,7 @@ struct VertexIn
     float3 PosL : POSITION;
     float2 TexCoord : TEXCOORD;
     float3 Normals : NORMALS;
+    float3 Color : COLOR;
     uint TexIndex : TEXINDEX;
 };
 
@@ -23,6 +24,7 @@ struct VertexOut
     float4 PosView: POSITION;
     float2 TexCoord : TEXCOORD;
     float3 Normals : NORMALS;
+    float3 Color : COLOR;
     uint TexIndex : TEXINDEX;
 };
 
@@ -40,6 +42,7 @@ VertexOut VS(VertexIn vin)
     // Just pass vertex texture coords into the pixel shader.
     vout.TexCoord = vin.TexCoord;
     vout.TexIndex = vin.TexIndex;
+    vout.Color = vin.Color;
 
     return vout;
 }
@@ -65,7 +68,7 @@ float4 PS(VertexOut pin) : SV_Target
 
     float2 texCoord = float2(pin.TexCoord.x, 1.0 - pin.TexCoord.y); 
 
-    float4 frag_color = gTextureCount == 0 ? float4(1.0, 1.0, 1.0, 1.0) : g_texture[pin.TexIndex].Sample(g_sampler, texCoord);
+    float4 frag_color = gTextureCount == 0 ? float4(pin.Color.xyz, 1.0) : g_texture[pin.TexIndex].Sample(g_sampler, texCoord);
     float4 res = (diffuse + ambient + specular) * frag_color;
     return clamp(res, 0.0f, 1.0f);
 }
