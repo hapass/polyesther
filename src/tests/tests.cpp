@@ -182,6 +182,22 @@ namespace Tests
 
             Assert::IsTrue(texture == reference);
         }
+
+        TEST_METHOD(RenderShouldProperlyRenderColoredTriangleScene)
+        {
+            Renderer::Scene scene;
+            bool success = Renderer::Load(TriangleDir + "scene.sce", scene);
+
+            Renderer::RendererDX12 renderer(AssetsDir + "color.hlsl");
+
+            Renderer::Texture texture(200, 150);
+            renderer.Render(scene, texture);
+
+            Renderer::Texture reference;
+            Renderer::Load(TestsDir + "backface_culling_dx12.bmp", reference);
+
+            Assert::IsTrue(texture == reference);
+        }
     };
 
     TEST_CLASS(RendererSoftware)
@@ -193,7 +209,7 @@ namespace Tests
 
             Renderer::RendererSoftware renderer;
 
-            Renderer::Texture texture(200, 150); // todo.pavelza: test error if texture has no dimensions and passed to render
+            Renderer::Texture texture(200, 150);
             renderer.Render(scene, texture);
 
             Renderer::Texture reference;
@@ -202,7 +218,6 @@ namespace Tests
             Assert::IsTrue(texture == reference);
         }
 
-        // todo.pavelza: add color triangle rendering test and implementation for dx12 renderer
         TEST_METHOD(RenderShouldProperlyRenderColoredTriangleScene)
         {
             Renderer::Scene scene;
@@ -210,7 +225,7 @@ namespace Tests
 
             Renderer::RendererSoftware renderer;
 
-            Renderer::Texture texture(200, 150); // todo.pavelza: test error if texture has no dimensions and passed to render
+            Renderer::Texture texture(200, 150);
             renderer.Render(scene, texture);
 
             Renderer::Texture reference;
