@@ -280,7 +280,7 @@ namespace Renderer
 
         // todo.pavelza: fix bad culling, also need to configure to get the winding order correctly
         //float crossProductZ = cross(vertices[1].pos_view - vertices[0].pos_view, vertices[1].pos_view - vertices[2].pos_view).z;
-        //if (crossProductZ > 0 && abs(crossProductZ) >= 0.1)
+        //if (crossProductZ > 0)
         //{
         //    return;
         //}

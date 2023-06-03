@@ -152,7 +152,7 @@ int CALLBACK WinMain(
 
     try
     {
-        if (ATOM id = RegisterClassW(&MainWindowClass))
+        if (RegisterClassW(&MainWindowClass))
         {
             RECT clientArea;
             clientArea.left = 0;

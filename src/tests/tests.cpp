@@ -173,13 +173,6 @@ namespace Tests
             Renderer::Scene scene;
             bool success = Renderer::Load(AssetsDir + "cars\\scene.sce", scene);
 
-            scene.camera.position.z = 2;
-            scene.camera.position.x = 0;
-            scene.camera.position.y = 0;
-            scene.camera.pitch = 0.0f;
-            scene.camera.yaw = 0.0f;
-            scene.light.position = Renderer::Vec{ 100.0f, 100.0f, 100.0f, 1.0f };
-
             Renderer::RendererDX12 renderer(AssetsDir + "color.hlsl");
 
             Renderer::Texture texture(200, 150); // todo.pavelza: test error if texture has no dimensions and passed to render

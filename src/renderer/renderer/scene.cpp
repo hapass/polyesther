@@ -35,7 +35,7 @@ namespace Renderer
                 return std::string();
             }
 
-            return result.substr(pos);
+            return result.substr(pos + 1);
         }
 
         std::string ReplaceFileNameInFullPath(const std::string& fullFileName, const std::string& newFileName)
@@ -65,7 +65,8 @@ namespace Renderer
                     }
                     else
                     {
-                        REPORT_ERROR();
+                        // do not log error, can be optional, error will be logged further
+                        return false;
                     }
                 }
                 else
@@ -340,7 +341,7 @@ namespace Renderer
                 std::stringstream lineStream(line);
 
                 Vec color;
-                if (Read(lineStream, 2, 0.0f, color))
+                if (Read(lineStream, 3, 1.0f, color))
                 {
                     light.color = Color(color);
                 }
