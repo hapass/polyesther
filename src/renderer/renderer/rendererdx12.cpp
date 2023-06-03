@@ -141,7 +141,7 @@ namespace Renderer
             rootSignature = CreateRootSignature(numberOfConstantStructs, numberOfTextures);
 
             // pso
-            pso = CreatePSO(shaderPath); // todo: keep arguments? it seems to be easier when the state is not shared at all
+            pso = CreatePSO(shaderPath); // todo.pavelza: keep arguments? it seems to be easier when the state is not shared at all
 
             // queue
             queue = std::make_unique<GraphicsQueue>(device);
@@ -550,7 +550,7 @@ namespace Renderer
 
             D3D12_HEAP_PROPERTIES uploadHeapProperties = device->GetCustomHeapProperties(0, D3D12_HEAP_TYPE_UPLOAD);
 
-            ID3D12Resource* dataUploadBuffer = nullptr; // TODO: should be cleared later
+            ID3D12Resource* dataUploadBuffer = nullptr; // todo.pavelza: should be cleared later
             D3D_NOT_FAILED(device->CreateCommittedResource(&uploadHeapProperties, D3D12_HEAP_FLAG_NONE, &dataBufferDescription, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&dataUploadBuffer)));
 
             BYTE* mappedData = nullptr;
@@ -611,7 +611,7 @@ namespace Renderer
             uploadBufferDescription.Flags = D3D12_RESOURCE_FLAG_NONE;
 
             D3D12_HEAP_PROPERTIES uploadProperties = device->GetCustomHeapProperties(0, D3D12_HEAP_TYPE_UPLOAD);
-            ID3D12Resource* dataUploadBuffer = nullptr; // TODO: should be cleared later
+            ID3D12Resource* dataUploadBuffer = nullptr; // todo.pavelza: should be cleared later
             D3D_NOT_FAILED(device->CreateCommittedResource(&uploadProperties, D3D12_HEAP_FLAG_NONE, &uploadBufferDescription, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&dataUploadBuffer)));
 
             D3D12_HEAP_PROPERTIES defaultProperties = device->GetCustomHeapProperties(0, D3D12_HEAP_TYPE_DEFAULT);
@@ -687,7 +687,7 @@ namespace Renderer
             readbackBufferDescription.Flags = D3D12_RESOURCE_FLAG_NONE;
 
             D3D12_HEAP_PROPERTIES readbackProperties = device->GetCustomHeapProperties(0, D3D12_HEAP_TYPE_READBACK);
-            ID3D12Resource* readbackBuffer = nullptr; // TODO: should be cleared later
+            ID3D12Resource* readbackBuffer = nullptr; // todo.pavelza: should be cleared later
             D3D_NOT_FAILED(device->CreateCommittedResource(&readbackProperties, D3D12_HEAP_FLAG_NONE, &readbackBufferDescription, D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&readbackBuffer)));
 
             D3D12_TEXTURE_COPY_LOCATION dest;
@@ -768,7 +768,7 @@ namespace Renderer
 
             queue->GetList()->RSSetScissorRects(1, &scissor);
 
-            // todo: when does it become copy dest?
+            // todo.pavelza: when does it become copy dest?
             queue->AddBarrierToList(currentBuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_RENDER_TARGET);
 
             FLOAT clearColor[4] = { 0.0f, 0.f, 0.f, 1.000000000f };

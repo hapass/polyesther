@@ -4,6 +4,10 @@
 #include <string>
 #include <memory>
 
+#pragma comment(lib, "D3d12.lib")
+#pragma comment(lib, "DXGI.lib")
+#pragma comment(lib, "d3dcompiler.lib")
+
 namespace Renderer
 {
     struct RendererDX12Context;

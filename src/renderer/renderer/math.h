@@ -10,12 +10,12 @@ namespace Renderer
         float m[16U];
     };
 
-    const Matrix& rotateZ(float alpha);
-    const Matrix& rotateY(float alpha);
-    const Matrix& rotateX(float alpha);
-    const Matrix& translate(float x, float y, float z);
-    const Matrix& scale(float x);
-    const Matrix& transpose(const Matrix& m);
+    Matrix rotateZ(float alpha);
+    Matrix rotateY(float alpha);
+    Matrix rotateX(float alpha);
+    Matrix translate(float x, float y, float z);
+    Matrix scale(float x);
+    Matrix transpose(const Matrix& m);
 
     Matrix operator*(const Matrix& a, const Matrix& b);
 

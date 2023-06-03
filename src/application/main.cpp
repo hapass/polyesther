@@ -152,7 +152,7 @@ int CALLBACK WinMain(
 
     try
     {
-        if (RegisterClassW(&MainWindowClass))
+        if (ATOM id = RegisterClassW(&MainWindowClass))
         {
             RECT clientArea;
             clientArea.left = 0;
@@ -165,8 +165,8 @@ int CALLBACK WinMain(
             HWND window;
             NOT_FAILED(window = CreateWindowExW(
                 0,
-                L"MainWindow",
-                L"Hardware Rasterizer",
+                MainWindowClass.lpszClassName,
+                nullptr,
                 WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_VISIBLE,
                 CW_USEDEFAULT,
                 CW_USEDEFAULT,
@@ -181,16 +181,16 @@ int CALLBACK WinMain(
             HDC screenContext;
             NOT_FAILED(screenContext = GetDC(window), 0);
 
-            BITMAPINFO BackBufferInfo;
-            BackBufferInfo.bmiHeader.biSize = sizeof(BackBufferInfo.bmiHeader);
-            BackBufferInfo.bmiHeader.biWidth = WindowWidth;
-            BackBufferInfo.bmiHeader.biHeight = WindowHeight;
-            BackBufferInfo.bmiHeader.biPlanes = 1;
-            BackBufferInfo.bmiHeader.biBitCount = sizeof(uint32_t) * CHAR_BIT;
-            BackBufferInfo.bmiHeader.biCompression = BI_RGB;
+            BITMAPINFO backBufferInfo;
+            backBufferInfo.bmiHeader.biSize = sizeof(backBufferInfo.bmiHeader);
+            backBufferInfo.bmiHeader.biWidth = WindowWidth;
+            backBufferInfo.bmiHeader.biHeight = WindowHeight;
+            backBufferInfo.bmiHeader.biPlanes = 1;
+            backBufferInfo.bmiHeader.biBitCount = sizeof(uint32_t) * CHAR_BIT;
+            backBufferInfo.bmiHeader.biCompression = BI_RGB;
 
-            uint32_t* BackBuffer = nullptr;
-            NOT_FAILED(BackBuffer = (uint32_t*)VirtualAlloc(0, WindowWidth * WindowHeight * sizeof(uint32_t), MEM_COMMIT, PAGE_READWRITE), 0);
+            uint32_t* backBuffer = nullptr;
+            NOT_FAILED(backBuffer = (uint32_t*)VirtualAlloc(0, WindowWidth * WindowHeight * sizeof(uint32_t), MEM_COMMIT, PAGE_READWRITE), 0);
 
             Renderer::Scene scene;
             Renderer::Load(AssetsDir + "cars\\scene.sce", scene);
@@ -200,8 +200,6 @@ int CALLBACK WinMain(
             scene.camera.position.y = 0;
             scene.camera.pitch = 0.0f;
             scene.camera.yaw = 0.0f;
-            scene.camera.forward = Renderer::Vec{ 0.0f, 0.0f, -1.0f, 0.0f };
-            scene.camera.left = Renderer::Vec{ -1.0f, 0.0f, 0.0f, 0.0f };
             scene.light.position = Renderer::Vec{ 100.0f, 100.0f, 100.0f, 1.0f };
 
             Renderer::RendererSoftware softwareRenderer;
@@ -232,16 +230,16 @@ int CALLBACK WinMain(
                 {
                     if (renderer == &hardwareRenderer)
                     {
-                        SetWindowText(window, L"Software Rasterizer");
                         renderer = &softwareRenderer;
                     }
                     else
                     {
-                        SetWindowText(window, L"Hardware Rasterizer"); // todo: make it so that initial setting of the name is not conflicting with this one
                         renderer = &hardwareRenderer;
                     }
                     KeyPressed[RKey] = false;
                 }
+
+                SetWindowText(window, renderer == &hardwareRenderer ? L"Hardware Rasterizer" : L"Software Rasterizer");
 
                 Renderer::Texture result(WindowWidth, WindowHeight);
                 renderer->Render(scene, result);
@@ -249,7 +247,7 @@ int CALLBACK WinMain(
                 for (size_t i = 0; i < result.GetSize(); i++)
                 {
                     // invert texture along y axis and shift alpha outside
-                    BackBuffer[result.GetWidth() * (result.GetHeight() - 1 - (i / result.GetWidth())) + i % result.GetWidth()] = (result.GetColor(i).rgba >> 8);
+                    backBuffer[result.GetWidth() * (result.GetHeight() - 1 - (i / result.GetWidth())) + i % result.GetWidth()] = (result.GetColor(i).rgba >> 8);
                 }
 
                 // swap buffers
@@ -263,14 +261,14 @@ int CALLBACK WinMain(
                     0,
                     WindowWidth,
                     WindowHeight,
-                    BackBuffer,
-                    &BackBufferInfo,
+                    backBuffer,
+                    &backBufferInfo,
                     DIB_RGB_COLORS, 
                     SRCCOPY
                 );
             }
 
-            NOT_FAILED(VirtualFree(BackBuffer, 0, MEM_RELEASE), 0);
+            NOT_FAILED(VirtualFree(backBuffer, 0, MEM_RELEASE), 0);
             NOT_FAILED(ReleaseDC(window, screenContext), 1);
         }
     }

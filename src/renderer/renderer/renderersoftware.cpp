@@ -14,8 +14,8 @@ namespace Renderer
 {
     namespace
     {
-        int32_t OutputWidth;
-        int32_t OutputHeight;
+        size_t OutputWidth;
+        size_t OutputHeight;
 
         std::vector<uint32_t> BackBuffer;
         std::vector<float> ZBuffer;
@@ -39,10 +39,10 @@ namespace Renderer
         Vertex v;
         Vec pos_view;
 
-        // todo: need to get rid of these, just needed for easier interpolation
-        float red;
-        float green;
-        float blue;
+        // todo.pavelza: need to get rid of these, just needed for easier interpolation
+        float red = 0.0f;
+        float green = 0.0f;
+        float blue = 0.0f;
     };
 
     void DrawPixel(int32_t x, int32_t y, Color color)
@@ -104,7 +104,7 @@ namespace Renderer
 
     struct Edge
     {
-        Edge(Vec b, Vec e, std::vector<Interpolant>& inter, bool isMin = true) : interpolants(inter), begin(b), isBeginMin(isMin)
+        Edge(Vec b, Vec e, std::vector<Interpolant>& inter, bool isMin = true) : interpolants(inter), begin(b), isBeginMin(isMin), pixelX(0)
         {
             pixelYBegin = static_cast<int32_t>(ceil(b.y));
             pixelYEnd = static_cast<int32_t>(ceil(e.y));
@@ -207,14 +207,15 @@ namespace Renderer
                     uint32_t materialId = CurrentTexture;
 
                     // From 0 to TextureWidth - 1 (TextureWidth pixels in total)
-                    int32_t textureX = static_cast<int32_t>((interpolants_raw[3] / interpolants_raw[5]) * (Textures[materialId].GetWidth() - 1));
+                    size_t textureX = static_cast<size_t>((interpolants_raw[3] / interpolants_raw[5]) * (Textures[materialId].GetWidth() - 1));
                     // From 0 to TextureHeight - 1 (TextureHeight pixels in total)
-                    int32_t textureY = static_cast<int32_t>((interpolants_raw[4] / interpolants_raw[5]) * (Textures[materialId].GetHeight() - 1));
+                    size_t textureY = static_cast<size_t>((interpolants_raw[4] / interpolants_raw[5]) * (Textures[materialId].GetHeight() - 1));
 
+                    // todo.pavelza: 0 height texture undefined behavior
                     textureY = (Textures[materialId].GetHeight() - 1) - textureY; // invert texture coords
 
                     assert(textureY < Textures[materialId].GetHeight() && textureX < Textures[materialId].GetWidth());
-                    int32_t texelBase = textureY * Textures[materialId].GetWidth() + textureX;
+                    size_t texelBase = textureY * Textures[materialId].GetWidth() + textureX;
 
                     Color texture_color = Textures[materialId].GetColor(texelBase);
 
@@ -277,7 +278,7 @@ namespace Renderer
             v.v.position.z /= v.v.position.w;
         }
 
-        // todo: fix bad culling, also need to configure to get the winding order correctly
+        // todo.pavelza: fix bad culling, also need to configure to get the winding order correctly
         //float crossProductZ = cross(vertices[1].pos_view - vertices[0].pos_view, vertices[1].pos_view - vertices[2].pos_view).z;
         //if (crossProductZ > 0 && abs(crossProductZ) >= 0.1)
         //{
@@ -288,7 +289,7 @@ namespace Renderer
 
         for (VertexS& v : vertices)
         {
-            // TODO.PAVELZA: Clipping might result in some vertices being slightly outside of -1 to 1 range, so we clamp. Will need to think how to avoid this.
+            // todo.pavelza: Clipping might result in some vertices being slightly outside of -1 to 1 range, so we clamp. Will need to think how to avoid this.
             v.v.position.x = std::clamp(v.v.position.x, -1.0f, 1.0f);
             v.v.position.y = std::clamp(v.v.position.y, -1.0f, 1.0f);
             v.v.position.z = std::clamp(v.v.position.z, -1.0f, 1.0f);
@@ -412,8 +413,8 @@ namespace Renderer
             v.v.normal = transform * v.v.normal;
         }
 
-        // TODO.PAVELZA: If all the points are outside of the view frustum - we can cull immediately.
-        // TODO.PAVELZA: If all points are inside - we can draw immediately.
+        // todo.pavelza: If all the points are outside of the view frustum - we can cull immediately.
+        // todo.pavelza: If all points are inside - we can draw immediately.
 
         if (ClipTriangleAxis(vertices, 0) && ClipTriangleAxis(vertices, 1) && ClipTriangleAxis(vertices, 2))
         {

@@ -17,9 +17,9 @@ namespace Renderer
         }
     }
 
-    const Matrix& rotateZ(float alpha)
+    Matrix rotateZ(float alpha)
     {
-        static Matrix m;
+        Matrix m;
 
         //col 1
         m.m[0] = cosf(alpha);
@@ -48,9 +48,9 @@ namespace Renderer
         return m;
     }
 
-    const Matrix& rotateY(float alpha)
+    Matrix rotateY(float alpha)
     {
-        static Matrix m;
+        Matrix m;
 
         //col 1
         m.m[0] = cosf(alpha);
@@ -79,9 +79,9 @@ namespace Renderer
         return m;
     }
 
-    const Matrix& rotateX(float alpha)
+    Matrix rotateX(float alpha)
     {
-        static Matrix m;
+        Matrix m;
 
         //col 1
         m.m[0] = 1.0f;
@@ -110,9 +110,9 @@ namespace Renderer
         return m;
     }
 
-    const Matrix& translate(float x, float y, float z)
+    Matrix translate(float x, float y, float z)
     {
-        static Matrix m;
+        Matrix m;
 
         //col 1
         m.m[0] = 1.0f;
@@ -141,9 +141,9 @@ namespace Renderer
         return m;
     }
 
-    const Matrix& scale(float x)
+    Matrix scale(float x)
     {
-        static Matrix m;
+        Matrix m;
 
         //col 1
         m.m[0] = x;
@@ -172,9 +172,9 @@ namespace Renderer
         return m;
     }
 
-    const Matrix& transpose(const Matrix& m)
+    Matrix transpose(const Matrix& m)
     {
-        static Matrix r; // todo: what if I multiply the results of two transposes?
+        Matrix r;
 
         //col 1
         r.m[0] = m.m[0];
@@ -264,9 +264,9 @@ namespace Renderer
 
         switch (index)
         {
-        case 0: x = val;
-        case 1: y = val;
-        case 2: z = val;
+        case 0: x = val; return;
+        case 1: y = val; return;
+        case 2: z = val; return;
         }
         w = val;
     }

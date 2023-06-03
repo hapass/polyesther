@@ -26,6 +26,18 @@ namespace Renderer
             uint32_t currentMaterialId = 0;
         };
 
+        std::string GetFileExtension(const std::string& fileName)
+        {
+            std::string result(fileName);
+            size_t pos = result.rfind('.');
+            if (pos == std::string::npos || pos == result.size() - 1)
+            {
+                return std::string();
+            }
+
+            return result.substr(pos);
+        }
+
         std::string ReplaceFileNameInFullPath(const std::string& fullFileName, const std::string& newFileName)
         {
             std::string result(fullFileName);
@@ -248,7 +260,7 @@ namespace Renderer
                                     model.vertices.push_back(vertex);
                                     vertexIndices[vertex] = static_cast<uint32_t>(model.vertices.size()) - 1;
                                 }
-                                
+
                                 model.indices.push_back(vertexIndices[vertex]);
                             }
                         }
@@ -293,7 +305,79 @@ namespace Renderer
                     }
                 }
             }
-            
+
+            REPORT_ERROR_IF_FALSE(file.is_open());
+        }
+
+        bool Load(const std::string& fullFileName, Light& light)
+        {
+            std::fstream file(fullFileName);
+            std::string line;
+
+            if (std::getline(file, line))
+            {
+                std::stringstream lineStream(line);
+
+                Vec params;
+                if (Read(lineStream, 3, 0.0f, params))
+                {
+                    light.ambientStrength = params.x;
+                    light.specularStrength = params.y;
+                    light.specularShininess = params.z;
+                }
+                else
+                {
+                    REPORT_ERROR();
+                }
+            }
+            else
+            {
+                REPORT_ERROR();
+            }
+
+            if (std::getline(file, line))
+            {
+                std::stringstream lineStream(line);
+
+                Vec color;
+                if (Read(lineStream, 2, 0.0f, color))
+                {
+                    light.color = Color(color);
+                }
+                else
+                {
+                    REPORT_ERROR();
+                }
+            }
+            else
+            {
+                REPORT_ERROR();
+            }
+
+            REPORT_ERROR_IF_FALSE(file.is_open());
+        }
+
+        bool Load(const std::string& fullFileName, Camera& camera)
+        {
+            std::fstream file(fullFileName);
+            std::string line;
+
+            if (std::getline(file, line))
+            {
+                std::stringstream lineStream(line);
+
+                Vec rotation;
+                if (Read(lineStream, 2, 0.0f, rotation))
+                {
+                    camera.pitch = rotation.x;
+                    camera.yaw = rotation.y;
+                }
+                else
+                {
+                    REPORT_ERROR();
+                }
+            }
+
             REPORT_ERROR_IF_FALSE(file.is_open());
         }
     }
@@ -311,37 +395,76 @@ namespace Renderer
 
     bool Load(const std::string& fullFileName, Scene& scene)
     {
+        const char* EXTENSION_MODEL = "obj";
+        const char* EXTENSION_LIGHT = "lig";
+        const char* EXTENSION_CAMERA = "cam";
+
         std::fstream file(fullFileName);
         std::string line;
 
         while (std::getline(file, line))
         {
-            Model model;
             std::stringstream lineStream(line);
 
-            if (Read(lineStream, 3, 1.0f, model.position))
+            std::string fileName;
+            if (lineStream >> fileName)
             {
-                std::string modelFileName;
-                if (lineStream >> modelFileName)
+                std::string extension = GetFileExtension(fileName);
+
+                if (extension == EXTENSION_MODEL)
                 {
-                    if (Load(ReplaceFileNameInFullPath(fullFileName, modelFileName), model))
+                    Model model;
+                    if (Read(lineStream, 3, 1.0f, model.position))
                     {
-                        scene.models.push_back(std::move(model));
+                        if (Load(ReplaceFileNameInFullPath(fullFileName, fileName), model))
+                        {
+                            scene.models.push_back(std::move(model));
+                        }
+                        else
+                        {
+                            REPORT_ERROR();
+                        }
                     }
                     else
                     {
                         REPORT_ERROR();
                     }
                 }
-                else
+                else if (extension == EXTENSION_CAMERA)
                 {
-                    REPORT_ERROR();
+                    if (Read(lineStream, 3, 1.0f, scene.camera.position))
+                    {
+                        if (!Load(ReplaceFileNameInFullPath(fullFileName, fileName), scene.camera))
+                        {
+                            REPORT_ERROR();
+                        }
+                    }
+                    else
+                    {
+                        REPORT_ERROR();
+                    }
+                }
+                else if (extension == EXTENSION_LIGHT)
+                {
+                    if (Read(lineStream, 3, 1.0f, scene.light.position))
+                    {
+                        if (!Load(ReplaceFileNameInFullPath(fullFileName, fileName), scene.light))
+                        {
+                            REPORT_ERROR();
+                        }
+                    }
+                    else
+                    {
+                        REPORT_ERROR();
+                    }
                 }
             }
             else
             {
                 REPORT_ERROR();
             }
+
+
         }
 
         REPORT_ERROR_IF_FALSE(file.is_open());
@@ -349,7 +472,7 @@ namespace Renderer
 
     Matrix PerspectiveTransform(float width, float height)
     {
-        static float Far = 400.0f;
+        static float Far = 400.0f; // todo.pavelza: move to camera
         static float Near = .1f;
         static float FOV = 25;
 

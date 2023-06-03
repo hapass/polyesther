@@ -37,20 +37,20 @@ namespace Renderer
     {
         Vec position;
 
-        float ambientStrength = 0.1f;
-        float specularStrength = 0.5f;
-        float specularShininess = 32.0f;
+        float ambientStrength = 0.0f;
+        float specularStrength = 0.0f;
+        float specularShininess = 0.0f;
         Color color = Color::White;
     };
 
     struct Camera
     {
         Vec position;
-        float pitch = 0.0f; // around x while at 0
-        float yaw = 0.0f; // around z while at 0
+        float pitch = 0.0f; // around x while at 0 position
+        float yaw = 0.0f; // around z while at 0 position
 
-        Vec forward;
-        Vec left;
+        const Vec forward { 0.0f, 0.0f, -1.0f, 0.0f }; // initial forward when pitch and yaw are 0
+        const Vec left { -1.0f, 0.0f, 0.0f, 0.0f };
     };
 
     struct Scene
