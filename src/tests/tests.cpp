@@ -1,5 +1,4 @@
-#include "pch.h"
-#include "CppUnitTest.h"
+#include <CppUnitTest.h>
 
 #include <renderer/scene.h>
 #include <renderer/utils.h>
