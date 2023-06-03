@@ -195,13 +195,6 @@ int CALLBACK WinMain(
             Renderer::Scene scene;
             Renderer::Load(AssetsDir + "cars\\scene.sce", scene);
 
-            scene.camera.position.z = 2;
-            scene.camera.position.x = 0;
-            scene.camera.position.y = 0;
-            scene.camera.pitch = 0.0f;
-            scene.camera.yaw = 0.0f;
-            scene.light.position = Renderer::Vec{ 100.0f, 100.0f, 100.0f, 1.0f };
-
             Renderer::RendererSoftware softwareRenderer;
             Renderer::RendererDX12 hardwareRenderer(AssetsDir + "color.hlsl");
 
