@@ -7,6 +7,7 @@
 #include <renderer/thirdparty/stb_image.h>
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include <renderer/thirdparty/stb_image_write.h>
+#include "texture.h"
 
 namespace Renderer
 {
@@ -64,7 +65,7 @@ namespace Renderer
         return width * height;
     }
 
-    bool Texture::operator==(const Texture& other)
+    bool Texture::operator==(const Texture& other) const
     {
         return this->width == other.width && this->height == other.height && this->data == other.data;
     }

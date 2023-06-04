@@ -12,8 +12,8 @@ namespace Renderer
     {
         constexpr static size_t BytesPerColor = 4;
 
-        Texture(size_t width, size_t height);
-        Texture();
+        explicit Texture(size_t width, size_t height);
+        explicit Texture();
 
         uint8_t* GetBuffer();
         const uint8_t* GetBuffer() const;
@@ -26,7 +26,7 @@ namespace Renderer
 
         size_t GetSize() const;
 
-        bool operator==(const Texture& rhs);
+        bool operator==(const Texture& rhs) const;
 
     private:
         size_t width = 0;
