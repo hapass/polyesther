@@ -1,7 +1,6 @@
 #define _USE_MATH_DEFINES
 
 #include <Windows.h>
-
 #include <array>
 
 #include <renderer/math.h>
@@ -28,78 +27,88 @@ namespace
 
     constexpr int32_t WindowWidth = 800;
     constexpr int32_t WindowHeight = 600;
-}
 
-void HandleInput(const std::array<bool, 256>& KeyPressed, const std::array<bool, 256>& KeyDown, Renderer::RendererDX12& hardwareRenderer, Renderer::RendererSoftware& softwareRenderer, Renderer::Scene& scene, Renderer::Renderer*& renderer)
-{
-    Renderer::Vec forward = Renderer::CameraTransform(scene.camera) * scene.camera.forward;
-    Renderer::Vec left = Renderer::CameraTransform(scene.camera) * scene.camera.left;
-
-    if (KeyDown[UpKey])
+    const char* GetCurrentRendererName(Renderer::RendererDX12& hardwareRenderer, Renderer::Renderer* renderer)
     {
-        scene.camera.pitch -= 0.01f;
-        if (scene.camera.pitch < 0)
+        return renderer == &hardwareRenderer ? "Hardware Rasterizer" : "Software Rasterizer";
+    }
+
+    void HandleKeyDown(const std::array<bool, 256>& KeyDown, Renderer::Scene& scene)
+    {
+        Renderer::Vec forward = Renderer::CameraTransform(scene.camera) * scene.camera.forward;
+        Renderer::Vec left = Renderer::CameraTransform(scene.camera) * scene.camera.left;
+
+        if (KeyDown[UpKey])
         {
-            scene.camera.pitch += static_cast<float>(M_PI) * 2;
+            scene.camera.pitch -= 0.01f;
+            if (scene.camera.pitch < 0)
+            {
+                scene.camera.pitch += static_cast<float>(M_PI) * 2;
+            }
+        }
+
+        if (KeyDown[DownKey])
+        {
+            scene.camera.pitch += 0.01f;
+            if (scene.camera.pitch > static_cast<float>(M_PI) * 2)
+            {
+                scene.camera.pitch -= static_cast<float>(M_PI) * 2;
+            }
+        }
+
+        if (KeyDown[RightKey])
+        {
+            scene.camera.yaw -= 0.01f;
+            if (scene.camera.yaw < 0)
+            {
+                scene.camera.yaw += static_cast<float>(M_PI) * 2;
+            }
+        }
+
+        if (KeyDown[LeftKey])
+        {
+            scene.camera.yaw += 0.01f;
+            if (scene.camera.yaw > static_cast<float>(M_PI) * 2)
+            {
+                scene.camera.yaw -= static_cast<float>(M_PI) * 2;
+            }
+        }
+
+        if (KeyDown[WKey])
+        {
+            scene.camera.position = scene.camera.position + forward * 0.1f;
+        }
+
+        if (KeyDown[AKey])
+        {
+            scene.camera.position = scene.camera.position + left * 0.1f;
+        }
+
+        if (KeyDown[SKey])
+        {
+            scene.camera.position = scene.camera.position - forward * 0.1f;
+        }
+
+        if (KeyDown[DKey])
+        {
+            scene.camera.position = scene.camera.position - left * 0.1f;
         }
     }
 
-    if (KeyDown[DownKey])
+    void HandleKeyUp(uint8_t code, HWND hWnd, Renderer::RendererDX12& hardwareRenderer, Renderer::RendererSoftware& softwareRenderer, Renderer::Renderer*& renderer)
     {
-        scene.camera.pitch += 0.01f;
-        if (scene.camera.pitch > static_cast<float>(M_PI) * 2)
+        if (code == RKey)
         {
-            scene.camera.pitch -= static_cast<float>(M_PI) * 2;
-        }
-    }
+            if (renderer == &hardwareRenderer)
+            {
+                renderer = &softwareRenderer;
+            }
+            else
+            {
+                renderer = &hardwareRenderer;
+            }
 
-    if (KeyDown[RightKey])
-    {
-        scene.camera.yaw -= 0.01f;
-        if (scene.camera.yaw < 0)
-        {
-            scene.camera.yaw += static_cast<float>(M_PI) * 2;
-        }
-    }
-
-    if (KeyDown[LeftKey])
-    {
-        scene.camera.yaw += 0.01f;
-        if (scene.camera.yaw > static_cast<float>(M_PI) * 2)
-        {
-            scene.camera.yaw -= static_cast<float>(M_PI) * 2;
-        }
-    }
-
-    if (KeyDown[WKey])
-    {
-        scene.camera.position = scene.camera.position + forward * 0.1f;
-    }
-
-    if (KeyDown[AKey])
-    {
-        scene.camera.position = scene.camera.position + left * 0.1f;
-    }
-
-    if (KeyDown[SKey])
-    {
-        scene.camera.position = scene.camera.position - forward * 0.1f;
-    }
-
-    if (KeyDown[DKey])
-    {
-        scene.camera.position = scene.camera.position - left * 0.1f;
-    }
-
-    if (KeyPressed[RKey])
-    {
-        if (renderer == &hardwareRenderer)
-        {
-            renderer = &softwareRenderer;
-        }
-        else
-        {
-            renderer = &hardwareRenderer;
+            SetWindowTextA(hWnd, GetCurrentRendererName(hardwareRenderer, renderer));
         }
     }
 }
@@ -109,7 +118,6 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
     static std::string SolutionDir = _SOLUTIONDIR;
     static std::string AssetsDir = SolutionDir + "assets\\";
 
-    std::array<bool, 256> KeyPressed = {};
     static std::array<bool, 256> KeyDown = {};
 
     static HDC screenContext = 0;
@@ -135,6 +143,7 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
         {
             NOT_FAILED(screenContext = GetDC(hWnd), 0);
             NOT_FAILED(Renderer::Load(AssetsDir + "cars\\scene.sce", scene), false);
+            SetWindowTextA(hWnd, GetCurrentRendererName(hardwareRenderer, renderer));
             return 0;
         }
         case WM_KEYDOWN:
@@ -142,27 +151,20 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
             uint8_t code = static_cast<uint8_t>(wParam);
             KeyDown[code] = true;
 
-            HandleInput(KeyPressed, KeyDown, hardwareRenderer, softwareRenderer, scene, renderer);
-            SetWindowText(hWnd, renderer == &hardwareRenderer ? L"Hardware Rasterizer" : L"Software Rasterizer");
-
             return 0;
         }
         case WM_KEYUP:
         {
             uint8_t code = static_cast<uint8_t>(wParam);
-            if (KeyDown[code])
-            {
-                KeyDown[code] = false;
-                KeyPressed[code] = true;
-            }
+            KeyDown[code] = false;
 
-            HandleInput(KeyPressed, KeyDown, hardwareRenderer, softwareRenderer, scene, renderer);
-            SetWindowText(hWnd, renderer == &hardwareRenderer ? L"Hardware Rasterizer" : L"Software Rasterizer");
-
+            HandleKeyUp(code, hWnd, hardwareRenderer, softwareRenderer, renderer);
             return 0;
         }
         case WM_PAINT:
         {
+            HandleKeyDown(KeyDown, scene);
+
             Renderer::Texture result(WindowWidth, WindowHeight);
             renderer->Render(scene, result);
 
@@ -226,13 +228,13 @@ int CALLBACK WinMain(
         clientArea.right = WindowWidth;
         clientArea.bottom = WindowHeight;
 
-        AdjustWindowRect(&clientArea, WS_OVERLAPPEDWINDOW, 0);
+        AdjustWindowRect(&clientArea, WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_VISIBLE, 0);
 
-        HWND window = CreateWindowExW(
+        CreateWindowExW(
             0,
             MainWindowClass.lpszClassName,
             nullptr,
-            WS_OVERLAPPEDWINDOW,
+            WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_VISIBLE,
             CW_USEDEFAULT,
             CW_USEDEFAULT,
             clientArea.right - clientArea.left,
@@ -242,8 +244,6 @@ int CALLBACK WinMain(
             hInstance,
             0
         );
-
-        ShowWindow(window, nShowCmd);
 
         MSG message {};
         while (message.message != WM_QUIT)
