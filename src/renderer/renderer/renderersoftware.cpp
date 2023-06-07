@@ -217,20 +217,16 @@ namespace Renderer
                     assert(textureY < Textures[materialId].GetHeight() && textureX < Textures[materialId].GetWidth());
                     size_t texelBase = textureY * Textures[materialId].GetWidth() + textureX;
 
-                    Color texture_color = Textures[materialId].GetColor(texelBase);
-
-                    Vec frag_color = texture_color.GetVec();
-                    final_color = (diffuse + ambient + specular) * frag_color;
-                    final_color.x = std::clamp(final_color.x, 0.0f, 1.0f);
-                    final_color.y = std::clamp(final_color.y, 0.0f, 1.0f);
-                    final_color.z = std::clamp(final_color.z, 0.0f, 1.0f);
+                    final_color = Textures[materialId].GetColor(texelBase).GetVec();
                 }
 
-                DrawPixel(x, y, Color(
-                    static_cast<uint8_t>(final_color.x * 255.0f),
-                    static_cast<uint8_t>(final_color.y * 255.0f),
-                    static_cast<uint8_t>(final_color.z * 255.0f)
-                ));
+                final_color = (diffuse + ambient + specular) * final_color;
+                final_color.x = std::clamp(final_color.x, 0.0f, 1.0f);
+                final_color.y = std::clamp(final_color.y, 0.0f, 1.0f);
+                final_color.z = std::clamp(final_color.z, 0.0f, 1.0f);
+                final_color.w = 1.0f; // fix the alpha being affected by light, noticable only in tests, because in application we correct alpha manually when copying to backbuffer
+
+                DrawPixel(x, y, Color(final_color));
             }
         }
     }

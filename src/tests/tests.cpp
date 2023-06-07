@@ -178,7 +178,7 @@ namespace Tests
             renderer.Render(scene, texture);
 
             Renderer::Texture reference;
-            Renderer::Load(TestsDir + "reference.bmp", reference);
+            Renderer::Load(TestsDir + "reference_dx12.bmp", reference);
 
             Assert::IsTrue(texture == reference);
         }
@@ -194,7 +194,7 @@ namespace Tests
             renderer.Render(scene, texture);
 
             Renderer::Texture reference;
-            Renderer::Load(TestsDir + "backface_culling_dx12.bmp", reference);
+            Renderer::Load(TestsDir + "reference_triangle_dx12.bmp", reference);
 
             Assert::IsTrue(texture == reference);
         }
@@ -229,7 +229,7 @@ namespace Tests
             renderer.Render(scene, texture);
 
             Renderer::Texture reference;
-            Renderer::Load(TestsDir + "reference_backface_culling.bmp", reference);
+            Renderer::Load(TestsDir + "reference_triangle_software.bmp", reference);
 
             Assert::IsTrue(texture == reference);
         }
