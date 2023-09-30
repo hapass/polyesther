@@ -70,7 +70,7 @@ float4 PS(VertexOut pin) : SV_Target
 
     float4 frag_color = gTextureCount == 0 ? float4(pin.Color.xyz, 1.0) : g_texture[pin.TexIndex].Sample(g_sampler, texCoord);
     float4 res = (diffuse + ambient + specular) * frag_color;
-    res.w = 1.0f; // fix the alpha being affected by light, noticable only in tests, because in application we correct alpha manually when copying to backbuffer
+    res.w = 1.0f; // fix the alpha being affected by light, noticable only in tests, because in application we correct alpha manually when copying to backbuffer 
     return clamp(res, 0.0f, 1.0f);
 }
 
