@@ -37,7 +37,7 @@ namespace Renderer
     {
         Vec position;
 
-        float ambientStrength = 0.0f;
+        float ambientStrength = 0.0f; // todo.pavelza: these are picked up from scene description on software, but not on hardware!
         float specularStrength = 0.0f;
         float specularShininess = 0.0f;
         Color color = Color::White;

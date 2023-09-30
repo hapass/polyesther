@@ -5,6 +5,8 @@
 #include <renderer/rendererdx12.h>
 #include <renderer/renderersoftware.h>
 
+#include <functional>
+
 using namespace Microsoft::VisualStudio::CppUnitTestFramework;
 
 namespace Tests
@@ -232,6 +234,42 @@ namespace Tests
             Renderer::Load(TestsDir + "reference_triangle_software.bmp", reference);
 
             Assert::IsTrue(texture == reference);
+        }
+    };
+
+    TEST_CLASS(RendererComparison)
+    {
+        BEGIN_TEST_METHOD_ATTRIBUTE(InterpolationShouldWorkTheSameInBothRenderers)
+            TEST_IGNORE() // todo.pavelza: this is a hard thing to fix, will do it later when I'm have more background in graphics
+        END_TEST_METHOD_ATTRIBUTE()
+
+        TEST_METHOD(InterpolationShouldWorkTheSameInBothRenderers)
+        {
+            Renderer::Scene scene;
+            bool success = Renderer::Load(TriangleDir + "scene.sce", scene);
+
+            Renderer::RendererSoftware renderer;
+            Renderer::RendererDX12 hardwareRenderer(AssetsDir + "color.hlsl");
+
+            uint32_t width = 200;
+            uint32_t height = 150;
+
+            Renderer::Texture textureSoftware(width, height);
+            renderer.Render(scene, textureSoftware);
+
+            Renderer::Texture textureHardware(width, height);
+            hardwareRenderer.Render(scene, textureHardware);
+
+            uint32_t differentPixels = 0;
+            for (size_t i = 0; i < textureHardware.GetSize(); i++)
+            {
+                if (textureSoftware.GetColor(i).rgba != textureHardware.GetColor(i).rgba)
+                {
+                    differentPixels++;
+                }
+            }
+
+            Assert::AreEqual(0u, differentPixels);
         }
     };
 }
