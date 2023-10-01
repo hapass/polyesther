@@ -19,6 +19,8 @@ namespace Renderer
             D3D_NOT_FAILED(device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&allocator)));
             D3D_NOT_FAILED(device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, allocator, nullptr, IID_PPV_ARGS(&commandList)));
 
+            commandList->SetName(L"Main command list");
+
             D3D_NOT_FAILED(device->CreateFence(currentFenceValue, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fence)));
             NOT_FAILED(fenceEventHandle = CreateEventExW(nullptr, nullptr, CREATE_EVENT_MANUAL_RESET, EVENT_ALL_ACCESS), 0);
         }
@@ -131,6 +133,8 @@ namespace Renderer
             D3D12_HEAP_PROPERTIES uploadHeapProperties = device->GetCustomHeapProperties(0, D3D12_HEAP_TYPE_UPLOAD);
             D3D_NOT_FAILED(device->CreateCommittedResource(&uploadHeapProperties, D3D12_HEAP_FLAG_NONE, &uploadBufferDescription, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&constantBuffer)));
 
+            constantBuffer->SetName(L"Constant buffer.");
+
             D3D12_CONSTANT_BUFFER_VIEW_DESC constantBufferViewDescription;
             constantBufferViewDescription.BufferLocation = constantBuffer->GetGPUVirtualAddress();
             constantBufferViewDescription.SizeInBytes = static_cast<UINT>(uploadBufferDescription.Width);
@@ -170,8 +174,14 @@ namespace Renderer
             UINT64 totalBytes = 0;
             device->GetCopyableFootprints(&textureDesc, 0, 1, 0, &footprint, &numRows, &rowSizeInBytes, &totalBytes);
 
+            D3D12_CLEAR_VALUE clearValue = {};
+            clearValue.Format = textureDesc.Format;
+            std::copy(clearColor, clearColor + 4, clearValue.Color);
+
             D3D12_HEAP_PROPERTIES defaultProperties = device->GetCustomHeapProperties(0, D3D12_HEAP_TYPE_DEFAULT);
-            D3D_NOT_FAILED(device->CreateCommittedResource(&defaultProperties, D3D12_HEAP_FLAG_NONE, &textureDesc, D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&currentBuffer)));
+            D3D_NOT_FAILED(device->CreateCommittedResource(&defaultProperties, D3D12_HEAP_FLAG_NONE, &textureDesc, D3D12_RESOURCE_STATE_RENDER_TARGET, &clearValue, IID_PPV_ARGS(&currentBuffer)));
+
+            currentBuffer->SetName(L"Render target.");
 
             currentBufferHandle = { SIZE_T(INT64(renderTargetDescriptorHeap->GetCPUDescriptorHandleForHeapStart().ptr)) };
             device->CreateRenderTargetView(currentBuffer, nullptr, currentBufferHandle);
@@ -495,6 +505,8 @@ namespace Renderer
             ID3D12Resource* depthStencilBuffer = nullptr;
             D3D_NOT_FAILED(device->CreateCommittedResource(&defaultHeapProperties, D3D12_HEAP_FLAG_NONE, &depthBufferDescription, D3D12_RESOURCE_STATE_COMMON, &clearValue, IID_PPV_ARGS(&depthStencilBuffer)));
 
+            depthStencilBuffer->SetName(L"Depth stencil buffer.");
+
             D3D12_DESCRIPTOR_HEAP_DESC depthStencilViewHeapDescription;
             depthStencilViewHeapDescription.Type = D3D12_DESCRIPTOR_HEAP_TYPE::D3D12_DESCRIPTOR_HEAP_TYPE_DSV;
             depthStencilViewHeapDescription.NumDescriptors = 1;
@@ -553,6 +565,8 @@ namespace Renderer
             ID3D12Resource* dataUploadBuffer = nullptr; // todo.pavelza: should be cleared later
             D3D_NOT_FAILED(device->CreateCommittedResource(&uploadHeapProperties, D3D12_HEAP_FLAG_NONE, &dataBufferDescription, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&dataUploadBuffer)));
 
+            dataUploadBuffer->SetName(L"Data upload buffer.");
+
             BYTE* mappedData = nullptr;
             dataUploadBuffer->Map(0, nullptr, (void**)&mappedData);
             memcpy(mappedData, data.data(), data.size() * sizeof(T));
@@ -563,6 +577,8 @@ namespace Renderer
             ID3D12Resource* dataBuffer = nullptr;
             D3D_NOT_FAILED(device->CreateCommittedResource(&defaultHeapProperties, D3D12_HEAP_FLAG_NONE, &dataBufferDescription, D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&dataBuffer)));
             
+            dataBuffer->SetName(L"Data buffer.");
+
             queue->GetList()->CopyBufferRegion(dataBuffer, 0, dataUploadBuffer, 0, data.size() * sizeof(T));
             queue->AddBarrierToList(dataBuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_GENERIC_READ);
             queue->Execute(pso);
@@ -614,9 +630,13 @@ namespace Renderer
             ID3D12Resource* dataUploadBuffer = nullptr; // todo.pavelza: should be cleared later
             D3D_NOT_FAILED(device->CreateCommittedResource(&uploadProperties, D3D12_HEAP_FLAG_NONE, &uploadBufferDescription, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&dataUploadBuffer)));
 
+            dataUploadBuffer->SetName(L"Texture upload buffer.");
+
             D3D12_HEAP_PROPERTIES defaultProperties = device->GetCustomHeapProperties(0, D3D12_HEAP_TYPE_DEFAULT);
             ID3D12Resource* dataBuffer = nullptr;
             D3D_NOT_FAILED(device->CreateCommittedResource(&defaultProperties, D3D12_HEAP_FLAG_NONE, &textureDesc, D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&dataBuffer)));
+
+            dataBuffer->SetName(L"Texture buffer");
 
             BYTE* mappedData = nullptr;
             dataUploadBuffer->Map(0, nullptr, (void**)&mappedData);
@@ -689,6 +709,8 @@ namespace Renderer
             D3D12_HEAP_PROPERTIES readbackProperties = device->GetCustomHeapProperties(0, D3D12_HEAP_TYPE_READBACK);
             ID3D12Resource* readbackBuffer = nullptr; // todo.pavelza: should be cleared later
             D3D_NOT_FAILED(device->CreateCommittedResource(&readbackProperties, D3D12_HEAP_FLAG_NONE, &readbackBufferDescription, D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&readbackBuffer)));
+
+            readbackBuffer->SetName(L"Readback buffer.");
 
             D3D12_TEXTURE_COPY_LOCATION dest;
             dest.pResource = readbackBuffer;
@@ -768,10 +790,6 @@ namespace Renderer
 
             queue->GetList()->RSSetScissorRects(1, &scissor);
 
-            // todo.pavelza: when does it become copy dest?
-            queue->AddBarrierToList(currentBuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_RENDER_TARGET);
-
-            FLOAT clearColor[4] = { 0.0f, 0.f, 0.f, 1.000000000f };
             queue->GetList()->ClearRenderTargetView(currentBufferHandle, clearColor, 0, nullptr);
             queue->GetList()->ClearDepthStencilView(depthBufferHandle, D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, 1.0f, 0, 0, nullptr);
 
@@ -797,6 +815,8 @@ namespace Renderer
             return true;
         }
 
+
+        FLOAT clearColor[4] = { 0.0f, 0.f, 0.f, 1.000000000f };
         ID3D12DescriptorHeap* rootDescriptorHeap = nullptr;
         ID3D12Device* device = nullptr;
         ID3D12Resource* constantBuffer = nullptr;
