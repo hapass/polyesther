@@ -195,7 +195,7 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
         }
         case WM_DESTROY:
         {
-            NOT_FAILED(ReleaseDC(hWnd, screenContext), 1);
+            ReleaseDC(hWnd, screenContext); // todo.pavelza: why is HRESULT == 1? (S_FALSE|Operation successful but returned no results)
             PostQuitMessage(0);
             return 0;
         }
