@@ -14,7 +14,6 @@ Use arrow keys to control camera angle.
 ## TODO
 
 1. Integrate imgui.
-1. Fix DX12 debug layer errors.
 1. Add model selection with imgui.
 1. Change camera controls to resemble those of windows 3D viewer (rotating around the model with mouse)
 1. Add lighting, render feature, switching renderer controls to imgui.
