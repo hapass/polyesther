@@ -131,7 +131,7 @@ namespace Renderer
             uploadBufferDescription.Flags = D3D12_RESOURCE_FLAG_NONE;
 
             D3D12_HEAP_PROPERTIES uploadHeapProperties = device->GetCustomHeapProperties(0, D3D12_HEAP_TYPE_UPLOAD);
-            D3D_NOT_FAILED(device->CreateCommittedResource(&uploadHeapProperties, D3D12_HEAP_FLAG_NONE, &uploadBufferDescription, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&constantBuffer)));
+            D3D_NOT_FAILED(device->CreateCommittedResource(&uploadHeapProperties, D3D12_HEAP_FLAG_NONE, &uploadBufferDescription, D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&constantBuffer)));
 
             constantBuffer->SetName(L"Constant buffer.");
 
@@ -150,6 +150,9 @@ namespace Renderer
             // queue
             queue = std::make_unique<GraphicsQueue>(device);
             queue->GetList()->SetPipelineState(pso);
+
+            // move constant buffer into correct state
+            queue->AddBarrierToList(constantBuffer, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_GENERIC_READ);
 
             // depth
             depthBufferHandle = CreateDepthBuffer(texture.GetWidth(), texture.GetHeight());
@@ -563,10 +566,11 @@ namespace Renderer
             D3D12_HEAP_PROPERTIES uploadHeapProperties = device->GetCustomHeapProperties(0, D3D12_HEAP_TYPE_UPLOAD);
 
             ID3D12Resource* dataUploadBuffer = nullptr; // todo.pavelza: should be cleared later
-            D3D_NOT_FAILED(device->CreateCommittedResource(&uploadHeapProperties, D3D12_HEAP_FLAG_NONE, &dataBufferDescription, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&dataUploadBuffer)));
+            D3D_NOT_FAILED(device->CreateCommittedResource(&uploadHeapProperties, D3D12_HEAP_FLAG_NONE, &dataBufferDescription, D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&dataUploadBuffer)));
 
             dataUploadBuffer->SetName(L"Data upload buffer.");
 
+            queue->AddBarrierToList(dataUploadBuffer, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_GENERIC_READ);
             BYTE* mappedData = nullptr;
             dataUploadBuffer->Map(0, nullptr, (void**)&mappedData);
             memcpy(mappedData, data.data(), data.size() * sizeof(T));
@@ -575,10 +579,11 @@ namespace Renderer
             D3D12_HEAP_PROPERTIES defaultHeapProperties = device->GetCustomHeapProperties(0, D3D12_HEAP_TYPE_DEFAULT);
 
             ID3D12Resource* dataBuffer = nullptr;
-            D3D_NOT_FAILED(device->CreateCommittedResource(&defaultHeapProperties, D3D12_HEAP_FLAG_NONE, &dataBufferDescription, D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&dataBuffer)));
+            D3D_NOT_FAILED(device->CreateCommittedResource(&defaultHeapProperties, D3D12_HEAP_FLAG_NONE, &dataBufferDescription, D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&dataBuffer)));
             
             dataBuffer->SetName(L"Data buffer.");
 
+            queue->AddBarrierToList(dataBuffer, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_COPY_DEST);
             queue->GetList()->CopyBufferRegion(dataBuffer, 0, dataUploadBuffer, 0, data.size() * sizeof(T));
             queue->AddBarrierToList(dataBuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_GENERIC_READ);
             queue->Execute(pso);
@@ -628,15 +633,19 @@ namespace Renderer
 
             D3D12_HEAP_PROPERTIES uploadProperties = device->GetCustomHeapProperties(0, D3D12_HEAP_TYPE_UPLOAD);
             ID3D12Resource* dataUploadBuffer = nullptr; // todo.pavelza: should be cleared later
-            D3D_NOT_FAILED(device->CreateCommittedResource(&uploadProperties, D3D12_HEAP_FLAG_NONE, &uploadBufferDescription, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&dataUploadBuffer)));
+            D3D_NOT_FAILED(device->CreateCommittedResource(&uploadProperties, D3D12_HEAP_FLAG_NONE, &uploadBufferDescription, D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&dataUploadBuffer)));
 
             dataUploadBuffer->SetName(L"Texture upload buffer.");
 
+            queue->AddBarrierToList(dataUploadBuffer, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_GENERIC_READ);
+
             D3D12_HEAP_PROPERTIES defaultProperties = device->GetCustomHeapProperties(0, D3D12_HEAP_TYPE_DEFAULT);
             ID3D12Resource* dataBuffer = nullptr;
-            D3D_NOT_FAILED(device->CreateCommittedResource(&defaultProperties, D3D12_HEAP_FLAG_NONE, &textureDesc, D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&dataBuffer)));
+            D3D_NOT_FAILED(device->CreateCommittedResource(&defaultProperties, D3D12_HEAP_FLAG_NONE, &textureDesc, D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&dataBuffer)));
 
             dataBuffer->SetName(L"Texture buffer");
+
+            queue->AddBarrierToList(dataBuffer, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_COPY_DEST);
 
             BYTE* mappedData = nullptr;
             dataUploadBuffer->Map(0, nullptr, (void**)&mappedData);
@@ -708,9 +717,11 @@ namespace Renderer
 
             D3D12_HEAP_PROPERTIES readbackProperties = device->GetCustomHeapProperties(0, D3D12_HEAP_TYPE_READBACK);
             ID3D12Resource* readbackBuffer = nullptr; // todo.pavelza: should be cleared later
-            D3D_NOT_FAILED(device->CreateCommittedResource(&readbackProperties, D3D12_HEAP_FLAG_NONE, &readbackBufferDescription, D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&readbackBuffer)));
+            D3D_NOT_FAILED(device->CreateCommittedResource(&readbackProperties, D3D12_HEAP_FLAG_NONE, &readbackBufferDescription, D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&readbackBuffer)));
 
             readbackBuffer->SetName(L"Readback buffer.");
+
+            queue->AddBarrierToList(readbackBuffer, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_COPY_DEST);
 
             D3D12_TEXTURE_COPY_LOCATION dest;
             dest.pResource = readbackBuffer;
