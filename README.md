@@ -14,7 +14,7 @@ Use arrow keys to control camera angle.
 ## TODO
 
 1. Integrate imgui.
-1. Add model selection with imgui.
+1. Add model loading with imgui.
 1. Change camera controls to resemble those of windows 3D viewer (rotating around the model with mouse)
 1. Add lighting, render feature, switching renderer controls to imgui.
 1. Minimize code duplication in DX12 renderer.
