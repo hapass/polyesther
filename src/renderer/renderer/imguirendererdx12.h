@@ -6,7 +6,12 @@ namespace Renderer
 {
     struct ImguiRenderer
     {
-        ImguiRenderer(const DeviceDX12& device) {};
-        void Render() {};
+        ImguiRenderer(const DeviceDX12& device);
+
+        void BeginRender();
+        void EndRender();
+
+    private:
+        const DeviceDX12& deviceDX12;
     };
 }

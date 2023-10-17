@@ -11,6 +11,13 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\..\extern\imgui\backends\imgui_impl_dx12.h" />
+    <ClInclude Include="..\..\extern\imgui\imconfig.h" />
+    <ClInclude Include="..\..\extern\imgui\imgui.h" />
+    <ClInclude Include="..\..\extern\imgui\imgui_internal.h" />
+    <ClInclude Include="..\..\extern\imgui\imstb_rectpack.h" />
+    <ClInclude Include="..\..\extern\imgui\imstb_textedit.h" />
+    <ClInclude Include="..\..\extern\imgui\imstb_truetype.h" />
     <ClInclude Include="renderer\color.h" />
     <ClInclude Include="renderer\devicedx12.h" />
     <ClInclude Include="renderer\imguirendererdx12.h" />
@@ -23,6 +30,12 @@
     <ClInclude Include="renderer\utils.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="..\..\extern\imgui\backends\imgui_impl_dx12.cpp" />
+    <ClCompile Include="..\..\extern\imgui\imgui.cpp" />
+    <ClCompile Include="..\..\extern\imgui\imgui_demo.cpp" />
+    <ClCompile Include="..\..\extern\imgui\imgui_draw.cpp" />
+    <ClCompile Include="..\..\extern\imgui\imgui_tables.cpp" />
+    <ClCompile Include="..\..\extern\imgui\imgui_widgets.cpp" />
     <ClCompile Include="renderer\color.cpp" />
     <ClCompile Include="renderer\devicedx12.cpp" />
     <ClCompile Include="renderer\imguirendererdx12.cpp" />
@@ -78,7 +91,7 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <AdditionalIncludeDirectories>..\renderer;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\..\extern\imgui;..\..\extern\imgui\backends;..\renderer;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>NDEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
     </ClCompile>
@@ -97,7 +110,7 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <AdditionalIncludeDirectories>..\renderer;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\..\extern\imgui;..\..\extern\imgui\backends;..\renderer;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>NDEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
     </ClCompile>
