@@ -10,6 +10,28 @@
       <Platform>x64</Platform>
     </ProjectConfiguration>
   </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="renderer\color.h" />
+    <ClInclude Include="renderer\devicedx12.h" />
+    <ClInclude Include="renderer\imguirendererdx12.h" />
+    <ClInclude Include="renderer\math.h" />
+    <ClInclude Include="renderer\scene.h" />
+    <ClInclude Include="renderer\scenerenderer.h" />
+    <ClInclude Include="renderer\scenerendererdx12.h" />
+    <ClInclude Include="renderer\scenerenderersoftware.h" />
+    <ClInclude Include="renderer\texture.h" />
+    <ClInclude Include="renderer\utils.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="renderer\color.cpp" />
+    <ClCompile Include="renderer\devicedx12.cpp" />
+    <ClCompile Include="renderer\imguirendererdx12.cpp" />
+    <ClCompile Include="renderer\math.cpp" />
+    <ClCompile Include="renderer\scene.cpp" />
+    <ClCompile Include="renderer\scenerendererdx12.cpp" />
+    <ClCompile Include="renderer\scenerenderersoftware.cpp" />
+    <ClCompile Include="renderer\texture.cpp" />
+  </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>16.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
@@ -61,7 +83,8 @@
       <ConformanceMode>true</ConformanceMode>
     </ClCompile>
     <Link>
-      <SubSystem></SubSystem>
+      <SubSystem>
+      </SubSystem>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
@@ -79,30 +102,13 @@
       <ConformanceMode>true</ConformanceMode>
     </ClCompile>
     <Link>
-      <SubSystem></SubSystem>
+      <SubSystem>
+      </SubSystem>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
     </Link>
   </ItemDefinitionGroup>
-  <ItemGroup>
-    <ClInclude Include="renderer\renderer.h" />
-    <ClInclude Include="renderer\rendererdx12.h" />
-    <ClInclude Include="renderer\renderersoftware.h" />
-    <ClInclude Include="renderer\scene.h" />
-    <ClInclude Include="renderer\math.h" />
-    <ClInclude Include="renderer\color.h" />
-    <ClInclude Include="renderer\texture.h" />
-    <ClInclude Include="renderer\utils.h" />
-  </ItemGroup>
-  <ItemGroup>
-    <ClCompile Include="renderer\color.cpp" />
-    <ClCompile Include="renderer\math.cpp" />
-    <ClCompile Include="renderer\rendererdx12.cpp" />
-    <ClCompile Include="renderer\renderersoftware.cpp" />
-    <ClCompile Include="renderer\scene.cpp" />
-    <ClCompile Include="renderer\texture.cpp" />
-  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>

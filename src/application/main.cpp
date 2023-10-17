@@ -4,8 +4,8 @@
 #include <array>
 
 #include <renderer/math.h>
-#include <renderer/rendererdx12.h>
-#include <renderer/renderersoftware.h>
+#include <renderer/scenerendererdx12.h>
+#include <renderer/scenerenderersoftware.h>
 #include <renderer/color.h>
 #include <renderer/scene.h>
 #include <renderer/texture.h>
@@ -28,7 +28,7 @@ namespace
     constexpr int32_t WindowWidth = 800;
     constexpr int32_t WindowHeight = 600;
 
-    const char* GetCurrentRendererName(Renderer::RendererDX12& hardwareRenderer, Renderer::Renderer* renderer)
+    const char* GetCurrentRendererName(Renderer::SceneRendererDX12& hardwareRenderer, Renderer::SceneRenderer* renderer)
     {
         return renderer == &hardwareRenderer ? "Hardware Rasterizer" : "Software Rasterizer";
     }
@@ -95,7 +95,7 @@ namespace
         }
     }
 
-    void HandleKeyUp(uint8_t code, HWND hWnd, Renderer::RendererDX12& hardwareRenderer, Renderer::RendererSoftware& softwareRenderer, Renderer::Renderer*& renderer)
+    void HandleKeyUp(uint8_t code, HWND hWnd, Renderer::SceneRendererDX12& hardwareRenderer, Renderer::SceneRendererSoftware& softwareRenderer, Renderer::SceneRenderer*& renderer)
     {
         if (code == RKey)
         {
@@ -131,9 +131,11 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
             .biCompression = BI_RGB
         }
     };
-    static Renderer::RendererSoftware softwareRenderer;
-    static Renderer::RendererDX12 hardwareRenderer(AssetsDir + "color.hlsl");
-    static Renderer::Renderer* renderer = &hardwareRenderer;
+
+    static Renderer::SceneRendererSoftware softwareRenderer;
+    static Renderer::DeviceDX12 device;
+    static Renderer::SceneRendererDX12 hardwareRenderer(AssetsDir + "color.hlsl", device);
+    static Renderer::SceneRenderer* renderer = &hardwareRenderer;
     static Renderer::Scene scene;
     static std::vector<uint32_t> backBuffer(WindowWidth * WindowHeight);
 

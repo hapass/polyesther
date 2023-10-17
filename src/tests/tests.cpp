@@ -2,8 +2,8 @@
 
 #include <renderer/scene.h>
 #include <renderer/utils.h>
-#include <renderer/rendererdx12.h>
-#include <renderer/renderersoftware.h>
+#include <renderer/scenerendererdx12.h>
+#include <renderer/scenerenderersoftware.h>
 
 #include <functional>
 
@@ -174,7 +174,8 @@ namespace Tests
             Renderer::Scene scene;
             bool success = Renderer::Load(AssetsDir + "cars\\scene.sce", scene);
 
-            Renderer::RendererDX12 renderer(AssetsDir + "color.hlsl");
+            Renderer::DeviceDX12 device;
+            Renderer::SceneRendererDX12 renderer(AssetsDir + "color.hlsl", device);
 
             Renderer::Texture texture(200, 150); // todo.pavelza: test error if texture has no dimensions and passed to render
             renderer.Render(scene, texture);
@@ -190,7 +191,8 @@ namespace Tests
             Renderer::Scene scene;
             bool success = Renderer::Load(TriangleDir + "scene.sce", scene);
 
-            Renderer::RendererDX12 renderer(AssetsDir + "color.hlsl");
+            Renderer::DeviceDX12 device;
+            Renderer::SceneRendererDX12 renderer(AssetsDir + "color.hlsl", device);
 
             Renderer::Texture texture(200, 150);
             renderer.Render(scene, texture);
@@ -209,7 +211,7 @@ namespace Tests
             Renderer::Scene scene;
             bool success = Renderer::Load(AssetsDir + "cars\\scene.sce", scene);
 
-            Renderer::RendererSoftware renderer;
+            Renderer::SceneRendererSoftware renderer;
 
             Renderer::Texture texture(200, 150);
             renderer.Render(scene, texture);
@@ -225,7 +227,7 @@ namespace Tests
             Renderer::Scene scene;
             bool success = Renderer::Load(TriangleDir + "scene.sce", scene);
 
-            Renderer::RendererSoftware renderer;
+            Renderer::SceneRendererSoftware renderer;
 
             Renderer::Texture texture(200, 150);
             renderer.Render(scene, texture);
@@ -248,8 +250,10 @@ namespace Tests
             Renderer::Scene scene;
             bool success = Renderer::Load(TriangleDir + "scene.sce", scene);
 
-            Renderer::RendererSoftware renderer;
-            Renderer::RendererDX12 hardwareRenderer(AssetsDir + "color.hlsl");
+            Renderer::SceneRendererSoftware renderer;
+
+            Renderer::DeviceDX12 device;
+            Renderer::SceneRendererDX12 hardwareRenderer(AssetsDir + "color.hlsl", device);
 
             uint32_t width = 200;
             uint32_t height = 150;

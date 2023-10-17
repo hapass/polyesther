@@ -1,6 +1,6 @@
 #pragma once
 
-#include <renderer/renderer.h>
+#include <renderer/scenerenderer.h>
 #include <string>
 #include <memory>
 
@@ -12,14 +12,15 @@ namespace Renderer
 {
     struct RendererDX12Context;
 
-    struct RendererDX12 : public Renderer
+    struct SceneRendererDX12 : public SceneRenderer
     {
-        RendererDX12(const std::string& path) : shaderPath(path) {};
+        SceneRendererDX12(const std::string& path, const DeviceDX12& device) : deviceDX12(device), shaderPath(path) {};
 
         bool Render(const Scene& scene, Texture& texture) override;
 
     private:
         std::shared_ptr<RendererDX12Context> context;
         std::string shaderPath;
+        const DeviceDX12& deviceDX12;
     };
 }

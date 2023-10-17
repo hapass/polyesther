@@ -1,4 +1,4 @@
-#include <renderer/renderersoftware.h>
+#include <renderer/scenerenderersoftware.h>
 
 #define _USE_MATH_DEFINES
 
@@ -195,10 +195,10 @@ namespace Renderer
                 Vec normal_vec = normalize({ normalX, normalY, normalZ, 0.0f });
                 Vec light_vec = normalize(light.position_view - pos_view);
 
-                Vec diffuse = light.light.color.GetVec() * static_cast<float>(std::max(dot(normal_vec, light_vec), 0.0f));
+                Vec diffuse = light.light.color.GetVec() * static_cast<float>(std::max<float>(dot(normal_vec, light_vec), 0.0f));
                 Vec ambient = light.light.color.GetVec() * light.light.ambientStrength;
 
-                float specAmount = static_cast<float>(std::max(dot(normalize(pos_view), reflect(normal_vec, light_vec * -1.0f)), 0.0f));
+                float specAmount = static_cast<float>(std::max<float>(dot(normalize(pos_view), reflect(normal_vec, light_vec * -1.0f)), 0.0f));
                 Vec specular = light.light.color.GetVec() * pow(specAmount, light.light.specularShininess) * light.light.specularStrength;
 
                 Vec final_color { tintRed, tintGreen, tintBlue, 1.0f };
@@ -430,7 +430,7 @@ namespace Renderer
         }
     }
 
-    bool RendererSoftware::Render(const Scene& scene, Texture& texture)
+    bool SceneRendererSoftware::Render(const Scene& scene, Texture& texture)
     {
         OutputWidth = texture.GetWidth();
         OutputHeight = texture.GetHeight();
