@@ -25,11 +25,17 @@ namespace Renderer
         commandList->Release();
         allocator->Release();
         queue->Release();
+        currentPSO = nullptr;
     }
 
     ID3D12GraphicsCommandList* GraphicsQueue::GetList()
     {
         return commandList;
+    }
+
+    ID3D12CommandQueue* GraphicsQueue::GetQueue()
+    {
+        return queue;
     }
 
     void GraphicsQueue::AddBarrierToList(ID3D12Resource* resource, D3D12_RESOURCE_STATES from, D3D12_RESOURCE_STATES to)
@@ -46,7 +52,13 @@ namespace Renderer
         commandList->ResourceBarrier(1, &barrier);
     }
 
-    void GraphicsQueue::Execute(ID3D12PipelineState* pso)
+    void GraphicsQueue::SetCurrentPipelineStateObject(ID3D12PipelineState* pso)
+    {
+        currentPSO = pso;
+        commandList->SetPipelineState(pso);
+    }
+
+    void GraphicsQueue::Execute()
     {
         commandList->Close();
 
@@ -56,7 +68,7 @@ namespace Renderer
         WaitForCommandListCompletion();
 
         D3D_NOT_FAILED(allocator->Reset());
-        D3D_NOT_FAILED(commandList->Reset(allocator, pso));
+        D3D_NOT_FAILED(commandList->Reset(allocator, currentPSO));
     }
 
     void GraphicsQueue::WaitForCommandListCompletion()

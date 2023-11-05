@@ -54,10 +54,10 @@ namespace Renderer
             rootSignature = CreateRootSignature(numberOfConstantStructs, numberOfTextures);
 
             // pso
-            pso = CreatePSO(shaderPath); // todo.pavelza: keep arguments? it seems to be easier when the state is not shared at all
+            ID3D12PipelineState* pso = CreatePSO(shaderPath); // todo.pavelza: should be destroyed somehow?
 
             // queue
-            deviceDX12.GetQueue().GetList()->SetPipelineState(pso);
+            deviceDX12.GetQueue().SetCurrentPipelineStateObject(pso);
 
             // move constant buffer into correct state
             deviceDX12.GetQueue().AddBarrierToList(constantBuffer, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_GENERIC_READ);
@@ -431,7 +431,7 @@ namespace Renderer
             deviceDX12.GetDevice()->CreateDepthStencilView(depthStencilBuffer, nullptr, resultHandle);
             deviceDX12.GetQueue().AddBarrierToList(depthStencilBuffer, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_DEPTH_WRITE);
 
-            deviceDX12.GetQueue().Execute(pso);
+            deviceDX12.GetQueue().Execute();
 
             return resultHandle;
         }
@@ -494,7 +494,7 @@ namespace Renderer
             deviceDX12.GetQueue().AddBarrierToList(dataBuffer, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_COPY_DEST);
             deviceDX12.GetQueue().GetList()->CopyBufferRegion(dataBuffer, 0, dataUploadBuffer, 0, data.size() * sizeof(T));
             deviceDX12.GetQueue().AddBarrierToList(dataBuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_GENERIC_READ);
-            deviceDX12.GetQueue().Execute(pso);
+            deviceDX12.GetQueue().Execute();
 
             R bufferView;
             bufferView.BufferLocation = dataBuffer->GetGPUVirtualAddress();
@@ -578,7 +578,7 @@ namespace Renderer
             deviceDX12.GetQueue().GetList()->CopyTextureRegion(&dest, 0, 0, 0, &src, nullptr);
             deviceDX12.GetQueue().AddBarrierToList(dataBuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_GENERIC_READ);
             
-            deviceDX12.GetQueue().Execute(pso);
+            deviceDX12.GetQueue().Execute();
 
             // Describe and create a SRV for the texture.
             D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
@@ -645,7 +645,7 @@ namespace Renderer
             deviceDX12.GetQueue().GetList()->CopyTextureRegion(&dest, 0, 0, 0, &src, nullptr);
             deviceDX12.GetQueue().AddBarrierToList(dataBuffer, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET);
 
-            deviceDX12.GetQueue().Execute(pso);
+            deviceDX12.GetQueue().Execute();
 
             // copy from readback buffer to cpu
             BYTE* mappedData = nullptr;
@@ -727,7 +727,7 @@ namespace Renderer
 
             deviceDX12.GetQueue().GetList()->DrawIndexedInstanced((UINT)scene.models[0].indices.size(), 1, 0, 0, 0);
 
-            deviceDX12.GetQueue().Execute(pso);
+            deviceDX12.GetQueue().Execute();
 
             NOT_FAILED(DownloadTextureFromGPU(currentBuffer, output), false);
 
@@ -745,7 +745,6 @@ namespace Renderer
         ID3D12RootSignature* rootSignature = nullptr;
         D3D12_VERTEX_BUFFER_VIEW vertexBufferView {};
         D3D12_INDEX_BUFFER_VIEW indexBufferView {};
-        ID3D12PipelineState* pso = nullptr;
 
         const DeviceDX12& deviceDX12;
         const Scene& scene;

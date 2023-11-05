@@ -17,14 +17,17 @@ namespace Renderer
         ~GraphicsQueue();
 
         ID3D12GraphicsCommandList* GetList();
+        ID3D12CommandQueue* GetQueue();
 
         void AddBarrierToList(ID3D12Resource* resource, D3D12_RESOURCE_STATES from, D3D12_RESOURCE_STATES to);
+        void SetCurrentPipelineStateObject(ID3D12PipelineState* pso);
 
-        void Execute(ID3D12PipelineState* pso);
+        void Execute();
 
     private:
         void WaitForCommandListCompletion();
 
+        ID3D12PipelineState* currentPSO = nullptr; // not owned
         ID3D12CommandAllocator* allocator = nullptr;
         ID3D12GraphicsCommandList* commandList = nullptr;
         ID3D12CommandQueue* queue = nullptr;
