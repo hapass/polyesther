@@ -1,7 +1,7 @@
 #pragma once
 
 #include <renderer/devicedx12.h>
-#include <dxgi.h>
+#include <dxgi1_4.h>
 
 namespace Renderer
 {
@@ -13,7 +13,10 @@ namespace Renderer
         void EndRender();
 
     private:
-        IDXGISwapChain* swapChain = nullptr;
+        ID3D12Resource* mainRenderTargetResource[2] = {};
+        D3D12_CPU_DESCRIPTOR_HANDLE mainRenderTargetDescriptor[2] = {};
+
+        IDXGISwapChain3* swapChain = nullptr;
         ID3D12DescriptorHeap* rootDescriptorHeap = nullptr;
         const DeviceDX12& deviceDX12;
     };

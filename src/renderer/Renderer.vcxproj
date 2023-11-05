@@ -12,6 +12,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\extern\imgui\backends\imgui_impl_dx12.h" />
+    <ClInclude Include="..\..\extern\imgui\backends\imgui_impl_win32.h" />
     <ClInclude Include="..\..\extern\imgui\imconfig.h" />
     <ClInclude Include="..\..\extern\imgui\imgui.h" />
     <ClInclude Include="..\..\extern\imgui\imgui_internal.h" />
@@ -31,6 +32,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\extern\imgui\backends\imgui_impl_dx12.cpp" />
+    <ClCompile Include="..\..\extern\imgui\backends\imgui_impl_win32.cpp" />
     <ClCompile Include="..\..\extern\imgui\imgui.cpp" />
     <ClCompile Include="..\..\extern\imgui\imgui_demo.cpp" />
     <ClCompile Include="..\..\extern\imgui\imgui_draw.cpp" />

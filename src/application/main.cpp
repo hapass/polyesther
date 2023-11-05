@@ -5,11 +5,16 @@
 
 #include <renderer/math.h>
 #include <renderer/scenerendererdx12.h>
+#include <renderer/imguirendererdx12.h>
 #include <renderer/scenerenderersoftware.h>
 #include <renderer/color.h>
 #include <renderer/scene.h>
 #include <renderer/texture.h>
 #include <renderer/utils.h>
+
+#include <imgui.h>
+#include <imgui_impl_dx12.h>
+#include <imgui_impl_win32.h>
 
 namespace
 {
@@ -113,8 +118,13 @@ namespace
     }
 }
 
+extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
+
 LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
+    if (ImGui_ImplWin32_WndProcHandler(hWnd, uMsg, wParam, lParam))
+        return true;
+
     static std::string SolutionDir = _SOLUTIONDIR;
     static std::string AssetsDir = SolutionDir + "assets\\";
 
@@ -135,6 +145,7 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
     static Renderer::SceneRendererSoftware softwareRenderer;
     static Renderer::DeviceDX12 device;
     static Renderer::SceneRendererDX12 hardwareRenderer(AssetsDir + "color.hlsl", device);
+    static Renderer::ImguiRenderer imguiRenderer(device, WindowWidth, WindowHeight, hWnd);
     static Renderer::SceneRenderer* renderer = &hardwareRenderer;
     static Renderer::Scene scene;
     static std::vector<uint32_t> backBuffer(WindowWidth * WindowHeight);
@@ -143,6 +154,7 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
     {
         case WM_CREATE:
         {
+            ImGui_ImplWin32_Init(hWnd);
             NOT_FAILED(screenContext = GetDC(hWnd), 0);
             NOT_FAILED(Renderer::Load(AssetsDir + "cars\\scene.sce", scene), false);
             SetWindowTextA(hWnd, GetCurrentRendererName(hardwareRenderer, renderer));
@@ -167,6 +179,29 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
         {
             HandleKeyDown(KeyDown, scene);
 
+            ImGui_ImplWin32_NewFrame();
+            imguiRenderer.BeginRender();
+
+            ImGui::NewFrame();
+
+            ImGui::ShowDemoWindow();
+
+            {
+                static float f = 0.0f;
+                static int counter = 0;
+
+                ImGui::Begin("Hello, world!");                          // Create a window called "Hello, world!" and append into it.
+
+                if (ImGui::Button("Button"))                            // Buttons return true when clicked (most widgets return true when edited/activated)
+                    counter++;
+
+                ImGui::SameLine();
+                ImGui::Text("counter = %d", counter);
+
+                ImGui::End();
+            }
+
+
             Renderer::Texture result(WindowWidth, WindowHeight);
             renderer->Render(scene, result);
 
@@ -176,22 +211,24 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
                 backBuffer[result.GetWidth() * (result.GetHeight() - 1 - (i / result.GetWidth())) + i % result.GetWidth()] = (result.GetColor(i).rgba >> 8);
             }
 
+            imguiRenderer.EndRender();
+
             // swap buffers
-            StretchDIBits(
-                screenContext,
-                0,
-                0,
-                WindowWidth,
-                WindowHeight,
-                0,
-                0,
-                WindowWidth,
-                WindowHeight,
-                backBuffer.data(),
-                &backBufferInfo,
-                DIB_RGB_COLORS,
-                SRCCOPY
-            );
+            //StretchDIBits(
+            //    screenContext,
+            //    0,
+            //    0,
+            //    WindowWidth,
+            //    WindowHeight,
+            //    0,
+            //    0,
+            //    WindowWidth,
+            //    WindowHeight,
+            //    backBuffer.data(),
+            //    &backBufferInfo,
+            //    DIB_RGB_COLORS,
+            //    SRCCOPY
+            //);
 
             return 0;
         }
