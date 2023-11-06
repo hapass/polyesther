@@ -1,6 +1,7 @@
 #pragma once
 
 #include <renderer/devicedx12.h>
+#include <functional>
 #include <dxgi1_4.h>
 
 namespace Renderer
@@ -9,8 +10,7 @@ namespace Renderer
     {
         ImguiRenderer(const DeviceDX12& device, uint32_t gameWidth, uint32_t gameHeight, HWND window);
 
-        void BeginRender();
-        void EndRender();
+        void Render(const std::function<void()>& func);
 
     private:
         ID3D12Resource* mainRenderTargetResource[2] = {};

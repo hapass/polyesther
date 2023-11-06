@@ -5,7 +5,7 @@
 
 #include <renderer/math.h>
 #include <renderer/scenerendererdx12.h>
-#include <renderer/imguirendererdx12.h>
+#include <renderer/imguirendererdx12.h> // todo.pavelza: move win32 header and cpp from renderer into application
 #include <renderer/scenerenderersoftware.h>
 #include <renderer/color.h>
 #include <renderer/scene.h>
@@ -122,8 +122,8 @@ extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg
 
 LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
-    if (ImGui_ImplWin32_WndProcHandler(hWnd, uMsg, wParam, lParam))
-        return true;
+    if (LRESULT r = ImGui_ImplWin32_WndProcHandler(hWnd, uMsg, wParam, lParam))
+        return r;
 
     static std::string SolutionDir = _SOLUTIONDIR;
     static std::string AssetsDir = SolutionDir + "assets\\";
@@ -179,29 +179,6 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
         {
             HandleKeyDown(KeyDown, scene);
 
-            ImGui_ImplWin32_NewFrame();
-            imguiRenderer.BeginRender();
-
-            ImGui::NewFrame();
-
-            ImGui::ShowDemoWindow();
-
-            {
-                static float f = 0.0f;
-                static int counter = 0;
-
-                ImGui::Begin("Hello, world!");                          // Create a window called "Hello, world!" and append into it.
-
-                if (ImGui::Button("Button"))                            // Buttons return true when clicked (most widgets return true when edited/activated)
-                    counter++;
-
-                ImGui::SameLine();
-                ImGui::Text("counter = %d", counter);
-
-                ImGui::End();
-            }
-
-
             Renderer::Texture result(WindowWidth, WindowHeight);
             renderer->Render(scene, result);
 
@@ -211,24 +188,19 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
                 backBuffer[result.GetWidth() * (result.GetHeight() - 1 - (i / result.GetWidth())) + i % result.GetWidth()] = (result.GetColor(i).rgba >> 8);
             }
 
-            imguiRenderer.EndRender();
+            ImGui_ImplWin32_NewFrame();
+            imguiRenderer.Render([]() {
+                static int counter = 0;
 
-            // swap buffers
-            //StretchDIBits(
-            //    screenContext,
-            //    0,
-            //    0,
-            //    WindowWidth,
-            //    WindowHeight,
-            //    0,
-            //    0,
-            //    WindowWidth,
-            //    WindowHeight,
-            //    backBuffer.data(),
-            //    &backBufferInfo,
-            //    DIB_RGB_COLORS,
-            //    SRCCOPY
-            //);
+                ImGui::Begin("Hello, world!");
+
+                if (ImGui::Button("Button")) counter++;
+
+                ImGui::SameLine();
+                ImGui::Text("counter = %d", counter);
+
+                ImGui::End();
+            });
 
             return 0;
         }

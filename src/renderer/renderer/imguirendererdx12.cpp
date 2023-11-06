@@ -83,13 +83,13 @@ namespace Renderer
         }
     }
 
-    void ImguiRenderer::BeginRender()
+    void ImguiRenderer::Render(const std::function<void()>& func)
     {
         ImGui_ImplDX12_NewFrame();
-    }
+        ImGui::NewFrame();
 
-    void ImguiRenderer::EndRender()
-    {
+        func();
+
         ImGui::Render();
 
         UINT backBufferIdx = swapChain->GetCurrentBackBufferIndex();
@@ -110,6 +110,7 @@ namespace Renderer
         //ImGui::UpdatePlatformWindows();
         //ImGui::RenderPlatformWindowsDefault(nullptr, (void*)deviceDX12.GetQueue().GetList());
 
+        // todo.pavelza: shutdown, clean, etc
         swapChain->Present(1, 0);
     }
 }
