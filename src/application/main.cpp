@@ -130,18 +130,6 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 
     static std::array<bool, 256> KeyDown = {};
 
-    static HDC screenContext = 0;
-    static BITMAPINFO backBufferInfo = {
-        .bmiHeader = {
-            .biSize = sizeof(backBufferInfo.bmiHeader),
-            .biWidth = WindowWidth,
-            .biHeight = WindowHeight,
-            .biPlanes = 1,
-            .biBitCount = sizeof(uint32_t) * CHAR_BIT,
-            .biCompression = BI_RGB
-        }
-    };
-
     static Renderer::SceneRendererSoftware softwareRenderer;
     static Renderer::DeviceDX12 device;
     static Renderer::SceneRendererDX12 hardwareRenderer(AssetsDir + "color.hlsl", device);
@@ -155,7 +143,6 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
         case WM_CREATE:
         {
             ImGui_ImplWin32_Init(hWnd);
-            NOT_FAILED(screenContext = GetDC(hWnd), 0);
             NOT_FAILED(Renderer::Load(AssetsDir + "cars\\scene.sce", scene), false);
             SetWindowTextA(hWnd, GetCurrentRendererName(hardwareRenderer, renderer));
             return 0;
@@ -182,14 +169,8 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
             Renderer::Texture result(WindowWidth, WindowHeight);
             renderer->Render(scene, result);
 
-            for (size_t i = 0; i < result.GetSize(); i++)
-            {
-                // invert texture along y axis and shift alpha outside
-                backBuffer[result.GetWidth() * (result.GetHeight() - 1 - (i / result.GetWidth())) + i % result.GetWidth()] = (result.GetColor(i).rgba >> 8);
-            }
-
             ImGui_ImplWin32_NewFrame();
-            imguiRenderer.Render([]() {
+            imguiRenderer.Render(result, [&result](ImTextureID id) {
                 static int counter = 0;
 
                 ImGui::Begin("Hello, world!");
@@ -199,6 +180,8 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
                 ImGui::SameLine();
                 ImGui::Text("counter = %d", counter);
 
+                ImGui::Image(id, ImVec2((float)result.GetWidth(), (float)result.GetHeight()));
+
                 ImGui::End();
             });
 
@@ -206,7 +189,6 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
         }
         case WM_DESTROY:
         {
-            ReleaseDC(hWnd, screenContext); // todo.pavelza: why is HRESULT == 1? (S_FALSE|Operation successful but returned no results)
             PostQuitMessage(0);
             return 0;
         }
