@@ -18,18 +18,6 @@
 
 namespace
 {
-    constexpr uint8_t WKey = 87;
-    constexpr uint8_t AKey = 65;
-    constexpr uint8_t SKey = 83;
-    constexpr uint8_t DKey = 68;
-
-    constexpr uint8_t RKey = 82;
-
-    constexpr uint8_t UpKey = 38;
-    constexpr uint8_t LeftKey = 37;
-    constexpr uint8_t DownKey = 40;
-    constexpr uint8_t RightKey = 39;
-
     constexpr int32_t WindowWidth = 800;
     constexpr int32_t WindowHeight = 600;
 
@@ -38,82 +26,64 @@ namespace
         return renderer == &hardwareRenderer ? "Hardware Rasterizer" : "Software Rasterizer";
     }
 
-    void HandleKeyDown(const std::array<bool, 256>& KeyDown, Renderer::Scene& scene)
+    void CorrectRotation(float& angle)
     {
+        if (angle < 0)
+        {
+            angle += static_cast<float>(M_PI) * 2;
+        }
+        else if (angle > static_cast<float>(M_PI) * 2)
+        {
+            angle -= static_cast<float>(M_PI) * 2;
+        }
+    }
+
+    void HandleInput(Renderer::Scene& scene)
+    {
+        if (ImGui::IsKeyDown(ImGuiKey::ImGuiKey_UpArrow))
+        {
+            scene.camera.pitch -= 0.01f;
+        }
+
+        if (ImGui::IsKeyDown(ImGuiKey::ImGuiKey_DownArrow))
+        {
+            scene.camera.pitch += 0.01f;
+        }
+
+        if (ImGui::IsKeyDown(ImGuiKey::ImGuiKey_RightArrow))
+        {
+            scene.camera.yaw -= 0.01f;
+        }
+
+        if (ImGui::IsKeyDown(ImGuiKey::ImGuiKey_LeftArrow))
+        {
+            scene.camera.yaw += 0.01f;
+        }
+
+        CorrectRotation(scene.camera.pitch);
+        CorrectRotation(scene.camera.yaw);
+
         Renderer::Vec forward = Renderer::CameraTransform(scene.camera) * scene.camera.forward;
         Renderer::Vec left = Renderer::CameraTransform(scene.camera) * scene.camera.left;
 
-        if (KeyDown[UpKey])
-        {
-            scene.camera.pitch -= 0.01f;
-            if (scene.camera.pitch < 0)
-            {
-                scene.camera.pitch += static_cast<float>(M_PI) * 2;
-            }
-        }
-
-        if (KeyDown[DownKey])
-        {
-            scene.camera.pitch += 0.01f;
-            if (scene.camera.pitch > static_cast<float>(M_PI) * 2)
-            {
-                scene.camera.pitch -= static_cast<float>(M_PI) * 2;
-            }
-        }
-
-        if (KeyDown[RightKey])
-        {
-            scene.camera.yaw -= 0.01f;
-            if (scene.camera.yaw < 0)
-            {
-                scene.camera.yaw += static_cast<float>(M_PI) * 2;
-            }
-        }
-
-        if (KeyDown[LeftKey])
-        {
-            scene.camera.yaw += 0.01f;
-            if (scene.camera.yaw > static_cast<float>(M_PI) * 2)
-            {
-                scene.camera.yaw -= static_cast<float>(M_PI) * 2;
-            }
-        }
-
-        if (KeyDown[WKey])
+        if (ImGui::IsKeyDown(ImGuiKey::ImGuiKey_W))
         {
             scene.camera.position = scene.camera.position + forward * 0.1f;
         }
 
-        if (KeyDown[AKey])
+        if (ImGui::IsKeyDown(ImGuiKey::ImGuiKey_A))
         {
             scene.camera.position = scene.camera.position + left * 0.1f;
         }
 
-        if (KeyDown[SKey])
+        if (ImGui::IsKeyDown(ImGuiKey::ImGuiKey_S))
         {
             scene.camera.position = scene.camera.position - forward * 0.1f;
         }
 
-        if (KeyDown[DKey])
+        if (ImGui::IsKeyDown(ImGuiKey::ImGuiKey_D))
         {
             scene.camera.position = scene.camera.position - left * 0.1f;
-        }
-    }
-
-    void HandleKeyUp(uint8_t code, HWND hWnd, Renderer::SceneRendererDX12& hardwareRenderer, Renderer::SceneRendererSoftware& softwareRenderer, Renderer::SceneRenderer*& renderer)
-    {
-        if (code == RKey)
-        {
-            if (renderer == &hardwareRenderer)
-            {
-                renderer = &softwareRenderer;
-            }
-            else
-            {
-                renderer = &hardwareRenderer;
-            }
-
-            SetWindowTextA(hWnd, GetCurrentRendererName(hardwareRenderer, renderer));
         }
     }
 }
@@ -128,57 +98,50 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
     static std::string SolutionDir = _SOLUTIONDIR;
     static std::string AssetsDir = SolutionDir + "assets\\";
 
-    static std::array<bool, 256> KeyDown = {};
-
     static Renderer::SceneRendererSoftware softwareRenderer;
     static Renderer::DeviceDX12 device;
     static Renderer::SceneRendererDX12 hardwareRenderer(AssetsDir + "color.hlsl", device);
     static Renderer::ImguiRenderer imguiRenderer(device, WindowWidth, WindowHeight, hWnd);
     static Renderer::SceneRenderer* renderer = &hardwareRenderer;
     static Renderer::Scene scene;
-    static std::vector<uint32_t> backBuffer(WindowWidth * WindowHeight);
 
     switch (uMsg)
     {
         case WM_CREATE:
         {
             ImGui_ImplWin32_Init(hWnd);
+
             NOT_FAILED(Renderer::Load(AssetsDir + "cars\\scene.sce", scene), false);
-            SetWindowTextA(hWnd, GetCurrentRendererName(hardwareRenderer, renderer));
-            return 0;
-        }
-        case WM_KEYDOWN:
-        {
-            uint8_t code = static_cast<uint8_t>(wParam);
-            KeyDown[code] = true;
-
-            return 0;
-        }
-        case WM_KEYUP:
-        {
-            uint8_t code = static_cast<uint8_t>(wParam);
-            KeyDown[code] = false;
-
-            HandleKeyUp(code, hWnd, hardwareRenderer, softwareRenderer, renderer);
+            SetWindowTextA(hWnd, "Polyesther");
             return 0;
         }
         case WM_PAINT:
         {
-            HandleKeyDown(KeyDown, scene);
+            ImGui_ImplWin32_NewFrame();
+
+            HandleInput(scene);
 
             Renderer::Texture result(WindowWidth, WindowHeight);
             renderer->Render(scene, result);
 
-            ImGui_ImplWin32_NewFrame();
             imguiRenderer.Render(result, [&result](ImTextureID id) {
                 static int counter = 0;
 
-                ImGui::Begin("Hello, world!");
+                ImGui::Begin("Scene");
 
-                if (ImGui::Button("Button")) counter++;
+                if (ImGui::IsKeyPressed(ImGuiKey::ImGuiKey_R))
+                {
+                    if (renderer == &hardwareRenderer)
+                    {
+                        renderer = &softwareRenderer;
+                    }
+                    else
+                    {
+                        renderer = &hardwareRenderer;
+                    }
+                }
 
-                ImGui::SameLine();
-                ImGui::Text("counter = %d", counter);
+                ImGui::Text(GetCurrentRendererName(hardwareRenderer, renderer));
 
                 ImGui::Image(id, ImVec2((float)result.GetWidth(), (float)result.GetHeight()));
 
