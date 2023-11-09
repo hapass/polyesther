@@ -18,8 +18,11 @@
 
 namespace
 {
-    constexpr int32_t WindowWidth = 800;
-    constexpr int32_t WindowHeight = 600;
+    constexpr int32_t WindowWidth = 1920;
+    constexpr int32_t WindowHeight = 1080;
+
+    constexpr int32_t RenderWidth = 800;
+    constexpr int32_t RenderHeight = 600;
 
     const char* GetCurrentRendererName(Renderer::SceneRendererDX12& hardwareRenderer, Renderer::SceneRenderer* renderer)
     {
@@ -112,7 +115,6 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
             ImGui_ImplWin32_Init(hWnd);
 
             NOT_FAILED(Renderer::Load(AssetsDir + "cars\\scene.sce", scene), false);
-            SetWindowTextA(hWnd, "Polyesther");
             return 0;
         }
         case WM_PAINT:
@@ -121,11 +123,47 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 
             HandleInput(scene);
 
-            Renderer::Texture result(WindowWidth, WindowHeight);
+            Renderer::Texture result(RenderWidth, RenderHeight);
             renderer->Render(scene, result);
 
             imguiRenderer.Render(result, [&result](ImTextureID id) {
-                static int counter = 0;
+                if (ImGui::BeginMainMenuBar())
+                {
+                    if (ImGui::BeginMenu("File"))
+                    {
+                        ImGui::MenuItem("(demo menu)", NULL, false, false);
+                        if (ImGui::MenuItem("New")) {}
+                        if (ImGui::MenuItem("Open", "Ctrl+O")) {}
+                        if (ImGui::BeginMenu("Open Recent"))
+                        {
+                            ImGui::MenuItem("fish_hat.c");
+                            ImGui::MenuItem("fish_hat.inl");
+                            ImGui::MenuItem("fish_hat.h");
+                            ImGui::EndMenu();
+                        }
+                        if (ImGui::MenuItem("Save", "Ctrl+S")) {}
+                        if (ImGui::MenuItem("Save As..")) {}
+
+                        ImGui::Separator();
+                        if (ImGui::BeginMenu("Options"))
+                        {
+                            static bool enabled = true;
+                            ImGui::MenuItem("Enabled", "", &enabled);
+                            ImGui::BeginChild("child", ImVec2(0, 60), true);
+                            for (int i = 0; i < 10; i++)
+                                ImGui::Text("Scrolling Text %d", i);
+                            ImGui::EndChild();
+                            static float f = 0.5f;
+                            static int n = 0;
+                            ImGui::SliderFloat("Value", &f, 0.0f, 1.0f);
+                            ImGui::InputFloat("Input", &f, 0.1f);
+                            ImGui::Combo("Combo", &n, "Yes\0No\0Maybe\0\0");
+                            ImGui::EndMenu();
+                        }
+                        ImGui::EndMenu();
+                    }
+                    ImGui::EndMainMenuBar();
+                }
 
                 ImGui::Begin("Scene");
 
@@ -184,13 +222,13 @@ int CALLBACK WinMain(
         clientArea.right = WindowWidth;
         clientArea.bottom = WindowHeight;
 
-        AdjustWindowRect(&clientArea, WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_VISIBLE, 0);
+        AdjustWindowRect(&clientArea, WS_OVERLAPPEDWINDOW | WS_VISIBLE, 0);
 
         CreateWindowExW(
             0,
             MainWindowClass.lpszClassName,
-            nullptr,
-            WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_VISIBLE,
+            L"Polyesther",
+            WS_OVERLAPPEDWINDOW | WS_VISIBLE,
             CW_USEDEFAULT,
             CW_USEDEFAULT,
             clientArea.right - clientArea.left,

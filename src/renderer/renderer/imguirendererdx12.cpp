@@ -174,6 +174,7 @@ namespace Renderer
     {
         ImGui_ImplDX12_NewFrame();
         ImGui::NewFrame();
+        ImGui::DockSpaceOverViewport();
 
         D3D12_GPU_DESCRIPTOR_HANDLE handle = UploadTexturesToGPU(texture); // todo.pavelza: add GPU handle to Image?
 
