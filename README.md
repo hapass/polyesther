@@ -2,10 +2,6 @@
 
 Simple obj model viewer. Renders obj models with software rasterizer or DX12 renderer.
 
-Press R to switch renderer.
-Use WASD to control camera offset.
-Use arrow keys to control camera angle.
-
 ## Build steps Windows
 
 1. Clone the repository with submodules.
