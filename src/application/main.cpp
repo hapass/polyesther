@@ -131,41 +131,28 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
                 {
                     if (ImGui::BeginMenu("File"))
                     {
-                        ImGui::MenuItem("(demo menu)", NULL, false, false);
-                        if (ImGui::MenuItem("New")) {}
                         if (ImGui::MenuItem("Open", "Ctrl+O")) {}
-                        if (ImGui::BeginMenu("Open Recent"))
-                        {
-                            ImGui::MenuItem("fish_hat.c");
-                            ImGui::MenuItem("fish_hat.inl");
-                            ImGui::MenuItem("fish_hat.h");
-                            ImGui::EndMenu();
-                        }
                         if (ImGui::MenuItem("Save", "Ctrl+S")) {}
-                        if (ImGui::MenuItem("Save As..")) {}
-
-                        ImGui::Separator();
-                        if (ImGui::BeginMenu("Options"))
-                        {
-                            static bool enabled = true;
-                            ImGui::MenuItem("Enabled", "", &enabled);
-                            ImGui::BeginChild("child", ImVec2(0, 60), true);
-                            for (int i = 0; i < 10; i++)
-                                ImGui::Text("Scrolling Text %d", i);
-                            ImGui::EndChild();
-                            static float f = 0.5f;
-                            static int n = 0;
-                            ImGui::SliderFloat("Value", &f, 0.0f, 1.0f);
-                            ImGui::InputFloat("Input", &f, 0.1f);
-                            ImGui::Combo("Combo", &n, "Yes\0No\0Maybe\0\0");
-                            ImGui::EndMenu();
-                        }
                         ImGui::EndMenu();
                     }
                     ImGui::EndMainMenuBar();
                 }
 
                 ImGui::Begin("Scene");
+                ImGui::Image(id, ImVec2((float)result.GetWidth(), (float)result.GetHeight()));
+                ImGui::End();
+
+                ImGui::Begin("Properties");
+
+                ImGui::Text("Current rasterizer: ");
+                ImGui::SameLine();
+                ImGui::Text(GetCurrentRendererName(hardwareRenderer, renderer));
+                ImGui::Separator();
+                ImGui::Text("Help:");
+                ImGui::Text("Press R to switch renderer.");
+                ImGui::Text("Use arrow keys to turn the camera.");
+                ImGui::Text("Use wasd keys to move the camera.");
+
 
                 if (ImGui::IsKeyPressed(ImGuiKey::ImGuiKey_R))
                 {
@@ -178,10 +165,6 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
                         renderer = &hardwareRenderer;
                     }
                 }
-
-                ImGui::Text(GetCurrentRendererName(hardwareRenderer, renderer));
-
-                ImGui::Image(id, ImVec2((float)result.GetWidth(), (float)result.GetHeight()));
 
                 ImGui::End();
             });
@@ -222,13 +205,13 @@ int CALLBACK WinMain(
         clientArea.right = WindowWidth;
         clientArea.bottom = WindowHeight;
 
-        AdjustWindowRect(&clientArea, WS_OVERLAPPEDWINDOW | WS_VISIBLE, 0);
+        AdjustWindowRect(&clientArea, WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_VISIBLE, 0);
 
         CreateWindowExW(
             0,
             MainWindowClass.lpszClassName,
             L"Polyesther",
-            WS_OVERLAPPEDWINDOW | WS_VISIBLE,
+            WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_VISIBLE,
             CW_USEDEFAULT,
             CW_USEDEFAULT,
             clientArea.right - clientArea.left,

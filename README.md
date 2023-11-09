@@ -14,12 +14,7 @@ Use arrow keys to control camera angle.
 
 ## TODO
 
-1. Create imgui DX12 renderer.
-1. Separate common "device" part of the two DX12 renderers.
-1. Integrate imgui with DX12.
-1. Draw to GPU texture on software rasterizer and remove readback texture from hardware DX12.
-1. Draw output textures as Imgui::Image by passing GPU texture handle.
-1. Add model loading with imgui.
+1. Add model save/load with imgui.
 1. Change camera controls to resemble those of windows 3D viewer (rotating around the model with mouse)
 1. Add lighting, render feature, switching renderer controls to imgui.
 1. Minimize code duplication in DX12 renderer.
@@ -30,3 +25,6 @@ Use arrow keys to control camera angle.
 1. Add more render features to DX12 implementation for education purposes.
 1. Fix window resize issues.
 1. Speed up software rasterizer.
+1. Render imgui and image from renderer on separate threads.
+1. Add raytracer.
+1. Use dropdown to choose current renderer.
