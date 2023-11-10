@@ -5,7 +5,7 @@
 
 #include <renderer/math.h>
 #include <renderer/scenerendererdx12.h>
-#include <renderer/imguirendererdx12.h> // todo.pavelza: move win32 header and cpp from renderer into application
+#include <renderer/imguirendererdx12.h>
 #include <renderer/scenerenderersoftware.h>
 #include <renderer/color.h>
 #include <renderer/scene.h>
@@ -139,7 +139,10 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
                 }
 
                 ImGui::Begin("Scene");
-                ImGui::Image(id, ImVec2((float)result.GetWidth(), (float)result.GetHeight()));
+                ImVec2 imageSize = ImVec2((float)result.GetWidth(), (float)result.GetHeight());
+                ImVec2 cursorPosition = ImVec2((ImGui::GetWindowSize()[0] - imageSize[0]) * 0.5f, (ImGui::GetWindowSize()[1] - imageSize[1]) * 0.5f);
+                ImGui::SetCursorPos(cursorPosition);
+                ImGui::Image(id, imageSize);
                 ImGui::End();
 
                 ImGui::Begin("Properties");
