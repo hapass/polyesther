@@ -2,6 +2,7 @@
 
 #include <Windows.h>
 #include <array>
+#include <chrono>
 
 #include <renderer/math.h>
 #include <renderer/scenerendererdx12.h>
@@ -123,10 +124,15 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 
             HandleInput(scene);
 
+            auto startTime = std::chrono::high_resolution_clock::now();
             Renderer::Texture result(RenderWidth, RenderHeight);
             renderer->Render(scene, result);
+            auto endTime = std::chrono::high_resolution_clock::now();
 
-            imguiRenderer.Render(result, [&result](ImTextureID id) {
+            std::stringstream ss;
+            ss << "Frame time: " << duration_cast<std::chrono::milliseconds>(endTime - startTime);
+
+            imguiRenderer.Render(result, [&result, &ss](ImTextureID id) {
                 if (ImGui::BeginMainMenuBar())
                 {
                     if (ImGui::BeginMenu("File"))
@@ -155,7 +161,9 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
                 ImGui::Text("Press R to switch renderer.");
                 ImGui::Text("Use arrow keys to turn the camera.");
                 ImGui::Text("Use wasd keys to move the camera.");
+                ImGui::Separator();
 
+                ImGui::Text(ss.str().c_str());
 
                 if (ImGui::IsKeyPressed(ImGuiKey::ImGuiKey_R))
                 {
@@ -171,6 +179,8 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 
                 ImGui::End();
             });
+
+            
 
             return 0;
         }

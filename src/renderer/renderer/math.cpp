@@ -311,6 +311,11 @@ namespace Renderer
         return Vec{ a.x * b, a.y * b, a.z * b, a.w * b };
     }
 
+    bool operator==(const Vec& a, const Vec& b)
+    {
+        return !(a < b) && !(b < a);
+    }
+
     Vec normalize(const Vec& v)
     {
         float norm = sqrt(v.x * v.x + v.y * v.y + v.z * v.z + v.w * v.w);
@@ -330,13 +335,6 @@ namespace Renderer
 
     Vec reflect(const Vec& normal, const Vec& vec)
     {
-        const Vec& j = normalize(normal);
-        Vec k = normalize(cross(vec, j));
-        Vec i = normalize(cross(j, k));
-
-        float vecI = dot(vec, i);
-        float vecJ = dot(vec, j);
-
-        return -i * vecI + j * vecJ;
+        return (vec - (normal * (dot(vec, normal) / dot(normal, normal))) * 2) * Vec(-1.0f, -1.0f, -1.0f, 0.0f);
     }
 }

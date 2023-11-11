@@ -7,6 +7,22 @@
 
 #include <functional>
 
+namespace Microsoft
+{
+    namespace VisualStudio
+    {
+        namespace CppUnitTestFramework
+        {
+            template<> inline std::wstring ToString<Renderer::Vec>(const Renderer::Vec& q) 
+            {
+                std::wstringstream ss;
+                ss << q.x << L"," << q.y << L"," << q.z << L"," << q.w;
+                return ss.str();
+            }
+        }
+    }
+}
+
 using namespace Microsoft::VisualStudio::CppUnitTestFramework;
 
 namespace Tests

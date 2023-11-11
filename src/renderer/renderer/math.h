@@ -46,9 +46,13 @@ namespace Renderer
 
     Vec operator*(const Vec& a, float b);
 
+    bool operator==(const Vec& a, const Vec& b);
+
     Vec normalize(const Vec& v);
 
     Vec cross(const Vec& a, const Vec& b);
 
     Vec reflect(const Vec& normal, const Vec& vec);
+
+    Vec fastReflect(const Vec& normal, const Vec& vec);
 }
