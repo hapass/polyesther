@@ -143,6 +143,9 @@ namespace Renderer
 
     void DrawTrianglePart(Edge& minMax, Edge& other)
     {
+        std::vector<float> interpolants_raw;
+        interpolants_raw.resize(minMax.interpolants.size());
+
         for (int32_t y = other.pixelYBegin; y < other.pixelYEnd; y++)
         {
             Edge* left = &minMax;
@@ -157,9 +160,6 @@ namespace Renderer
                 left = right;
                 right = temp;
             }
-
-            std::vector<float> interpolants_raw;
-            interpolants_raw.resize(left->interpolants.size());
 
             for (int32_t x = left->pixelX; x < right->pixelX; x++)
             {
@@ -192,8 +192,7 @@ namespace Renderer
                 float viewY = interpolants_raw[11] / interpolants_raw[5];
                 float viewZ = interpolants_raw[12] / interpolants_raw[5];
 
-
-                Vec pos_view{ viewX, viewY, viewZ, 1.0f };
+                Vec pos_view { viewX, viewY, viewZ, 1.0f };
                 Vec normal_vec = normalize({ normalX, normalY, normalZ, 0.0f });
                 Vec light_vec = normalize(light.position_view - pos_view);
 
@@ -324,8 +323,9 @@ namespace Renderer
         return point.v.position.Get(axis) * plane <= point.v.position.w;
     }
 
-    // todo.pavelza: There is an issue somewhere - we render black 1px line on the border sometimes when the triangle is outside of frustum (compared to dx12 renderer). 
-    // rodo.pavelza: And after introducing the backface culling we can sometimes see pixels from some triangles on the back in the first left 1px line. Looks like front triangle is clipped not precisely by frustum.
+    // todo.pavelza: There is an issue somewhere - we render black 1px line on the border sometimes when the triangle is outside of frustum (compared to dx12 renderer).
+    // And after introducing the backface culling we can sometimes see pixels from some triangles on the back in the first left 1px line.
+    // Looks like front triangle is clipped not precisely by frustum.
     void ClipTrianglePlane(std::vector<VertexS>& vertices, int32_t axis, int32_t plane)
     {
         std::vector<VertexS> result;
@@ -417,6 +417,9 @@ namespace Renderer
             return;
         }
 
+        // We must check that all triangle lies on outside of one of the planes,
+        // since if we check that some vertices lie on the outside of one plane and others on outside of the other,
+        // then part of the triangle might still be visible.
         std::array<bool, 6> planesToOutsideness { false };
         for (const VertexS& v : vertices)
         {
@@ -428,7 +431,8 @@ namespace Renderer
             planesToOutsideness[5] |= IsVertexInside(v, 2, -1);
         }
 
-        // This check doesn't give us a big performance boost in a general case, but it doesn't seem to hit performance in general case too much to remove it either.
+        // This check doesn't give us a big performance boost in a general case,
+        // but it doesn't seem to hit performance in general case too much to remove it either.
         if (std::any_of(planesToOutsideness.begin(), planesToOutsideness.end(), [](bool val) { return !val; }))
         {
             return;
