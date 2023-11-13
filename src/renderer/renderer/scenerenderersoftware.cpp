@@ -143,8 +143,8 @@ namespace Renderer
 
     void DrawTrianglePart(Edge& minMax, Edge& other)
     {
-        std::vector<float> interpolants_raw;
-        interpolants_raw.resize(minMax.interpolants.size());
+        std::array<float, 13> interpolants_raw;
+        assert(interpolants_raw.size() == minMax.interpolants.size());
 
         for (int32_t y = other.pixelYBegin; y < other.pixelYEnd; y++)
         {
