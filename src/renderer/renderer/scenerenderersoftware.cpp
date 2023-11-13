@@ -8,6 +8,8 @@
 #include <cmath>
 #include <cassert>
 #include <iostream>
+#include <array>
+
 #include "utils.h"
 
 namespace Renderer
@@ -415,8 +417,28 @@ namespace Renderer
             return;
         }
 
-        // todo.pavelza: If all the points are outside of the view frustum - we can cull immediately.
-        // todo.pavelza: If all points are inside - we can draw immediately.
+        std::array<bool, 6> planesToOutsideness { false };
+        for (const VertexS& v : vertices)
+        {
+            planesToOutsideness[0] |= IsVertexInside(v, 0, 1);
+            planesToOutsideness[1] |= IsVertexInside(v, 1, 1);
+            planesToOutsideness[2] |= IsVertexInside(v, 2, 1);
+            planesToOutsideness[3] |= IsVertexInside(v, 0, -1);
+            planesToOutsideness[4] |= IsVertexInside(v, 1, -1);
+            planesToOutsideness[5] |= IsVertexInside(v, 2, -1);
+        }
+
+        // This check doesn't give us a big performance boost in a general case, but it doesn't seem to hit performance in general case too much to remove it either.
+        if (std::any_of(planesToOutsideness.begin(), planesToOutsideness.end(), [](bool val) { return !val; }))
+        {
+            return;
+        }
+
+        if (std::all_of(vertices.begin(), vertices.end(), [](const VertexS& v){ return IsVertexInside(v, 0, 1) && IsVertexInside(v, 1, 1) && IsVertexInside(v, 2, 1) && IsVertexInside(v, 0, -1) && IsVertexInside(v, 1, -1) && IsVertexInside(v, 2, -1); }))
+        {
+            DrawRawTriangle(vertices);
+            return;
+        }
 
         if (ClipTriangleAxis(vertices, 0) && ClipTriangleAxis(vertices, 1) && ClipTriangleAxis(vertices, 2))
         {
