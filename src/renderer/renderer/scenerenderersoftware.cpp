@@ -14,6 +14,41 @@
 
 namespace Renderer
 {
+    struct InterpolationPoint
+    {
+        float x;
+        float y;
+        float c;
+    };
+
+    struct Interpolant
+    {
+        Interpolant() {}
+
+        Interpolant(const InterpolationPoint& a, const InterpolationPoint& b, const InterpolationPoint& c)
+        {
+            float dx = (b.x - c.x) * (a.y - c.y) - (a.x - c.x) * (b.y - c.y);
+            float dy = -dx;
+
+            stepX = ((b.c - c.c) * (a.y - c.y) - (a.c - c.c) * (b.y - c.y)) / dx;
+            stepY = ((b.c - c.c) * (a.x - c.x) - (a.c - c.c) * (b.x - c.x)) / dy;
+
+            minC = a.c;
+            midC = b.c;
+        }
+
+        float stepX = 0.0f;
+        float stepY = 0.0f;
+
+        float minC = 0.0f;
+        float midC = 0.0f;
+
+        float CalculateC(float dx, float dy, bool isMin)
+        {
+            return (isMin ? minC : midC) + dy * stepY + dx * stepX;
+        }
+    };
+
     namespace
     {
         size_t OutputWidth;
@@ -23,6 +58,9 @@ namespace Renderer
         std::vector<float> ZBuffer;
         std::vector<Texture> Textures;
         uint32_t CurrentTexture = 0;
+
+        static constexpr uint32_t InterpolantsSize = 13;
+        std::array<Interpolant, InterpolantsSize> Interpolants;
     }
 
     struct LightS
@@ -57,56 +95,9 @@ namespace Renderer
         BackBuffer[y * OutputWidth + x] = color.rgba;
     }
 
-    void ClearScreen(Color color)
-    {
-        assert(OutputWidth > 0);
-        assert(OutputHeight > 0);
-        assert(BackBuffer);
-
-        for (uint32_t i = 0; i < OutputWidth * OutputHeight; i++)
-        {
-            BackBuffer[i] = color.rgba;
-            ZBuffer[i] = 2.0f;
-        }
-    }
-
-    struct InterpolationPoint
-    {
-        float x;
-        float y;
-        float c;
-    };
-
-    struct Interpolant
-    {
-        Interpolant(const InterpolationPoint& a, const InterpolationPoint& b, const InterpolationPoint& c)
-        {
-            float dx = (b.x - c.x) * (a.y - c.y) - (a.x - c.x) * (b.y - c.y);
-            float dy = -dx;
-
-            stepX = ((b.c - c.c) * (a.y - c.y) - (a.c - c.c) * (b.y - c.y)) / dx;
-            stepY = ((b.c - c.c) * (a.x - c.x) - (a.c - c.c) * (b.x - c.x)) / dy;
-
-            minC = a.c;
-            midC = b.c;
-        }
-
-        float stepX;
-        float stepY;
-        float currentC = 0.0f;
-
-        float minC;
-        float midC;
-
-        void CalculateC(float dx, float dy, bool isMin)
-        {
-            currentC = (isMin ? minC : midC) + dy * stepY + dx * stepX;
-        }
-    };
-
     struct Edge
     {
-        Edge(Vec b, Vec e, std::vector<Interpolant>& inter, bool isMin = true) : interpolants(inter), begin(b), isBeginMin(isMin), pixelX(0)
+        Edge(Vec b, Vec e, bool isMin = true) : begin(b), isBeginMin(isMin), pixelX(0)
         {
             pixelYBegin = static_cast<int32_t>(ceil(b.y));
             pixelYEnd = static_cast<int32_t>(ceil(e.y));
@@ -116,12 +107,12 @@ namespace Renderer
             stepX = distanceY > 0.0f ? distanceX / distanceY : 0.0f;
         }
 
-        void CalculateX(int32_t y)
+        void CalculateC(int32_t y)
         {
             pixelX = static_cast<int32_t>(ceil(begin.x + (y - begin.y) * stepX));
-            for (Interpolant& i : interpolants)
+            for (size_t i = 0; i < InterpolantsSize; i++)
             {
-                i.CalculateC(pixelX - begin.x, y - begin.y, isBeginMin);
+                currentC[i] = Interpolants[i].CalculateC(pixelX - begin.x, y - begin.y, isBeginMin);
             }
         }
 
@@ -133,7 +124,8 @@ namespace Renderer
         bool isBeginMin;
         Vec begin;
 
-        std::vector<Interpolant> interpolants;
+        // todo.pavelza: C along the edge. Need to rename the C into interpolated value or something like this.
+        std::array<float, InterpolantsSize> currentC;
     };
 
     float Lerp(float begin, float end, float lerpAmount)
@@ -143,7 +135,8 @@ namespace Renderer
 
     void DrawTrianglePart(Edge& minMax, Edge& other)
     {
-        std::array<float, 13> interpolants_raw;
+        // todo.pavelza: Same as currentC in the edge, but interpolated between edges, need to rename those two.
+        std::array<float, InterpolantsSize> interpolants_raw;
         assert(interpolants_raw.size() == minMax.interpolants.size());
 
         for (int32_t y = other.pixelYBegin; y < other.pixelYEnd; y++)
@@ -151,8 +144,8 @@ namespace Renderer
             Edge* left = &minMax;
             Edge* right = &other;
 
-            left->CalculateX(y);
-            right->CalculateX(y);
+            left->CalculateC(y);
+            right->CalculateC(y);
 
             if (left->pixelX > right->pixelX)
             {
@@ -165,7 +158,7 @@ namespace Renderer
             {
                 float percent = static_cast<float>(x - left->pixelX) / static_cast<float>(right->pixelX - left->pixelX);
 
-                interpolants_raw[6] = Lerp(left->interpolants[6].currentC, right->interpolants[6].currentC, percent);
+                interpolants_raw[6] = Lerp(left->currentC[6], right->currentC[6], percent);
                 if (interpolants_raw[6] < ZBuffer[y * OutputWidth + x])
                 {
                     ZBuffer[y * OutputWidth + x] = interpolants_raw[6];
@@ -177,7 +170,7 @@ namespace Renderer
 
                 for (uint32_t i = 0; i < interpolants_raw.size(); i++)
                 {
-                    interpolants_raw[i] = Lerp(left->interpolants[i].currentC, right->interpolants[i].currentC, percent);
+                    interpolants_raw[i] = Lerp(left->currentC[i], right->currentC[i], percent);
                 }
 
                 float tintRed = interpolants_raw[0] / interpolants_raw[5];
@@ -288,31 +281,29 @@ namespace Renderer
             v.v.position.y = (OutputHeight - 1) * ((v.v.position.y + 1) / 2.0f);
         }
 
+        Interpolants[0] = GetInterpolant(vertices, vertices[0].red, vertices[1].red, vertices[2].red);
+        Interpolants[1] = GetInterpolant(vertices, vertices[0].green, vertices[1].green, vertices[2].green);
+        Interpolants[2] = GetInterpolant(vertices, vertices[0].blue, vertices[1].blue, vertices[2].blue);
+
+        Interpolants[3] = GetInterpolant(vertices, vertices[0].v.textureCoord.x, vertices[1].v.textureCoord.x, vertices[2].v.textureCoord.x);
+        Interpolants[4] = GetInterpolant(vertices, vertices[0].v.textureCoord.y, vertices[1].v.textureCoord.y, vertices[2].v.textureCoord.y);
+
+        Interpolants[5] = GetInterpolant(vertices, 1.0f, 1.0f, 1.0f);
+
         // No division by w, because it is already divided by w.
-        Interpolant z({ vertices[0].v.position.x, vertices[0].v.position.y, vertices[0].v.position.z }, { vertices[1].v.position.x, vertices[1].v.position.y, vertices[1].v.position.z }, { vertices[2].v.position.x, vertices[2].v.position.y, vertices[2].v.position.z });
+        Interpolants[6] = Interpolant({ vertices[0].v.position.x, vertices[0].v.position.y, vertices[0].v.position.z }, { vertices[1].v.position.x, vertices[1].v.position.y, vertices[1].v.position.z }, { vertices[2].v.position.x, vertices[2].v.position.y, vertices[2].v.position.z });
 
-        Interpolant red = GetInterpolant(vertices, vertices[0].red, vertices[1].red, vertices[2].red);
-        Interpolant green = GetInterpolant(vertices, vertices[0].green, vertices[1].green, vertices[2].green);
-        Interpolant blue = GetInterpolant(vertices, vertices[0].blue, vertices[1].blue, vertices[2].blue);
+        Interpolants[7] = GetInterpolant(vertices, vertices[0].v.normal.x, vertices[1].v.normal.x, vertices[2].v.normal.x);
+        Interpolants[8] = GetInterpolant(vertices, vertices[0].v.normal.y, vertices[1].v.normal.y, vertices[2].v.normal.y);
+        Interpolants[9] = GetInterpolant(vertices, vertices[0].v.normal.z, vertices[1].v.normal.z, vertices[2].v.normal.z);
 
-        Interpolant xTexture = GetInterpolant(vertices, vertices[0].v.textureCoord.x, vertices[1].v.textureCoord.x, vertices[2].v.textureCoord.x);
-        Interpolant yTexture = GetInterpolant(vertices, vertices[0].v.textureCoord.y, vertices[1].v.textureCoord.y, vertices[2].v.textureCoord.y);
+        Interpolants[10] = GetInterpolant(vertices, vertices[0].pos_view.x, vertices[1].pos_view.x, vertices[2].pos_view.x);
+        Interpolants[11] = GetInterpolant(vertices, vertices[0].pos_view.y, vertices[1].pos_view.y, vertices[2].pos_view.y);
+        Interpolants[12] = GetInterpolant(vertices, vertices[0].pos_view.z, vertices[1].pos_view.z, vertices[2].pos_view.z);
 
-        Interpolant oneOverW = GetInterpolant(vertices, 1.0f, 1.0f, 1.0f);
-
-        Interpolant xNormal = GetInterpolant(vertices, vertices[0].v.normal.x, vertices[1].v.normal.x, vertices[2].v.normal.x);
-        Interpolant yNormal = GetInterpolant(vertices, vertices[0].v.normal.y, vertices[1].v.normal.y, vertices[2].v.normal.y);
-        Interpolant zNormal = GetInterpolant(vertices, vertices[0].v.normal.z, vertices[1].v.normal.z, vertices[2].v.normal.z);
-
-        Interpolant xView = GetInterpolant(vertices, vertices[0].pos_view.x, vertices[1].pos_view.x, vertices[2].pos_view.x);
-        Interpolant yView = GetInterpolant(vertices, vertices[0].pos_view.y, vertices[1].pos_view.y, vertices[2].pos_view.y);
-        Interpolant zView = GetInterpolant(vertices, vertices[0].pos_view.z, vertices[1].pos_view.z, vertices[2].pos_view.z);
-
-        std::vector<Interpolant> interpolants{ red, green, blue, xTexture, yTexture, oneOverW, z, xNormal, yNormal, zNormal, xView, yView, zView };
-
-        Edge minMax(vertices[0].v.position, vertices[2].v.position, interpolants, true);
-        Edge minMiddle(vertices[0].v.position, vertices[1].v.position, interpolants, true);
-        Edge middleMax(vertices[1].v.position, vertices[2].v.position, interpolants, false);
+        Edge minMax(vertices[0].v.position, vertices[2].v.position, true);
+        Edge minMiddle(vertices[0].v.position, vertices[1].v.position, true);
+        Edge middleMax(vertices[1].v.position, vertices[2].v.position, false);
 
         DrawTrianglePart(minMax, minMiddle);
         DrawTrianglePart(minMax, middleMax);
@@ -370,32 +361,32 @@ namespace Renderer
 
     void DrawTriangle(const Vertex& a, const Vertex& b, const Vertex& c, const Matrix& transform)
     {
-        std::vector<VertexS> vertices
-        {
-            VertexS
-            {
-                a,
-                a.position,
-                a.color.GetVec().x,
-                a.color.GetVec().y,
-                a.color.GetVec().z
-            },
-            VertexS
-            {
-                b,
-                b.position,
-                b.color.GetVec().x,
-                b.color.GetVec().y,
-                b.color.GetVec().z
-            },
-            VertexS
-            {
-                c,
-                c.position,
-                c.color.GetVec().x,
-                c.color.GetVec().y,
-                c.color.GetVec().z
-            }
+        static std::vector<VertexS> vertices;
+        vertices.clear();
+        vertices.resize(3);
+
+        vertices[0] = VertexS {
+            a,
+            a.position,
+            a.color.GetVec().x,
+            a.color.GetVec().y,
+            a.color.GetVec().z
+        };
+
+        vertices[1] = VertexS {
+            b,
+            b.position,
+            b.color.GetVec().x,
+            b.color.GetVec().y,
+            b.color.GetVec().z
+        };
+
+        vertices[2] = VertexS {
+            c,
+            c.position,
+            c.color.GetVec().x,
+            c.color.GetVec().y,
+            c.color.GetVec().z
         };
 
         for (VertexS& v : vertices)
@@ -450,7 +441,8 @@ namespace Renderer
 
             for (size_t i = 2; i < vertices.size(); i++)
             {
-                std::vector<VertexS> triangle;
+                static std::vector<VertexS> triangle;
+                triangle.clear();
                 triangle.resize(3);
 
                 triangle[0] = vertices[0];
@@ -469,7 +461,9 @@ namespace Renderer
 
         BackBuffer.resize(OutputWidth * OutputHeight);
         ZBuffer.resize(OutputWidth * OutputHeight);
-        ClearScreen(Color::Black);
+
+        std::fill(BackBuffer.begin(), BackBuffer.end(), Color::Black.rgba);
+        std::fill(ZBuffer.begin(), ZBuffer.end(), 2.0f);
 
         // calculate light's position in view space
         light.position_view = ViewTransform(scene.camera) * scene.light.position;

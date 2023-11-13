@@ -55,10 +55,7 @@ namespace Renderer
 
     void Texture::SetColor(size_t index, Color color)
     {
-        data[index * BytesPerColor] = color.GetVal(0);
-        data[index * BytesPerColor + 1] = color.GetVal(1);
-        data[index * BytesPerColor + 2] = color.GetVal(2);
-        data[index * BytesPerColor + 3] = color.GetVal(3);
+        ((uint32_t*)data.data())[index] = (((color.rgba & 0xFF000000) >> 24) | ((color.rgba & 0x00FF0000) >> 8) | ((color.rgba & 0x0000FF00) << 8) | ((color.rgba & 0x000000FF) << 24));
     }
 
     size_t Texture::GetSize() const
