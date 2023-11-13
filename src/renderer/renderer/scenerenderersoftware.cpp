@@ -274,13 +274,6 @@ namespace Renderer
             v.v.position.z /= v.v.position.w;
         }
 
-        // todo.pavelza: fix bad culling, also need to configure to get the winding order correctly
-        //float crossProductZ = cross(vertices[1].pos_view - vertices[0].pos_view, vertices[1].pos_view - vertices[2].pos_view).z;
-        //if (crossProductZ > 0)
-        //{
-        //    return;
-        //}
-
         std::sort(std::begin(vertices), std::end(vertices), [](const VertexS& lhs, const VertexS& rhs) { return lhs.v.position.y < rhs.v.position.y; });
 
         for (VertexS& v : vertices)
@@ -329,6 +322,8 @@ namespace Renderer
         return point.v.position.Get(axis) * plane <= point.v.position.w;
     }
 
+    // todo.pavelza: There is an issue somewhere - we render black 1px line on the border sometimes when the triangle is outside of frustum (compared to dx12 renderer). 
+    // rodo.pavelza: And after introducing the backface culling we can sometimes see pixels from some triangles on the back in the first left 1px line. Looks like front triangle is clipped not precisely by frustum.
     void ClipTrianglePlane(std::vector<VertexS>& vertices, int32_t axis, int32_t plane)
     {
         std::vector<VertexS> result;
@@ -407,6 +402,17 @@ namespace Renderer
             v.pos_view = transform * v.pos_view;
             // This is possible because we do not do non-uniform scale in transform. If we are about to do non-uniform scale, we should calculate the normal matrix.
             v.v.normal = transform * v.v.normal;
+        }
+
+        // Backface culling produces very rough results in view space (maybe need to figure out why some day). So we do it in clip space. And it seems to be the right (identical to hardware) way.
+        // Doing clipspace culling before we split triangles that penetrate camera frustum gives us additional ~10ms gain for a frame in reference scene.
+        // Front is counter clockwise.
+        Vec v0 { vertices[0].v.position.x / vertices[0].v.position.w, vertices[0].v.position.y / vertices[0].v.position.w, vertices[0].v.position.z / vertices[0].v.position.w, 1.0f };
+        Vec v1 { vertices[1].v.position.x / vertices[1].v.position.w, vertices[1].v.position.y / vertices[1].v.position.w, vertices[1].v.position.z / vertices[1].v.position.w, 1.0f };
+        Vec v2 { vertices[2].v.position.x / vertices[2].v.position.w, vertices[2].v.position.y / vertices[2].v.position.w, vertices[2].v.position.z / vertices[2].v.position.w, 1.0f };
+        if (cross(v2 - v0, v1 - v0).z > 0)
+        {
+            return;
         }
 
         // todo.pavelza: If all the points are outside of the view frustum - we can cull immediately.

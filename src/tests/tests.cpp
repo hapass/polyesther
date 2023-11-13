@@ -232,7 +232,7 @@ namespace Tests
             Renderer::Texture texture(200, 150);
             renderer.Render(scene, texture);
 
-            Renderer::Texture reference;
+            Renderer::Texture reference(200, 150);
             Renderer::Load(TestsDir + "reference_software.bmp", reference);
 
             Assert::IsTrue(texture == reference);
@@ -280,14 +280,9 @@ namespace Tests
             Renderer::Texture textureHardware(width, height);
             hardwareRenderer.Render(scene, textureHardware);
 
+            Renderer::Texture diff(width, height);
             uint32_t differentPixels = 0;
-            for (size_t i = 0; i < textureHardware.GetSize(); i++)
-            {
-                if (textureSoftware.GetColor(i).rgba != textureHardware.GetColor(i).rgba)
-                {
-                    differentPixels++;
-                }
-            }
+            Renderer::Diff(textureSoftware, textureHardware, diff, differentPixels);
 
             Assert::AreEqual(0u, differentPixels);
         }

@@ -37,4 +37,6 @@ namespace Renderer
     bool Load(const std::string& path, Texture& texture);
 
     bool Save(const std::string& path, const Texture& texture);
+
+    bool Diff(const Texture& lhs, const Texture& rhs, Texture& result, uint32_t& differentPixelsCount);
 }

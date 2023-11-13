@@ -109,12 +109,12 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
     static Renderer::SceneRenderer* renderer = &hardwareRenderer;
     static Renderer::Scene scene;
 
+
     switch (uMsg)
     {
         case WM_CREATE:
         {
             ImGui_ImplWin32_Init(hWnd);
-
             NOT_FAILED(Renderer::Load(AssetsDir + "cars\\scene.sce", scene), false);
             return 0;
         }
@@ -126,6 +126,7 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 
             auto startTime = std::chrono::high_resolution_clock::now();
             Renderer::Texture result(RenderWidth, RenderHeight);
+
             renderer->Render(scene, result);
             auto endTime = std::chrono::high_resolution_clock::now();
 
@@ -164,6 +165,18 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
                 ImGui::Separator();
 
                 ImGui::Text(ss.str().c_str());
+                ImGui::Separator();
+
+                ImGui::Text("Camera:");
+                ImGui::Text("x: %f; y: %f; z: %f",
+                    scene.camera.position.x,
+                    scene.camera.position.y,
+                    scene.camera.position.z
+                );
+                ImGui::Text("pitch: %f; yaw: %f",
+                    scene.camera.pitch,
+                    scene.camera.yaw
+                );
 
                 if (ImGui::IsKeyPressed(ImGuiKey::ImGuiKey_R))
                 {

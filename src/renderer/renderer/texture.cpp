@@ -8,6 +8,7 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include <renderer/thirdparty/stb_image_write.h>
 #include "texture.h"
+#include "utils.h"
 
 namespace Renderer
 {
@@ -88,5 +89,29 @@ namespace Renderer
     bool Save(const std::string& path, const Texture& texture)
     {
         return static_cast<bool>(stbi_write_bmp(path.c_str(), static_cast<int>(texture.GetWidth()), static_cast<int>(texture.GetHeight()), Texture::BytesPerColor, texture.GetBuffer()));
+    }
+
+    bool Diff(const Texture& lhs, const Texture& rhs, Texture& result, uint32_t& differentPixelsCount)
+    {
+        if (lhs.GetSize() != rhs.GetSize() || lhs.GetSize() != result.GetSize())
+        {
+            REPORT_ERROR();
+        }
+
+        differentPixelsCount = 0;
+        for (size_t i = 0; i < lhs.GetSize(); i++)
+        {
+            if (lhs.GetColor(i).rgba != rhs.GetColor(i).rgba)
+            {
+                differentPixelsCount++;
+                result.SetColor(i, Color::Pink);
+            }
+            else
+            {
+                result.SetColor(i, lhs.GetColor(i).rgba);
+            }
+        }
+
+        return true;
     }
 }

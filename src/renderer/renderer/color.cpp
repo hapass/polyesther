@@ -7,4 +7,5 @@ namespace Renderer
     Color Color::Red = Color(255u, 0u, 0u);
     Color Color::Green = Color(0u, 255u, 0u);
     Color Color::Blue = Color(0u, 0u, 255u);
+    Color Color::Pink = Color(255u, 192u, 203u);
 }
