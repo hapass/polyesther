@@ -318,8 +318,8 @@ namespace Renderer
 
     Vec normalize(const Vec& v)
     {
-        float norm = sqrt(v.x * v.x + v.y * v.y + v.z * v.z + v.w * v.w);
-        return Vec{ v.x / norm, v.y / norm, v.z / norm, v.w / norm };
+        float norm = 1.0f / sqrt(v.x * v.x + v.y * v.y + v.z * v.z + v.w * v.w);
+        return Vec{ v.x * norm, v.y * norm, v.z * norm, v.w * norm };
     }
 
     Vec cross(const Vec& a, const Vec& b)

@@ -3,6 +3,7 @@
 #include <Windows.h>
 #include <array>
 #include <chrono>
+#include <numeric>
 
 #include <renderer/math.h>
 #include <renderer/scenerendererdx12.h>
@@ -92,6 +93,24 @@ namespace
     }
 }
 
+struct FrameCounter
+{
+    void AddTiming(uint64_t count)
+    {
+        static uint32_t i = 0;
+        frameRates[i] = count;
+        i = (i + 1) % TotalFrames;
+    }
+
+    float GetAverageFPS()
+    {
+        return std::reduce(frameRates.begin(), frameRates.end()) / (float)TotalFrames;
+    }
+
+    static constexpr uint64_t TotalFrames = 100;
+    std::array<uint64_t, TotalFrames> frameRates {};
+};
+
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
 LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
@@ -108,7 +127,8 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
     static Renderer::ImguiRenderer imguiRenderer(device, WindowWidth, WindowHeight, hWnd);
     static Renderer::SceneRenderer* renderer = &hardwareRenderer;
     static Renderer::Scene scene;
-
+    
+    static FrameCounter counter;
 
     switch (uMsg)
     {
@@ -130,8 +150,10 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
             renderer->Render(scene, result);
             auto endTime = std::chrono::high_resolution_clock::now();
 
+            counter.AddTiming(duration_cast<std::chrono::milliseconds>(endTime - startTime).count());
+
             std::stringstream ss;
-            ss << "Frame time: " << duration_cast<std::chrono::milliseconds>(endTime - startTime);
+            ss << "Frame time: " << counter.GetAverageFPS();
 
             imguiRenderer.Render(result, [&result, &ss](ImTextureID id) {
                 if (ImGui::BeginMainMenuBar())
