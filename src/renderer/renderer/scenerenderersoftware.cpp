@@ -43,7 +43,7 @@ namespace Renderer
         float minC = 0.0f;
         float midC = 0.0f;
 
-        float CalculateC(float dx, float dy, bool isMin)
+        float CalculateC(float dx, float dy, bool isMin) const
         {
             return (isMin ? minC : midC) + dy * stepY + dx * stepX;
         }
@@ -51,13 +51,13 @@ namespace Renderer
 
     namespace
     {
-        size_t OutputWidth;
-        size_t OutputHeight;
+        static size_t OutputWidth;
+        static size_t OutputHeight;
 
-        std::vector<uint32_t> BackBuffer;
-        std::vector<float> ZBuffer;
-        std::vector<Texture> Textures;
-        uint32_t CurrentTexture = 0;
+        static std::vector<uint32_t> BackBuffer;
+        static std::vector<float> ZBuffer;
+        static std::vector<Texture> Textures;
+        static uint32_t CurrentTexture = 0;
 
         static constexpr uint32_t InterpolantsSize = 13;
         std::array<Interpolant, InterpolantsSize> Interpolants;
@@ -97,35 +97,53 @@ namespace Renderer
 
     struct Edge
     {
-        Edge(Vec b, Vec e, bool isMin = true) : begin(b), isBeginMin(isMin), pixelX(0)
+        struct EdgeData
         {
-            pixelYBegin = static_cast<int32_t>(ceil(b.y));
-            pixelYEnd = static_cast<int32_t>(ceil(e.y));
+            int32_t y;
+            int32_t pixelX;
+            std::array<float, InterpolantsSize> currentC;
+        };
 
-            float distanceX = e.x - b.x;
-            float distanceY = e.y - b.y;
-            stepX = distanceY > 0.0f ? distanceX / distanceY : 0.0f;
+        Edge(Vec b, Vec e, bool isMin = true)
+            : begin(b)
+            , distanceX(e.x - b.x)
+            , distanceY(e.y - b.y)
+            , stepX(distanceY > 0.0f ? distanceX / distanceY : 0.0f)
+            , pixelYBegin(static_cast<int32_t>(ceil(b.y)))
+            , pixelYEnd(static_cast<int32_t>(ceil(e.y)))
+            , isBeginMin(isMin)
+        {
+            data.resize(pixelYEnd - pixelYBegin);
         }
 
-        void CalculateC(int32_t y)
+        void CalculateXandC(int32_t y)
         {
-            pixelX = static_cast<int32_t>(ceil(begin.x + (y - begin.y) * stepX));
+            EdgeData& d = data[y - pixelYBegin];
+            d.y = y;
+            d.pixelX = static_cast<int32_t>(ceil(begin.x + (y - begin.y) * stepX));
             for (size_t i = 0; i < InterpolantsSize; i++)
             {
-                currentC[i] = Interpolants[i].CalculateC(pixelX - begin.x, y - begin.y, isBeginMin);
+                d.currentC[i] = Interpolants[i].CalculateC(d.pixelX - begin.x, y - begin.y, isBeginMin);
             }
         }
 
-        int32_t pixelYBegin;
-        int32_t pixelYEnd;
-        int32_t pixelX;
+        bool GetEdgeData(int32_t y, EdgeData*& result)
+        {
+            int32_t index = y - pixelYBegin;
+            if (index < 0 || y >= pixelYEnd) return false;
+            result = &data[y - pixelYBegin];
+            return true;
+        }
 
-        float stepX;
-        bool isBeginMin;
-        Vec begin;
-
-        // todo.pavelza: C along the edge. Need to rename the C into interpolated value or something like this.
-        std::array<float, InterpolantsSize> currentC;
+        const Vec begin;
+        const float distanceX;
+        const float distanceY;
+        const float stepX;
+        const int32_t pixelYBegin;
+        const int32_t pixelYEnd;
+        const bool isBeginMin;
+        
+        std::vector<EdgeData> data;
     };
 
     float Lerp(float begin, float end, float lerpAmount)
@@ -133,35 +151,32 @@ namespace Renderer
         return begin + (end - begin) * lerpAmount;
     }
 
-    void DrawTrianglePart(Edge& minMax, Edge& other)
+    void Draw(Edge& minMax, Edge& minMiddle, Edge& middleMax)
     {
-        // todo.pavelza: Same as currentC in the edge, but interpolated between edges, need to rename those two.
+        // todo.pavelza: Same as currentC in the edge data, but interpolated between edges, need to rename those two.
         std::array<float, InterpolantsSize> interpolants_raw;
         assert(interpolants_raw.size() == minMax.interpolants.size());
 
-        for (int32_t y = other.pixelYBegin; y < other.pixelYEnd; y++)
+        std::for_each(minMax.data.begin(), minMax.data.end(), [&minMiddle, &middleMax, &interpolants_raw](Edge::EdgeData& n)
         {
-            Edge* left = &minMax;
-            Edge* right = &other;
-
-            left->CalculateC(y);
-            right->CalculateC(y);
-
-            if (left->pixelX > right->pixelX)
+            Edge::EdgeData* left = &n;
+            Edge::EdgeData* right = nullptr;
+            if (!minMiddle.GetEdgeData(n.y, right))
             {
-                Edge* temp = left;
-                left = right;
-                right = temp;
+                bool result = middleMax.GetEdgeData(n.y, right);
+                assert(result);
             }
+
+            if (left->pixelX > right->pixelX) std::swap(left, right);
 
             for (int32_t x = left->pixelX; x < right->pixelX; x++)
             {
                 float percent = static_cast<float>(x - left->pixelX) / static_cast<float>(right->pixelX - left->pixelX);
 
                 interpolants_raw[6] = Lerp(left->currentC[6], right->currentC[6], percent);
-                if (interpolants_raw[6] < ZBuffer[y * OutputWidth + x])
+                if (interpolants_raw[6] < ZBuffer[n.y * OutputWidth + x])
                 {
-                    ZBuffer[y * OutputWidth + x] = interpolants_raw[6];
+                    ZBuffer[n.y * OutputWidth + x] = interpolants_raw[6];
                 }
                 else
                 {
@@ -177,6 +192,9 @@ namespace Renderer
                 float tintGreen = interpolants_raw[1] / interpolants_raw[5];
                 float tintBlue = interpolants_raw[2] / interpolants_raw[5];
 
+                float textureXf = interpolants_raw[3] / interpolants_raw[5];
+                float textureYf = interpolants_raw[4] / interpolants_raw[5];
+
                 float normalX = interpolants_raw[7] / interpolants_raw[5];
                 float normalY = interpolants_raw[8] / interpolants_raw[5];
                 float normalZ = interpolants_raw[9] / interpolants_raw[5];
@@ -185,7 +203,7 @@ namespace Renderer
                 float viewY = interpolants_raw[11] / interpolants_raw[5];
                 float viewZ = interpolants_raw[12] / interpolants_raw[5];
 
-                Vec pos_view { viewX, viewY, viewZ, 1.0f };
+                Vec pos_view{ viewX, viewY, viewZ, 1.0f };
                 Vec normal_vec = normalize({ normalX, normalY, normalZ, 0.0f });
                 Vec light_vec = normalize(light.position_view - pos_view);
 
@@ -195,15 +213,15 @@ namespace Renderer
                 float specAmount = static_cast<float>(std::max<float>(dot(normalize(pos_view), reflect(normal_vec, light_vec * -1.0f)), 0.0f));
                 Vec specular = light.light.color.GetVec() * pow(specAmount, light.light.specularShininess) * light.light.specularStrength;
 
-                Vec final_color { tintRed, tintGreen, tintBlue, 1.0f };
+                Vec final_color{ tintRed, tintGreen, tintBlue, 1.0f };
                 if (Textures.size() > 0)
                 {
                     uint32_t materialId = CurrentTexture;
 
                     // From 0 to TextureWidth - 1 (TextureWidth pixels in total)
-                    size_t textureX = static_cast<size_t>((interpolants_raw[3] / interpolants_raw[5]) * (Textures[materialId].GetWidth() - 1));
+                    size_t textureX = static_cast<size_t>(textureXf * (Textures[materialId].GetWidth() - 1));
                     // From 0 to TextureHeight - 1 (TextureHeight pixels in total)
-                    size_t textureY = static_cast<size_t>((interpolants_raw[4] / interpolants_raw[5]) * (Textures[materialId].GetHeight() - 1));
+                    size_t textureY = static_cast<size_t>(textureYf * (Textures[materialId].GetHeight() - 1));
 
                     // todo.pavelza: 0 height texture undefined behavior
                     textureY = (Textures[materialId].GetHeight() - 1) - textureY; // invert texture coords
@@ -220,9 +238,9 @@ namespace Renderer
                 final_color.z = std::clamp(final_color.z, 0.0f, 1.0f);
                 final_color.w = 1.0f; // fix the alpha being affected by light, noticable only in tests, because in application we correct alpha manually when copying to backbuffer
 
-                DrawPixel(x, y, Color(final_color));
+                DrawPixel(x, n.y, Color(final_color));
             }
-        }
+        });
     }
 
     VertexS Lerp(const VertexS& begin, const VertexS& end, float lerpAmount)
@@ -305,8 +323,19 @@ namespace Renderer
         Edge minMiddle(vertices[0].v.position, vertices[1].v.position, true);
         Edge middleMax(vertices[1].v.position, vertices[2].v.position, false);
 
-        DrawTrianglePart(minMax, minMiddle);
-        DrawTrianglePart(minMax, middleMax);
+        for (int32_t y = minMiddle.pixelYBegin; y < minMiddle.pixelYEnd; y++)
+        {
+            minMax.CalculateXandC(y);
+            minMiddle.CalculateXandC(y);
+        }
+
+        for (int32_t y = middleMax.pixelYBegin; y < middleMax.pixelYEnd; y++)
+        {
+            minMax.CalculateXandC(y);
+            middleMax.CalculateXandC(y);
+        }
+
+        Draw(minMax, minMiddle, middleMax);
     }
 
     bool IsVertexInside(const VertexS& point, int32_t axis, int32_t plane)
