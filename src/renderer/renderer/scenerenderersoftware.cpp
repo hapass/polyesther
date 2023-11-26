@@ -9,6 +9,7 @@
 #include <cassert>
 #include <iostream>
 #include <array>
+#include <execution>
 
 #include "utils.h"
 
@@ -151,13 +152,46 @@ namespace Renderer
         return begin + (end - begin) * lerpAmount;
     }
 
+    struct InterpolationData
+    {
+        struct XData
+        {
+            int32_t x;
+            float percent;
+            float z;
+        };
+
+        InterpolationData(Edge::EdgeData* l, Edge::EdgeData* r)
+            : left(l)
+            , right(r)
+        {
+            percents.reserve(right->pixelX - left->pixelX);
+            
+            for (int32_t x = left->pixelX; x < right->pixelX; x++)
+            {
+                float percent = static_cast<float>(x - left->pixelX) / static_cast<float>(right->pixelX - left->pixelX);
+                float z = Lerp(left->currentC[6], right->currentC[6], percent);
+                percents.push_back(XData { x, percent, z });
+            }
+        }
+
+        int32_t GetY() { return left->y; }
+
+        std::vector<XData> percents;
+        Edge::EdgeData* left;
+        Edge::EdgeData* right;
+    };
+
     void Draw(Edge& minMax, Edge& minMiddle, Edge& middleMax)
     {
         // todo.pavelza: Same as currentC in the edge data, but interpolated between edges, need to rename those two.
         std::array<float, InterpolantsSize> interpolants_raw;
         assert(interpolants_raw.size() == minMax.interpolants.size());
 
-        std::for_each(minMax.data.begin(), minMax.data.end(), [&minMiddle, &middleMax, &interpolants_raw](Edge::EdgeData& n)
+        std::vector<InterpolationData> interpolationData;
+        interpolationData.reserve(minMax.data.size());
+
+        std::for_each(minMax.data.begin(), minMax.data.end(), [&minMiddle, &middleMax, &interpolants_raw, &interpolationData](Edge::EdgeData& n)
         {
             Edge::EdgeData* left = &n;
             Edge::EdgeData* right = nullptr;
@@ -169,23 +203,30 @@ namespace Renderer
 
             if (left->pixelX > right->pixelX) std::swap(left, right);
 
-            for (int32_t x = left->pixelX; x < right->pixelX; x++)
-            {
-                float percent = static_cast<float>(x - left->pixelX) / static_cast<float>(right->pixelX - left->pixelX);
+            interpolationData.push_back(InterpolationData(left, right));
 
-                interpolants_raw[6] = Lerp(left->currentC[6], right->currentC[6], percent);
-                if (interpolants_raw[6] < ZBuffer[n.y * OutputWidth + x])
+            std::for_each(interpolationData.back().percents.begin(), interpolationData.back().percents.end(), [&interpolationData](InterpolationData::XData& d)
+            {
+                if (d.z < ZBuffer[interpolationData.back().GetY() * OutputWidth + d.x])
                 {
-                    ZBuffer[n.y * OutputWidth + x] = interpolants_raw[6];
+                    ZBuffer[interpolationData.back().GetY() * OutputWidth + d.x] = d.z;
                 }
-                else
+            });
+        });
+
+        std::for_each(interpolationData.begin(), interpolationData.end(), [](InterpolationData& iData)
+        {
+            std::for_each(iData.percents.begin(), iData.percents.end(), [&iData](InterpolationData::XData& xData)
+            {
+                std::array<float, InterpolantsSize> interpolants_raw;
+                if (xData.z != ZBuffer[iData.GetY() * OutputWidth + xData.x])
                 {
-                    continue;
+                    return;
                 }
 
                 for (uint32_t i = 0; i < interpolants_raw.size(); i++)
                 {
-                    interpolants_raw[i] = Lerp(left->currentC[i], right->currentC[i], percent);
+                    interpolants_raw[i] = Lerp(iData.left->currentC[i], iData.right->currentC[i], xData.percent);
                 }
 
                 float tintRed = interpolants_raw[0] / interpolants_raw[5];
@@ -238,8 +279,8 @@ namespace Renderer
                 final_color.z = std::clamp(final_color.z, 0.0f, 1.0f);
                 final_color.w = 1.0f; // fix the alpha being affected by light, noticable only in tests, because in application we correct alpha manually when copying to backbuffer
 
-                DrawPixel(x, n.y, Color(final_color));
-            }
+                DrawPixel(xData.x, iData.GetY(), Color(final_color));
+            });
         });
     }
 
