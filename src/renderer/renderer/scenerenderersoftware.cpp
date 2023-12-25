@@ -49,20 +49,6 @@ namespace Renderer
         }
     };
 
-    namespace
-    {
-        size_t OutputWidth;
-        size_t OutputHeight;
-
-        std::vector<uint32_t> BackBuffer;
-        std::vector<float> ZBuffer;
-        std::vector<Texture> Textures;
-        uint32_t CurrentTexture = 0;
-
-        static constexpr uint32_t InterpolantsSize = 13;
-        std::array<Interpolant, InterpolantsSize> Interpolants;
-    }
-
     struct LightS
     {
         Light light;
@@ -71,7 +57,15 @@ namespace Renderer
 
     namespace
     {
+        size_t OutputWidth;
+        size_t OutputHeight;
+
+        std::vector<uint32_t> BackBuffer;
+        std::vector<float> ZBuffer;
+        std::vector<Texture> Textures;
         LightS light;
+
+        static constexpr uint32_t InterpolantsSize = 13;
     }
 
     struct VertexS
@@ -97,6 +91,10 @@ namespace Renderer
 
     struct Edge
     {
+        Edge()
+        {
+        }
+
         Edge(Vec b, Vec e, bool isMin = true) : begin(b), isBeginMin(isMin), pixelX(0)
         {
             pixelYBegin = static_cast<int32_t>(ceil(b.y));
@@ -107,12 +105,12 @@ namespace Renderer
             stepX = distanceY > 0.0f ? distanceX / distanceY : 0.0f;
         }
 
-        void CalculateC(int32_t y)
+        void CalculateC(std::array<Interpolant, InterpolantsSize>& interpolants, int32_t y)
         {
             pixelX = static_cast<int32_t>(ceil(begin.x + (y - begin.y) * stepX));
             for (size_t i = 0; i < InterpolantsSize; i++)
             {
-                currentC[i] = Interpolants[i].CalculateC(pixelX - begin.x, y - begin.y, isBeginMin);
+                currentC[i] = interpolants[i].CalculateC(pixelX - begin.x, y - begin.y, isBeginMin);
             }
         }
 
@@ -128,24 +126,36 @@ namespace Renderer
         std::array<float, InterpolantsSize> currentC;
     };
 
+    struct Triangle
+    {
+        uint32_t texture = 0;
+
+        std::array<Interpolant, InterpolantsSize> interpolants;
+        std::vector<VertexS> vertices;
+
+        Edge minMax;
+        Edge minMiddle;
+        Edge middleMax;
+    };
+
     float Lerp(float begin, float end, float lerpAmount)
     {
         return begin + (end - begin) * lerpAmount;
     }
 
-    void DrawTrianglePart(Edge& minMax, Edge& other)
+    void ShadeTriangle(Triangle& tr)
     {
         // todo.pavelza: Same as currentC in the edge, but interpolated between edges, need to rename those two.
         std::array<float, InterpolantsSize> interpolants_raw;
         assert(interpolants_raw.size() == minMax.interpolants.size());
 
-        for (int32_t y = other.pixelYBegin; y < other.pixelYEnd; y++)
+        for (int32_t y = tr.minMax.pixelYBegin; y < tr.minMax.pixelYEnd; y++)
         {
-            Edge* left = &minMax;
-            Edge* right = &other;
+            Edge* left = &tr.minMax;
+            Edge* right = y >= tr.middleMax.pixelYBegin ? &tr.middleMax : &tr.minMiddle;
 
-            left->CalculateC(y);
-            right->CalculateC(y);
+            left->CalculateC(tr.interpolants, y);
+            right->CalculateC(tr.interpolants, y);
 
             if (left->pixelX > right->pixelX)
             {
@@ -198,7 +208,7 @@ namespace Renderer
                 Vec final_color { tintRed, tintGreen, tintBlue, 1.0f };
                 if (Textures.size() > 0)
                 {
-                    uint32_t materialId = CurrentTexture;
+                    uint32_t materialId = tr.texture;
 
                     // From 0 to TextureWidth - 1 (TextureWidth pixels in total)
                     size_t textureX = static_cast<size_t>((interpolants_raw[3] / interpolants_raw[5]) * (Textures[materialId].GetWidth() - 1));
@@ -245,32 +255,33 @@ namespace Renderer
         result.v.normal.y = Lerp(begin.v.normal.y, end.v.normal.y, lerpAmount);
         result.v.normal.z = Lerp(begin.v.normal.z, end.v.normal.z, lerpAmount);
         result.v.normal.w = Lerp(begin.v.normal.w, end.v.normal.w, lerpAmount);
+        result.v.materialId = begin.v.materialId;
         return result;
     }
 
-    Interpolant GetInterpolant(std::vector<VertexS>& vertices, float c1, float c2, float c3)
+    Interpolant GetInterpolant(std::vector<VertexS>& vertices, const std::function<float(const VertexS& v)>& c)
     {
         return Interpolant(
-            { vertices[0].v.position.x, vertices[0].v.position.y, c1 / vertices[0].v.position.w },
-            { vertices[1].v.position.x, vertices[1].v.position.y, c2 / vertices[1].v.position.w },
-            { vertices[2].v.position.x, vertices[2].v.position.y, c3 / vertices[2].v.position.w }
+            { vertices[0].v.position.x, vertices[0].v.position.y, c(vertices[0]) / vertices[0].v.position.w },
+            { vertices[1].v.position.x, vertices[1].v.position.y, c(vertices[1]) / vertices[1].v.position.w },
+            { vertices[2].v.position.x, vertices[2].v.position.y, c(vertices[2]) / vertices[2].v.position.w }
         );
     }
 
-    void DrawRawTriangle(std::vector<VertexS>& vertices)
+    void DrawRawTriangle(Triangle& tr)
     {
         assert(vertices.size() == 3);
 
-        for (VertexS& v : vertices)
+        for (VertexS& v : tr.vertices)
         {
             v.v.position.x /= v.v.position.w;
             v.v.position.y /= v.v.position.w;
             v.v.position.z /= v.v.position.w;
         }
 
-        std::sort(std::begin(vertices), std::end(vertices), [](const VertexS& lhs, const VertexS& rhs) { return lhs.v.position.y < rhs.v.position.y; });
+        std::sort(std::begin(tr.vertices), std::end(tr.vertices), [](const VertexS& lhs, const VertexS& rhs) { return lhs.v.position.y < rhs.v.position.y; });
 
-        for (VertexS& v : vertices)
+        for (VertexS& v : tr.vertices)
         {
             // todo.pavelza: Clipping might result in some vertices being slightly outside of -1 to 1 range, so we clamp. Will need to think how to avoid this.
             v.v.position.x = std::clamp(v.v.position.x, -1.0f, 1.0f);
@@ -281,32 +292,35 @@ namespace Renderer
             v.v.position.y = (OutputHeight - 1) * ((v.v.position.y + 1) / 2.0f);
         }
 
-        Interpolants[0] = GetInterpolant(vertices, vertices[0].red, vertices[1].red, vertices[2].red);
-        Interpolants[1] = GetInterpolant(vertices, vertices[0].green, vertices[1].green, vertices[2].green);
-        Interpolants[2] = GetInterpolant(vertices, vertices[0].blue, vertices[1].blue, vertices[2].blue);
+        tr.interpolants[0] = GetInterpolant(tr.vertices, [](const VertexS& v) { return v.red; });
+        tr.interpolants[1] = GetInterpolant(tr.vertices, [](const VertexS& v) { return v.green; });
+        tr.interpolants[2] = GetInterpolant(tr.vertices, [](const VertexS& v) { return v.blue; });
 
-        Interpolants[3] = GetInterpolant(vertices, vertices[0].v.textureCoord.x, vertices[1].v.textureCoord.x, vertices[2].v.textureCoord.x);
-        Interpolants[4] = GetInterpolant(vertices, vertices[0].v.textureCoord.y, vertices[1].v.textureCoord.y, vertices[2].v.textureCoord.y);
+        tr.interpolants[3] = GetInterpolant(tr.vertices, [](const VertexS& v) { return v.v.textureCoord.x; });
+        tr.interpolants[4] = GetInterpolant(tr.vertices, [](const VertexS& v) { return v.v.textureCoord.y; });
 
-        Interpolants[5] = GetInterpolant(vertices, 1.0f, 1.0f, 1.0f);
+        tr.interpolants[5] = GetInterpolant(tr.vertices, [](const VertexS& v) { return 1.0f; });
 
         // No division by w, because it is already divided by w.
-        Interpolants[6] = Interpolant({ vertices[0].v.position.x, vertices[0].v.position.y, vertices[0].v.position.z }, { vertices[1].v.position.x, vertices[1].v.position.y, vertices[1].v.position.z }, { vertices[2].v.position.x, vertices[2].v.position.y, vertices[2].v.position.z });
+        tr.interpolants[6] = Interpolant(
+            { tr.vertices[0].v.position.x, tr.vertices[0].v.position.y, tr.vertices[0].v.position.z },
+            { tr.vertices[1].v.position.x, tr.vertices[1].v.position.y, tr.vertices[1].v.position.z },
+            { tr.vertices[2].v.position.x, tr.vertices[2].v.position.y, tr.vertices[2].v.position.z });
 
-        Interpolants[7] = GetInterpolant(vertices, vertices[0].v.normal.x, vertices[1].v.normal.x, vertices[2].v.normal.x);
-        Interpolants[8] = GetInterpolant(vertices, vertices[0].v.normal.y, vertices[1].v.normal.y, vertices[2].v.normal.y);
-        Interpolants[9] = GetInterpolant(vertices, vertices[0].v.normal.z, vertices[1].v.normal.z, vertices[2].v.normal.z);
+        tr.interpolants[7] = GetInterpolant(tr.vertices, [](const VertexS& v) { return v.v.normal.x; });
+        tr.interpolants[8] = GetInterpolant(tr.vertices, [](const VertexS& v) { return v.v.normal.y; });
+        tr.interpolants[9] = GetInterpolant(tr.vertices, [](const VertexS& v) { return v.v.normal.z; });
 
-        Interpolants[10] = GetInterpolant(vertices, vertices[0].pos_view.x, vertices[1].pos_view.x, vertices[2].pos_view.x);
-        Interpolants[11] = GetInterpolant(vertices, vertices[0].pos_view.y, vertices[1].pos_view.y, vertices[2].pos_view.y);
-        Interpolants[12] = GetInterpolant(vertices, vertices[0].pos_view.z, vertices[1].pos_view.z, vertices[2].pos_view.z);
+        tr.interpolants[10] = GetInterpolant(tr.vertices, [](const VertexS& v) { return v.pos_view.x; });
+        tr.interpolants[11] = GetInterpolant(tr.vertices, [](const VertexS& v) { return v.pos_view.y; });
+        tr.interpolants[12] = GetInterpolant(tr.vertices, [](const VertexS& v) { return v.pos_view.z; });
+        tr.texture = tr.vertices[0].v.materialId;
 
-        Edge minMax(vertices[0].v.position, vertices[2].v.position, true);
-        Edge minMiddle(vertices[0].v.position, vertices[1].v.position, true);
-        Edge middleMax(vertices[1].v.position, vertices[2].v.position, false);
+        tr.minMax = Edge(tr.vertices[0].v.position, tr.vertices[2].v.position, true);
+        tr.minMiddle = Edge(tr.vertices[0].v.position, tr.vertices[1].v.position, true);
+        tr.middleMax = Edge(tr.vertices[1].v.position, tr.vertices[2].v.position, false);
 
-        DrawTrianglePart(minMax, minMiddle);
-        DrawTrianglePart(minMax, middleMax);
+        ShadeTriangle(tr);
     }
 
     bool IsVertexInside(const VertexS& point, int32_t axis, int32_t plane)
@@ -361,11 +375,10 @@ namespace Renderer
 
     void DrawTriangle(const Vertex& a, const Vertex& b, const Vertex& c, const Matrix& transform)
     {
-        static std::vector<VertexS> vertices;
-        vertices.clear();
-        vertices.resize(3);
+        Triangle tr;
+        tr.vertices.resize(3);
 
-        vertices[0] = VertexS {
+        tr.vertices[0] = VertexS {
             a,
             a.position,
             a.color.GetVec().x,
@@ -373,7 +386,7 @@ namespace Renderer
             a.color.GetVec().z
         };
 
-        vertices[1] = VertexS {
+        tr.vertices[1] = VertexS {
             b,
             b.position,
             b.color.GetVec().x,
@@ -381,7 +394,7 @@ namespace Renderer
             b.color.GetVec().z
         };
 
-        vertices[2] = VertexS {
+        tr.vertices[2] = VertexS {
             c,
             c.position,
             c.color.GetVec().x,
@@ -389,7 +402,7 @@ namespace Renderer
             c.color.GetVec().z
         };
 
-        for (VertexS& v : vertices)
+        for (VertexS& v : tr.vertices)
         {
             v.v.position = PerspectiveTransform(static_cast<float>(OutputWidth), static_cast<float>(OutputHeight)) * transform * v.v.position;
             v.pos_view = transform * v.pos_view;
@@ -400,9 +413,9 @@ namespace Renderer
         // Backface culling produces very rough results in view space (maybe need to figure out why some day). So we do it in clip space. And it seems to be the right (identical to hardware) way.
         // Doing clipspace culling before we split triangles that penetrate camera frustum gives us additional ~10ms gain for a frame in reference scene.
         // Front is counter clockwise.
-        Vec v0 { vertices[0].v.position.x / vertices[0].v.position.w, vertices[0].v.position.y / vertices[0].v.position.w, vertices[0].v.position.z / vertices[0].v.position.w, 1.0f };
-        Vec v1 { vertices[1].v.position.x / vertices[1].v.position.w, vertices[1].v.position.y / vertices[1].v.position.w, vertices[1].v.position.z / vertices[1].v.position.w, 1.0f };
-        Vec v2 { vertices[2].v.position.x / vertices[2].v.position.w, vertices[2].v.position.y / vertices[2].v.position.w, vertices[2].v.position.z / vertices[2].v.position.w, 1.0f };
+        Vec v0 { tr.vertices[0].v.position.x / tr.vertices[0].v.position.w, tr.vertices[0].v.position.y / tr.vertices[0].v.position.w, tr.vertices[0].v.position.z / tr.vertices[0].v.position.w, 1.0f };
+        Vec v1 { tr.vertices[1].v.position.x / tr.vertices[1].v.position.w, tr.vertices[1].v.position.y / tr.vertices[1].v.position.w, tr.vertices[1].v.position.z / tr.vertices[1].v.position.w, 1.0f };
+        Vec v2 { tr.vertices[2].v.position.x / tr.vertices[2].v.position.w, tr.vertices[2].v.position.y / tr.vertices[2].v.position.w, tr.vertices[2].v.position.z / tr.vertices[2].v.position.w, 1.0f };
         if (cross(v2 - v0, v1 - v0).z > 0)
         {
             return;
@@ -412,7 +425,7 @@ namespace Renderer
         // since if we check that some vertices lie on the outside of one plane and others on outside of the other,
         // then part of the triangle might still be visible.
         std::array<bool, 6> planesToOutsideness { false };
-        for (const VertexS& v : vertices)
+        for (const VertexS& v : tr.vertices)
         {
             planesToOutsideness[0] |= IsVertexInside(v, 0, 1);
             planesToOutsideness[1] |= IsVertexInside(v, 1, 1);
@@ -429,27 +442,26 @@ namespace Renderer
             return;
         }
 
-        if (std::all_of(vertices.begin(), vertices.end(), [](const VertexS& v){ return IsVertexInside(v, 0, 1) && IsVertexInside(v, 1, 1) && IsVertexInside(v, 2, 1) && IsVertexInside(v, 0, -1) && IsVertexInside(v, 1, -1) && IsVertexInside(v, 2, -1); }))
+        if (std::all_of(tr.vertices.begin(), tr.vertices.end(), [](const VertexS& v){ return IsVertexInside(v, 0, 1) && IsVertexInside(v, 1, 1) && IsVertexInside(v, 2, 1) && IsVertexInside(v, 0, -1) && IsVertexInside(v, 1, -1) && IsVertexInside(v, 2, -1); }))
         {
-            DrawRawTriangle(vertices);
+            DrawRawTriangle(tr);
             return;
         }
 
-        if (ClipTriangleAxis(vertices, 0) && ClipTriangleAxis(vertices, 1) && ClipTriangleAxis(vertices, 2))
+        if (ClipTriangleAxis(tr.vertices, 0) && ClipTriangleAxis(tr.vertices, 1) && ClipTriangleAxis(tr.vertices, 2))
         {
-            assert(vertices.size() >= 3);
+            assert(tr.vertices.size() >= 3);
 
-            for (size_t i = 2; i < vertices.size(); i++)
+            for (size_t i = 2; i < tr.vertices.size(); i++)
             {
-                static std::vector<VertexS> triangle;
-                triangle.clear();
-                triangle.resize(3);
+                Triangle newTr;
+                newTr.vertices.resize(3);
 
-                triangle[0] = vertices[0];
-                triangle[1] = vertices[i - 1];
-                triangle[2] = vertices[i];
+                newTr.vertices[0] = tr.vertices[0];
+                newTr.vertices[1] = tr.vertices[i - 1];
+                newTr.vertices[2] = tr.vertices[i];
 
-                DrawRawTriangle(triangle);
+                DrawRawTriangle(newTr);
             }
         }
     }
@@ -481,7 +493,6 @@ namespace Renderer
         const Model& model = scene.models[0];
         for (uint32_t i = 0; i < model.indices.size() / 3; i++)
         {
-            CurrentTexture = model.vertices[model.indices[i * 3 + 0]].materialId;
             DrawTriangle(
                 model.vertices[model.indices[i * 3 + 0]],
                 model.vertices[model.indices[i * 3 + 1]],
