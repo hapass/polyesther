@@ -10,6 +10,7 @@
 #include <iostream>
 #include <array>
 #include <execution>
+#include <ranges>
 
 #include "utils.h"
 
@@ -153,10 +154,8 @@ namespace Renderer
             Edge* left = &tr.minMax;
             Edge* right = y >= tr.middleMax.pixelYBegin ? &tr.middleMax : &tr.minMiddle;
 
-            {
-                left->CalculateC(tr.interpolants, y); // <--- how do we do that once? and most importantly not lose single threaded perf
-                right->CalculateC(tr.interpolants, y);
-            }
+            left->CalculateC(tr.interpolants, y);
+            right->CalculateC(tr.interpolants, y);
 
             if (left->pixelX > right->pixelX)
             {
@@ -175,15 +174,13 @@ namespace Renderer
                     if (z < ZBuffer[y * OutputWidth + x])
                     {
                         ZBuffer[y * OutputWidth + x] = z;
-                        continue;
                     }
                     else
                     {
                         continue;
                     }
                 }
-
-                if (tr.stage == Triangle::RenderingStage::GBuffer)
+                else if (tr.stage == Triangle::RenderingStage::GBuffer)
                 {
                     float z = Lerp(left->currentC[6], right->currentC[6], percent);
                     if (z == ZBuffer[y * OutputWidth + x])
@@ -192,77 +189,77 @@ namespace Renderer
                         {
                             assert(GBuffer[y * OutputWidth + x][i] == 0.0f);
                             GBuffer[y * OutputWidth + x][i] = Lerp(left->currentC[i], right->currentC[i], percent);
-                            
                         }
                         TBuffer[y * OutputWidth + x] = tr.texture;
-                    }
-                    continue;
-                }
-
-                if (tr.stage == Triangle::RenderingStage::Shading)
-                {
-                    std::array<float, InterpolantsSize>& interpolants_raw = GBuffer[y * OutputWidth + x];
-
-                    if (interpolants_raw[6] == ZBuffer[y * OutputWidth + x])
-                    {
-                        float tintRed = interpolants_raw[0] / interpolants_raw[5];
-                        float tintGreen = interpolants_raw[1] / interpolants_raw[5];
-                        float tintBlue = interpolants_raw[2] / interpolants_raw[5];
-
-                        float normalX = interpolants_raw[7] / interpolants_raw[5];
-                        float normalY = interpolants_raw[8] / interpolants_raw[5];
-                        float normalZ = interpolants_raw[9] / interpolants_raw[5];
-
-                        float viewX = interpolants_raw[10] / interpolants_raw[5];
-                        float viewY = interpolants_raw[11] / interpolants_raw[5];
-                        float viewZ = interpolants_raw[12] / interpolants_raw[5];
-
-                        Vec pos_view{ viewX, viewY, viewZ, 1.0f };
-                        Vec normal_vec = normalize({ normalX, normalY, normalZ, 0.0f });
-                        Vec light_vec = normalize(light.position_view - pos_view);
-
-                        Vec diffuse = light.light.color.GetVec() * static_cast<float>(std::max<float>(dot(normal_vec, light_vec), 0.0f));
-                        Vec ambient = light.light.color.GetVec() * light.light.ambientStrength;
-
-                        float specAmount = static_cast<float>(std::max<float>(dot(normalize(pos_view), reflect(normal_vec, light_vec * -1.0f)), 0.0f));
-                        Vec specular = light.light.color.GetVec() * pow(specAmount, light.light.specularShininess) * light.light.specularStrength;
-
-                        Vec final_color{ tintRed, tintGreen, tintBlue, 1.0f };
-                        if (Textures.size() > 0)
-                        {
-                            uint32_t materialId = TBuffer[y * OutputWidth + x];
-
-                            // From 0 to TextureWidth - 1 (TextureWidth pixels in total)
-                            size_t textureX = static_cast<size_t>((interpolants_raw[3] / interpolants_raw[5]) * (Textures[materialId].GetWidth() - 1));
-                            // From 0 to TextureHeight - 1 (TextureHeight pixels in total)
-                            size_t textureY = static_cast<size_t>((interpolants_raw[4] / interpolants_raw[5]) * (Textures[materialId].GetHeight() - 1));
-
-                            // todo.pavelza: 0 height texture undefined behavior
-                            textureY = (Textures[materialId].GetHeight() - 1) - textureY; // invert texture coords
-
-                            assert(textureY < Textures[materialId].GetHeight() && textureX < Textures[materialId].GetWidth());
-                            size_t texelBase = textureY * Textures[materialId].GetWidth() + textureX;
-
-                            final_color = Textures[materialId].GetColor(texelBase).GetVec();
-                        }
-
-                        final_color = (diffuse + ambient + specular) * final_color;
-                        final_color.x = std::clamp(final_color.x, 0.0f, 1.0f);
-                        final_color.y = std::clamp(final_color.y, 0.0f, 1.0f);
-                        final_color.z = std::clamp(final_color.z, 0.0f, 1.0f);
-                        final_color.w = 1.0f; // fix the alpha being affected by light, noticable only in tests, because in application we correct alpha manually when copying to backbuffer
-
-                        assert(OutputWidth > 0);
-                        assert(OutputHeight > 0);
-                        assert(0 <= x && x < OutputWidth);
-                        assert(0 <= y && y < OutputHeight);
-                        assert(BackBuffer);
-                        BackBuffer[y * OutputWidth + x] = Color(final_color).rgba;
-                        continue;
                     }
                 }
             }
         }
+    }
+
+    void ShadeShade()
+    {
+        auto r = std::ranges::iota_view{ 0, 480000 };
+        std::for_each(std::execution::par, r.begin(), r.end(), [](int32_t i) {
+            std::array<float, InterpolantsSize>& interpolants_raw = GBuffer[i];
+
+            if (interpolants_raw[6] == ZBuffer[i])
+            {
+                float tintRed = interpolants_raw[0] / interpolants_raw[5];
+                float tintGreen = interpolants_raw[1] / interpolants_raw[5];
+                float tintBlue = interpolants_raw[2] / interpolants_raw[5];
+
+                float normalX = interpolants_raw[7] / interpolants_raw[5];
+                float normalY = interpolants_raw[8] / interpolants_raw[5];
+                float normalZ = interpolants_raw[9] / interpolants_raw[5];
+
+                float viewX = interpolants_raw[10] / interpolants_raw[5];
+                float viewY = interpolants_raw[11] / interpolants_raw[5];
+                float viewZ = interpolants_raw[12] / interpolants_raw[5];
+
+                Vec pos_view{ viewX, viewY, viewZ, 1.0f };
+                Vec normal_vec = normalize({ normalX, normalY, normalZ, 0.0f });
+                Vec light_vec = normalize(light.position_view - pos_view);
+
+                Vec diffuse = light.light.color.GetVec() * static_cast<float>(std::max<float>(dot(normal_vec, light_vec), 0.0f));
+                Vec ambient = light.light.color.GetVec() * light.light.ambientStrength;
+
+                float specAmount = static_cast<float>(std::max<float>(dot(normalize(pos_view), reflect(normal_vec, light_vec * -1.0f)), 0.0f));
+                Vec specular = light.light.color.GetVec() * pow(specAmount, light.light.specularShininess) * light.light.specularStrength;
+
+                Vec final_color{ tintRed, tintGreen, tintBlue, 1.0f };
+                if (Textures.size() > 0)
+                {
+                    uint32_t materialId = TBuffer[i];
+
+                    // From 0 to TextureWidth - 1 (TextureWidth pixels in total)
+                    size_t textureX = static_cast<size_t>((interpolants_raw[3] / interpolants_raw[5]) * (Textures[materialId].GetWidth() - 1));
+                    // From 0 to TextureHeight - 1 (TextureHeight pixels in total)
+                    size_t textureY = static_cast<size_t>((interpolants_raw[4] / interpolants_raw[5]) * (Textures[materialId].GetHeight() - 1));
+
+                    // todo.pavelza: 0 height texture undefined behavior
+                    textureY = (Textures[materialId].GetHeight() - 1) - textureY; // invert texture coords
+
+                    assert(textureY < Textures[materialId].GetHeight() && textureX < Textures[materialId].GetWidth());
+                    size_t texelBase = textureY * Textures[materialId].GetWidth() + textureX;
+
+                    final_color = Textures[materialId].GetColor(texelBase).GetVec();
+                }
+
+                final_color = (diffuse + ambient + specular) * final_color;
+                final_color.x = std::clamp(final_color.x, 0.0f, 1.0f);
+                final_color.y = std::clamp(final_color.y, 0.0f, 1.0f);
+                final_color.z = std::clamp(final_color.z, 0.0f, 1.0f);
+                final_color.w = 1.0f; // fix the alpha being affected by light, noticable only in tests, because in application we correct alpha manually when copying to backbuffer
+
+                assert(OutputWidth > 0);
+                assert(OutputHeight > 0);
+                assert(0 <= x && x < OutputWidth);
+                assert(0 <= y && y < OutputHeight);
+                assert(BackBuffer);
+                BackBuffer[i] = Color(final_color).rgba;
+            }
+        });
     }
 
     VertexS Lerp(const VertexS& begin, const VertexS& end, float lerpAmount)
@@ -555,10 +552,7 @@ namespace Renderer
             ShadeTriangle(tr);
         });
 
-        std::for_each(std::execution::par, trianglesCache.begin(), trianglesCache.end(), [](Triangle& tr) {
-            tr.stage = Triangle::RenderingStage::Shading;
-            ShadeTriangle(tr);
-        });
+        ShadeShade();
 
         for (size_t i = 0; i < BackBuffer.size(); i++)
         {
