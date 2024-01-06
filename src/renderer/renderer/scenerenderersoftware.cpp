@@ -154,7 +154,7 @@ namespace Renderer
             Edge* right = y >= tr.middleMax.pixelYBegin ? &tr.middleMax : &tr.minMiddle;
 
             {
-                left->CalculateC(tr.interpolants, y); // <--- how do we do that once?
+                left->CalculateC(tr.interpolants, y); // <--- how do we do that once? and most importantly not lose single threaded perf
                 right->CalculateC(tr.interpolants, y);
             }
 
