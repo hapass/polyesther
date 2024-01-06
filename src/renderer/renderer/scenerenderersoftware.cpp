@@ -9,6 +9,7 @@
 #include <cassert>
 #include <iostream>
 #include <array>
+#include <execution>
 
 #include "utils.h"
 
@@ -124,7 +125,7 @@ namespace Renderer
             int32_t x;
             int32_t y;
             float percent;
-            InterpolantData& id;
+            int32_t idIndex;
         };
 
         uint32_t texture = 0;
@@ -144,7 +145,7 @@ namespace Renderer
     {
         for (const Triangle::LerpData& ld : tr.lerpDatas)
         {
-            float z = Lerp(ld.id.left[6], ld.id.right[6], ld.percent);
+            float z = Lerp(tr.interpolantDatas[ld.idIndex].left[6], tr.interpolantDatas[ld.idIndex].right[6], ld.percent);
             if (z < ZBuffer[ld.y * OutputWidth + ld.x])
             {
                 ZBuffer[ld.y * OutputWidth + ld.x] = z;
@@ -154,27 +155,25 @@ namespace Renderer
 
     void FillIBuffer(const Triangle& tr)
     {
-        for (const Triangle::LerpData& ld : tr.lerpDatas)
-        {
-            float z = Lerp(ld.id.left[6], ld.id.right[6], ld.percent);
+        std::for_each(std::execution::par, tr.lerpDatas.begin(), tr.lerpDatas.end(), [&tr](const Triangle::LerpData& ld) {
+            float z = Lerp(tr.interpolantDatas[ld.idIndex].left[6], tr.interpolantDatas[ld.idIndex].right[6], ld.percent);
             if (z == ZBuffer[ld.y * OutputWidth + ld.x])
             {
                 for (uint32_t i = 0; i < InterpolantsSize; i++)
                 {
                     assert(IBuffer[y * OutputWidth + x][i] == 0.0f);
-                    IBuffer[ld.y * OutputWidth + ld.x][i] = Lerp(ld.id.left[i], ld.id.right[i], ld.percent);
+                    IBuffer[ld.y * OutputWidth + ld.x][i] = Lerp(tr.interpolantDatas[ld.idIndex].left[i], tr.interpolantDatas[ld.idIndex].right[i], ld.percent);
                 }
 
                 assert(TBuffer[y * OutputWidth + x][i] == 0);
                 TBuffer[ld.y * OutputWidth + ld.x] = tr.texture;
             }
-        }
+        });
     }
 
     void ShadeTriangle(const Triangle& tr)
     {
-        for (const Triangle::LerpData& ld : tr.lerpDatas)
-        {
+        std::for_each(std::execution::par, tr.lerpDatas.begin(), tr.lerpDatas.end(), [&tr](const Triangle::LerpData& ld) {
             std::array<float, InterpolantsSize>& interpolants_raw = IBuffer[ld.y * OutputWidth + ld.x];
 
             if (interpolants_raw[6] == ZBuffer[ld.y * OutputWidth + ld.x])
@@ -233,7 +232,7 @@ namespace Renderer
                 assert(BackBuffer);
                 BackBuffer[ld.y * OutputWidth + ld.x] = Color(final_color).rgba;
             }
-        }
+        });
     }
 
     VertexS Lerp(const VertexS& begin, const VertexS& end, float lerpAmount)
@@ -322,6 +321,8 @@ namespace Renderer
         Edge middleMax(tr.vertices[1].v.position, tr.vertices[2].v.position, false);
 
         tr.interpolantDatas.resize(minMax.pixelYEnd - minMax.pixelYBegin);
+        tr.lerpDatas.reserve((minMax.pixelYEnd - minMax.pixelYBegin) * 10);
+
         for (int32_t y = minMax.pixelYBegin; y < minMax.pixelYEnd; y++)
         {
             Edge& left = minMax;
@@ -345,7 +346,7 @@ namespace Renderer
                     x,
                     y,
                     static_cast<float>(x - leftPixelX) / static_cast<float>(rightPixelX - leftPixelX),
-                    tr.interpolantDatas[y - minMax.pixelYBegin]
+                    y - minMax.pixelYBegin
                 });
             }
         }
@@ -547,15 +548,8 @@ namespace Renderer
             FillZBuffer(tr);
         }
 
-        for (const Triangle& tr : triangles)
-        {
-            FillIBuffer(tr);
-        }
-
-        for (const Triangle& tr : triangles)
-        {
-            ShadeTriangle(tr);
-        }
+        std::for_each(std::execution::par, triangles.begin(), triangles.end(), [](const Triangle& tr) { FillIBuffer(tr); });
+        std::for_each(std::execution::par, triangles.begin(), triangles.end(), [](const Triangle& tr) { ShadeTriangle(tr); });
 
         for (size_t i = 0; i < BackBuffer.size(); i++)
         {
