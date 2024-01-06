@@ -66,6 +66,9 @@ namespace Renderer
         LightS light;
 
         static constexpr uint32_t InterpolantsSize = 13;
+
+        std::vector<std::array<float, InterpolantsSize>> IBuffer;
+        std::vector<uint32_t> TBuffer;
     }
 
     struct VertexS
@@ -79,23 +82,9 @@ namespace Renderer
         float blue = 0.0f;
     };
 
-    void DrawPixel(int32_t x, int32_t y, Color color)
-    {
-        assert(OutputWidth > 0);
-        assert(OutputHeight > 0);
-        assert(0 <= x && x < OutputWidth);
-        assert(0 <= y && y < OutputHeight);
-        assert(BackBuffer);
-        BackBuffer[y * OutputWidth + x] = color.rgba;
-    }
-
     struct Edge
     {
-        Edge()
-        {
-        }
-
-        Edge(Vec b, Vec e, bool isMin = true) : begin(b), isBeginMin(isMin), pixelX(0)
+        Edge(Vec b, Vec e, bool isMin = true) : begin(b), isBeginMin(isMin)
         {
             pixelYBegin = static_cast<int32_t>(ceil(b.y));
             pixelYEnd = static_cast<int32_t>(ceil(e.y));
@@ -105,37 +94,45 @@ namespace Renderer
             stepX = distanceY > 0.0f ? distanceX / distanceY : 0.0f;
         }
 
-        void CalculateC(std::array<Interpolant, InterpolantsSize>& interpolants, int32_t y)
+        void CalculateCandX(std::array<Interpolant, InterpolantsSize>& interpolants, int32_t y, std::array<float, InterpolantsSize>& outC, int32_t& outPixelX) const
         {
-            pixelX = static_cast<int32_t>(ceil(begin.x + (y - begin.y) * stepX));
+            outPixelX = static_cast<int32_t>(ceil(begin.x + (y - begin.y) * stepX));
             for (size_t i = 0; i < InterpolantsSize; i++)
             {
-                currentC[i] = interpolants[i].CalculateC(pixelX - begin.x, y - begin.y, isBeginMin);
+                outC[i] = interpolants[i].CalculateC(outPixelX - begin.x, y - begin.y, isBeginMin);
             }
         }
 
         int32_t pixelYBegin;
         int32_t pixelYEnd;
-        int32_t pixelX;
 
         float stepX;
         bool isBeginMin;
         Vec begin;
-
-        // todo.pavelza: C along the edge. Need to rename the C into interpolated value or something like this.
-        std::array<float, InterpolantsSize> currentC;
     };
 
     struct Triangle
     {
+        struct InterpolantData
+        {
+            std::array<float, InterpolantsSize> left;
+            std::array<float, InterpolantsSize> right;
+        };
+
+        struct LerpData
+        {
+            int32_t x;
+            int32_t y;
+            float percent;
+            InterpolantData& id;
+        };
+
         uint32_t texture = 0;
 
-        std::array<Interpolant, InterpolantsSize> interpolants;
+        std::array<Interpolant, InterpolantsSize> interpolants; // todo.pavelza: can we actually throw these out immediately and only leave lerpDatas?
         std::vector<VertexS> vertices;
-
-        Edge minMax;
-        Edge minMiddle;
-        Edge middleMax;
+        std::vector<LerpData> lerpDatas;
+        std::vector<InterpolantData> interpolantDatas;
     };
 
     float Lerp(float begin, float end, float lerpAmount)
@@ -143,46 +140,45 @@ namespace Renderer
         return begin + (end - begin) * lerpAmount;
     }
 
-    void ShadeTriangle(Triangle& tr)
+    void FillZBuffer(const Triangle& tr)
     {
-        // todo.pavelza: Same as currentC in the edge, but interpolated between edges, need to rename those two.
-        std::array<float, InterpolantsSize> interpolants_raw;
-        assert(interpolants_raw.size() == minMax.interpolants.size());
-
-        for (int32_t y = tr.minMax.pixelYBegin; y < tr.minMax.pixelYEnd; y++)
+        for (const Triangle::LerpData& ld : tr.lerpDatas)
         {
-            Edge* left = &tr.minMax;
-            Edge* right = y >= tr.middleMax.pixelYBegin ? &tr.middleMax : &tr.minMiddle;
-
-            left->CalculateC(tr.interpolants, y);
-            right->CalculateC(tr.interpolants, y);
-
-            if (left->pixelX > right->pixelX)
+            float z = Lerp(ld.id.left[6], ld.id.right[6], ld.percent);
+            if (z < ZBuffer[ld.y * OutputWidth + ld.x])
             {
-                Edge* temp = left;
-                left = right;
-                right = temp;
+                ZBuffer[ld.y * OutputWidth + ld.x] = z;
             }
+        }
+    }
 
-            for (int32_t x = left->pixelX; x < right->pixelX; x++)
+    void FillIBuffer(const Triangle& tr)
+    {
+        for (const Triangle::LerpData& ld : tr.lerpDatas)
+        {
+            float z = Lerp(ld.id.left[6], ld.id.right[6], ld.percent);
+            if (z == ZBuffer[ld.y * OutputWidth + ld.x])
             {
-                float percent = static_cast<float>(x - left->pixelX) / static_cast<float>(right->pixelX - left->pixelX);
-
-                interpolants_raw[6] = Lerp(left->currentC[6], right->currentC[6], percent);
-                if (interpolants_raw[6] < ZBuffer[y * OutputWidth + x])
+                for (uint32_t i = 0; i < InterpolantsSize; i++)
                 {
-                    ZBuffer[y * OutputWidth + x] = interpolants_raw[6];
-                }
-                else
-                {
-                    continue;
+                    assert(IBuffer[y * OutputWidth + x][i] == 0.0f);
+                    IBuffer[ld.y * OutputWidth + ld.x][i] = Lerp(ld.id.left[i], ld.id.right[i], ld.percent);
                 }
 
-                for (uint32_t i = 0; i < interpolants_raw.size(); i++)
-                {
-                    interpolants_raw[i] = Lerp(left->currentC[i], right->currentC[i], percent);
-                }
+                assert(TBuffer[y * OutputWidth + x][i] == 0);
+                TBuffer[ld.y * OutputWidth + ld.x] = tr.texture;
+            }
+        }
+    }
 
+    void ShadeTriangle(const Triangle& tr)
+    {
+        for (const Triangle::LerpData& ld : tr.lerpDatas)
+        {
+            std::array<float, InterpolantsSize>& interpolants_raw = IBuffer[ld.y * OutputWidth + ld.x];
+
+            if (interpolants_raw[6] == ZBuffer[ld.y * OutputWidth + ld.x])
+            {
                 float tintRed = interpolants_raw[0] / interpolants_raw[5];
                 float tintGreen = interpolants_raw[1] / interpolants_raw[5];
                 float tintBlue = interpolants_raw[2] / interpolants_raw[5];
@@ -195,7 +191,7 @@ namespace Renderer
                 float viewY = interpolants_raw[11] / interpolants_raw[5];
                 float viewZ = interpolants_raw[12] / interpolants_raw[5];
 
-                Vec pos_view { viewX, viewY, viewZ, 1.0f };
+                Vec pos_view{ viewX, viewY, viewZ, 1.0f };
                 Vec normal_vec = normalize({ normalX, normalY, normalZ, 0.0f });
                 Vec light_vec = normalize(light.position_view - pos_view);
 
@@ -205,10 +201,10 @@ namespace Renderer
                 float specAmount = static_cast<float>(std::max<float>(dot(normalize(pos_view), reflect(normal_vec, light_vec * -1.0f)), 0.0f));
                 Vec specular = light.light.color.GetVec() * pow(specAmount, light.light.specularShininess) * light.light.specularStrength;
 
-                Vec final_color { tintRed, tintGreen, tintBlue, 1.0f };
+                Vec final_color{ tintRed, tintGreen, tintBlue, 1.0f };
                 if (Textures.size() > 0)
                 {
-                    uint32_t materialId = tr.texture;
+                    uint32_t materialId = TBuffer[ld.y * OutputWidth + ld.x];
 
                     // From 0 to TextureWidth - 1 (TextureWidth pixels in total)
                     size_t textureX = static_cast<size_t>((interpolants_raw[3] / interpolants_raw[5]) * (Textures[materialId].GetWidth() - 1));
@@ -230,7 +226,12 @@ namespace Renderer
                 final_color.z = std::clamp(final_color.z, 0.0f, 1.0f);
                 final_color.w = 1.0f; // fix the alpha being affected by light, noticable only in tests, because in application we correct alpha manually when copying to backbuffer
 
-                DrawPixel(x, y, Color(final_color));
+                assert(OutputWidth > 0);
+                assert(OutputHeight > 0);
+                assert(0 <= x && x < OutputWidth);
+                assert(0 <= y && y < OutputHeight);
+                assert(BackBuffer);
+                BackBuffer[ld.y * OutputWidth + ld.x] = Color(final_color).rgba;
             }
         }
     }
@@ -268,7 +269,7 @@ namespace Renderer
         );
     }
 
-    void DrawRawTriangle(Triangle& tr)
+    void AddRawTriangle(Triangle& tr, std::vector<Triangle>& outTriangles)
     {
         assert(vertices.size() == 3);
 
@@ -316,11 +317,40 @@ namespace Renderer
         tr.interpolants[12] = GetInterpolant(tr.vertices, [](const VertexS& v) { return v.pos_view.z; });
         tr.texture = tr.vertices[0].v.materialId;
 
-        tr.minMax = Edge(tr.vertices[0].v.position, tr.vertices[2].v.position, true);
-        tr.minMiddle = Edge(tr.vertices[0].v.position, tr.vertices[1].v.position, true);
-        tr.middleMax = Edge(tr.vertices[1].v.position, tr.vertices[2].v.position, false);
+        Edge minMax(tr.vertices[0].v.position, tr.vertices[2].v.position, true);
+        Edge minMiddle(tr.vertices[0].v.position, tr.vertices[1].v.position, true);
+        Edge middleMax(tr.vertices[1].v.position, tr.vertices[2].v.position, false);
 
-        ShadeTriangle(tr);
+        tr.interpolantDatas.resize(minMax.pixelYEnd - minMax.pixelYBegin);
+        for (int32_t y = minMax.pixelYBegin; y < minMax.pixelYEnd; y++)
+        {
+            Edge& left = minMax;
+            Edge& right = y >= middleMax.pixelYBegin ? middleMax : minMiddle;
+
+            int32_t leftPixelX = 0;
+            left.CalculateCandX(tr.interpolants, y, tr.interpolantDatas[y - minMax.pixelYBegin].left, leftPixelX);
+
+            int32_t rightPixelX = 0;
+            right.CalculateCandX(tr.interpolants, y, tr.interpolantDatas[y - minMax.pixelYBegin].right, rightPixelX);
+
+            if (leftPixelX > rightPixelX)
+            {
+                std::swap(leftPixelX, rightPixelX);
+                std::swap(tr.interpolantDatas[y - minMax.pixelYBegin].left, tr.interpolantDatas[y - minMax.pixelYBegin].right);
+            }
+
+            for (int32_t x = leftPixelX; x < rightPixelX; x++)
+            {
+                tr.lerpDatas.push_back({
+                    x,
+                    y,
+                    static_cast<float>(x - leftPixelX) / static_cast<float>(rightPixelX - leftPixelX),
+                    tr.interpolantDatas[y - minMax.pixelYBegin]
+                });
+            }
+        }
+
+        outTriangles.push_back(std::move(tr));
     }
 
     bool IsVertexInside(const VertexS& point, int32_t axis, int32_t plane)
@@ -373,12 +403,16 @@ namespace Renderer
         return vertices.size() != 0;
     }
 
-    void DrawTriangle(const Vertex& a, const Vertex& b, const Vertex& c, const Matrix& transform)
+    void AddTriangle(uint32_t index, const Model& model, const Matrix& transform, std::vector<Triangle>& outTriangles)
     {
         Triangle tr;
         tr.vertices.resize(3);
 
-        tr.vertices[0] = VertexS {
+        const Vertex& a = model.vertices[model.indices[index * 3 + 0]];
+        const Vertex& b = model.vertices[model.indices[index * 3 + 1]];
+        const Vertex& c = model.vertices[model.indices[index * 3 + 2]];
+
+        tr.vertices[0] = VertexS{
             a,
             a.position,
             a.color.GetVec().x,
@@ -386,7 +420,7 @@ namespace Renderer
             a.color.GetVec().z
         };
 
-        tr.vertices[1] = VertexS {
+        tr.vertices[1] = VertexS{
             b,
             b.position,
             b.color.GetVec().x,
@@ -394,7 +428,7 @@ namespace Renderer
             b.color.GetVec().z
         };
 
-        tr.vertices[2] = VertexS {
+        tr.vertices[2] = VertexS{
             c,
             c.position,
             c.color.GetVec().x,
@@ -444,24 +478,25 @@ namespace Renderer
 
         if (std::all_of(tr.vertices.begin(), tr.vertices.end(), [](const VertexS& v){ return IsVertexInside(v, 0, 1) && IsVertexInside(v, 1, 1) && IsVertexInside(v, 2, 1) && IsVertexInside(v, 0, -1) && IsVertexInside(v, 1, -1) && IsVertexInside(v, 2, -1); }))
         {
-            DrawRawTriangle(tr);
+            AddRawTriangle(tr, outTriangles);
             return;
         }
 
-        if (ClipTriangleAxis(tr.vertices, 0) && ClipTriangleAxis(tr.vertices, 1) && ClipTriangleAxis(tr.vertices, 2))
+        std::vector<VertexS> vertices = std::move(tr.vertices);
+        if (ClipTriangleAxis(vertices, 0) && ClipTriangleAxis(vertices, 1) && ClipTriangleAxis(vertices, 2))
         {
-            assert(tr.vertices.size() >= 3);
+            assert(vertices.size() >= 3);
 
-            for (size_t i = 2; i < tr.vertices.size(); i++)
+            for (size_t i = 2; i < vertices.size(); i++)
             {
                 Triangle newTr;
                 newTr.vertices.resize(3);
 
-                newTr.vertices[0] = tr.vertices[0];
-                newTr.vertices[1] = tr.vertices[i - 1];
-                newTr.vertices[2] = tr.vertices[i];
+                newTr.vertices[0] = vertices[0];
+                newTr.vertices[1] = vertices[i - 1];
+                newTr.vertices[2] = vertices[i];
 
-                DrawRawTriangle(newTr);
+                AddRawTriangle(newTr, outTriangles);
             }
         }
     }
@@ -472,10 +507,16 @@ namespace Renderer
         OutputHeight = texture.GetHeight();
 
         BackBuffer.resize(OutputWidth * OutputHeight);
-        ZBuffer.resize(OutputWidth * OutputHeight);
-
         std::fill(BackBuffer.begin(), BackBuffer.end(), Color::Black.rgba);
+
+        ZBuffer.resize(OutputWidth * OutputHeight);
         std::fill(ZBuffer.begin(), ZBuffer.end(), 2.0f);
+
+        IBuffer.clear();
+        IBuffer.resize(OutputWidth * OutputHeight);
+
+        TBuffer.clear();
+        TBuffer.resize(OutputWidth * OutputHeight);
 
         // calculate light's position in view space
         light.position_view = ViewTransform(scene.camera) * scene.light.position;
@@ -491,14 +532,29 @@ namespace Renderer
         }
 
         const Model& model = scene.models[0];
+
+        static std::vector<Triangle> triangles;
+        triangles.reserve(model.indices.size() / 3 * 2);
+        triangles.clear();
+
         for (uint32_t i = 0; i < model.indices.size() / 3; i++)
         {
-            DrawTriangle(
-                model.vertices[model.indices[i * 3 + 0]],
-                model.vertices[model.indices[i * 3 + 1]],
-                model.vertices[model.indices[i * 3 + 2]],
-                ViewTransform(scene.camera)
-            );
+            AddTriangle(i, model, ViewTransform(scene.camera), triangles);
+        }
+
+        for (const Triangle& tr : triangles)
+        {
+            FillZBuffer(tr);
+        }
+
+        for (const Triangle& tr : triangles)
+        {
+            FillIBuffer(tr);
+        }
+
+        for (const Triangle& tr : triangles)
+        {
+            ShadeTriangle(tr);
         }
 
         for (size_t i = 0; i < BackBuffer.size(); i++)
