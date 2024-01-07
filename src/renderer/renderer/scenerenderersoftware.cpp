@@ -199,7 +199,7 @@ namespace Renderer
 
     void ShadeShade()
     {
-        auto r = std::ranges::iota_view{ 0, 480000 };
+        auto r = std::ranges::iota_view<int32_t, int32_t>{ 0, static_cast<int32_t>(OutputWidth * OutputHeight) };
         std::for_each(std::execution::par, r.begin(), r.end(), [](int32_t i) {
             std::array<float, InterpolantsSize>& interpolants_raw = GBuffer[i];
 
