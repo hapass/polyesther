@@ -11,6 +11,7 @@
 #include <array>
 #include <execution>
 #include <ranges>
+#include <utility>
 
 #include "utils.h"
 
@@ -131,15 +132,6 @@ namespace Renderer
         Edge minMax;
         Edge minMiddle;
         Edge middleMax;
-
-        enum class RenderingStage
-        {
-            ZBuffer,
-            GBuffer,
-            Shading
-        };
-
-        RenderingStage stage;
     };
 
     float Lerp(float begin, float end, float lerpAmount)
@@ -147,7 +139,36 @@ namespace Renderer
         return begin + (end - begin) * lerpAmount;
     }
 
-    void ShadeTriangle(Triangle& tr)
+    void FillZBuffer(Triangle& tr)
+    {
+        for (int32_t y = tr.minMax.pixelYBegin; y < tr.minMax.pixelYEnd; y++)
+        {
+            Edge* left = &tr.minMax;
+            Edge* right = y >= tr.middleMax.pixelYBegin ? &tr.middleMax : &tr.minMiddle;
+
+            left->CalculateC(tr.interpolants, y);
+            right->CalculateC(tr.interpolants, y); // todo.pavelza: don't need all interpolants?
+
+            if (left->pixelX > right->pixelX)
+            {
+                Edge* temp = left;
+                left = right;
+                right = temp;
+            }
+
+            for (int32_t x = left->pixelX; x < right->pixelX; x++)
+            {
+                float percent = static_cast<float>(x - left->pixelX) / static_cast<float>(right->pixelX - left->pixelX);
+                float z = Lerp(left->currentC[6], right->currentC[6], percent);
+                if (z < ZBuffer[y * OutputWidth + x])
+                {
+                    ZBuffer[y * OutputWidth + x] = z;
+                }
+            }
+        }
+    }
+
+    void FillGBuffer(Triangle& tr)
     {
         for (int32_t y = tr.minMax.pixelYBegin; y < tr.minMax.pixelYEnd; y++)
         {
@@ -167,43 +188,28 @@ namespace Renderer
             for (int32_t x = left->pixelX; x < right->pixelX; x++)
             {
                 float percent = static_cast<float>(x - left->pixelX) / static_cast<float>(right->pixelX - left->pixelX);
-
-                if (tr.stage == Triangle::RenderingStage::ZBuffer)
+                float z = Lerp(left->currentC[6], right->currentC[6], percent);
+                if (z == ZBuffer[y * OutputWidth + x])
                 {
-                    float z = Lerp(left->currentC[6], right->currentC[6], percent);
-                    if (z < ZBuffer[y * OutputWidth + x])
+                    for (uint32_t i = 0; i < InterpolantsSize; i++)
                     {
-                        ZBuffer[y * OutputWidth + x] = z;
+                        assert(GBuffer[y * OutputWidth + x][i] == 0.0f);
+                        GBuffer[y * OutputWidth + x][i] = Lerp(left->currentC[i], right->currentC[i], percent);
                     }
-                    else
-                    {
-                        continue;
-                    }
-                }
-                else if (tr.stage == Triangle::RenderingStage::GBuffer)
-                {
-                    float z = Lerp(left->currentC[6], right->currentC[6], percent);
-                    if (z == ZBuffer[y * OutputWidth + x])
-                    {
-                        for (uint32_t i = 0; i < InterpolantsSize; i++)
-                        {
-                            assert(GBuffer[y * OutputWidth + x][i] == 0.0f);
-                            GBuffer[y * OutputWidth + x][i] = Lerp(left->currentC[i], right->currentC[i], percent);
-                        }
-                        TBuffer[y * OutputWidth + x] = tr.texture;
-                    }
+                    TBuffer[y * OutputWidth + x] = tr.texture;
                 }
             }
         }
     }
 
-    void ShadeShade()
+    void ShadePixels()
     {
-        auto r = std::ranges::iota_view<int32_t, int32_t>{ 0, static_cast<int32_t>(OutputWidth * OutputHeight) };
+        //auto r = std::ranges::iota_view<int32_t, int32_t>{ 0, static_cast<int32_t>(OutputWidth * OutputHeight) };
+        auto r = std::ranges::iota_view<int32_t, int32_t>{ 0, static_cast<int32_t>(480000) };
         std::for_each(std::execution::par, r.begin(), r.end(), [](int32_t i) {
             std::array<float, InterpolantsSize>& interpolants_raw = GBuffer[i];
 
-            if (interpolants_raw[6] == ZBuffer[i])
+            if (interpolants_raw[6] != 0.0f)
             {
                 float tintRed = interpolants_raw[0] / interpolants_raw[5];
                 float tintGreen = interpolants_raw[1] / interpolants_raw[5];
@@ -295,7 +301,7 @@ namespace Renderer
         );
     }
 
-    void DrawRawTriangle(Triangle& tr)
+    void AddRawTriangle(Triangle& tr)
     {
         assert(vertices.size() == 3);
 
@@ -398,7 +404,7 @@ namespace Renderer
         return vertices.size() != 0;
     }
 
-    void DrawTriangle(Triangle& tr, const Matrix& transform, std::vector<Triangle>& trianglesCache)
+    void AddTriangle(Triangle& tr, const Matrix& transform, std::vector<Triangle>& trianglesCache)
     {
         for (VertexS& v : tr.vertices)
         {
@@ -442,7 +448,7 @@ namespace Renderer
 
         if (std::all_of(tr.vertices.begin(), tr.vertices.end(), [](const VertexS& v){ return IsVertexInside(v, 0, 1) && IsVertexInside(v, 1, 1) && IsVertexInside(v, 2, 1) && IsVertexInside(v, 0, -1) && IsVertexInside(v, 1, -1) && IsVertexInside(v, 2, -1); }))
         {
-            DrawRawTriangle(tr);
+            AddRawTriangle(tr);
             trianglesCache.push_back(std::move(tr));
             return;
         }
@@ -461,7 +467,7 @@ namespace Renderer
                 newTr.vertices[1] = vertices[i - 1];
                 newTr.vertices[2] = vertices[i];
 
-                DrawRawTriangle(newTr);
+                AddRawTriangle(newTr);
                 trianglesCache.push_back(std::move(newTr));
             }
         }
@@ -505,6 +511,7 @@ namespace Renderer
         OutputWidth = texture.GetWidth();
         OutputHeight = texture.GetHeight();
 
+        PERF_START("Clean buffers");
         BackBuffer.resize(OutputWidth * OutputHeight);
         ZBuffer.resize(OutputWidth * OutputHeight);
         GBuffer.clear();
@@ -514,6 +521,7 @@ namespace Renderer
 
         std::fill(BackBuffer.begin(), BackBuffer.end(), Color::Black.rgba);
         std::fill(ZBuffer.begin(), ZBuffer.end(), 2.0f);
+        PERF_END();
 
         // calculate light's position in view space
         light.position_view = ViewTransform(scene.camera) * scene.light.position;
@@ -534,30 +542,38 @@ namespace Renderer
         trianglesCache.reserve(model.indices.size() / 3 * 2);
         trianglesCache.clear();
 
+        PERF_START("Add triangles");
         for (uint32_t i = 0; i < model.indices.size() / 3; i++)
         {
             Triangle triangle;
             GetTriangleFromModel(i, model, triangle);
-            DrawTriangle(triangle, ViewTransform(scene.camera), trianglesCache);
+            AddTriangle(triangle, ViewTransform(scene.camera), trianglesCache);
         }
+        PERF_END();
 
+        PERF_START("ZBuffer");
         for (Triangle& tr : trianglesCache)
         {
-            tr.stage = Triangle::RenderingStage::ZBuffer;
-            ShadeTriangle(tr);
+            FillZBuffer(tr);
         }
+        PERF_END();
 
-        std::for_each(std::execution::par, trianglesCache.begin(), trianglesCache.end(), [](Triangle& tr) {
-            tr.stage = Triangle::RenderingStage::GBuffer;
-            ShadeTriangle(tr);
-        });
+        PERF_START("GBuffer");
+        std::for_each(std::execution::par, trianglesCache.begin(), trianglesCache.end(), [](Triangle& tr) { FillGBuffer(tr); });
+        PERF_END();
 
-        ShadeShade();
+        PERF_START("Shading");
+        ShadePixels();
+        PERF_END();
 
+        PERF_START("Buffer to texture");
+        size_t coefficient1 = OutputWidth * OutputHeight - OutputWidth;
+        size_t coefficient2 = 2 * OutputWidth;
         for (size_t i = 0; i < BackBuffer.size(); i++)
         {
-            texture.SetColor(OutputWidth * (OutputHeight - 1 - (i / OutputWidth)) + i % OutputWidth, Color(BackBuffer[i]));
+            texture.SetColor(coefficient1 - (i / OutputWidth) * coefficient2 + i, Color(BackBuffer[i]));
         }
+        PERF_END();
 
         return true;
     }

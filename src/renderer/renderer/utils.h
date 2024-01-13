@@ -6,6 +6,11 @@
 #include <sstream>
 #include <iomanip>
 #include <functional>
+#include <array>
+#include <numeric>
+#include <map>
+#include <chrono>
+#include <stack>
 
 namespace Utils
 {
@@ -42,6 +47,63 @@ namespace Utils
         DebugUtils() {}
         std::vector<std::function<void(std::string)>> outputs;
     };
+
+    struct FrameCounter
+    {
+        struct Sample
+        {
+            void Start()
+            {
+                startTime = std::chrono::high_resolution_clock::now();
+            }
+
+            void End()
+            {
+                auto endTime = std::chrono::high_resolution_clock::now();
+                frameRates[i] = duration_cast<std::chrono::milliseconds>(endTime - startTime).count();
+                i = (i + 1) % TotalFrames;
+            }
+
+            float GetAverageFrameTimeMs() const
+            {
+                return std::reduce(frameRates.begin(), frameRates.end()) / (float)TotalFrames;
+            }
+
+            static constexpr uint64_t TotalFrames = 100;
+            std::array<uint64_t, TotalFrames> frameRates {};
+            std::chrono::time_point<std::chrono::high_resolution_clock> startTime;
+            uint32_t i = 0;
+        };
+
+        static FrameCounter& GetInstance()
+        {
+            static FrameCounter frameCounter;
+            return frameCounter;
+        }
+
+        void Start(std::string&& name)
+        {
+            samples[name].Start();
+            lastName.push(name);
+        }
+
+        void End()
+        {
+            samples[lastName.top()].End();
+            lastName.pop();
+        }
+
+        void GetPerformanceString(std::stringstream& ss)
+        {
+            for (const auto& sample : samples)
+            {
+                ss << sample.first << ": " << sample.second.GetAverageFrameTimeMs() << "\n";
+            }
+        }
+
+        std::unordered_map<std::string, Sample> samples;
+        std::stack<std::string> lastName;
+    };
 }
 
 #define LOG(message) Utils::DebugUtils::GetInstance().Log(std::stringstream() << "File: " << __FILE__ << "|Line: " << __LINE__ << "|" << message << "\n")
@@ -75,3 +137,11 @@ namespace Utils
        LOG("Error: " << "0x" << std::hex << std::setw(8) << std::setfill('0') << CONCAT(result, __LINE__)); \
        throw std::exception(); \
    } \
+
+#define PERF_START(sampleName) //Utils::FrameCounter::GetInstance().Start(sampleName)
+
+#define PERF_END() //Utils::FrameCounter::GetInstance().End()
+
+#define P_S(sampleName) Utils::FrameCounter::GetInstance().Start(sampleName)
+
+#define P_E() Utils::FrameCounter::GetInstance().End()
