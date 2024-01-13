@@ -204,8 +204,8 @@ namespace Renderer
 
     void ShadePixels()
     {
-        //auto r = std::ranges::iota_view<int32_t, int32_t>{ 0, static_cast<int32_t>(OutputWidth * OutputHeight) };
-        auto r = std::ranges::iota_view<int32_t, int32_t>{ 0, static_cast<int32_t>(480000) };
+        auto r = std::ranges::iota_view<int32_t, int32_t>{ 0, static_cast<int32_t>(OutputWidth * OutputHeight) };
+        //auto r = std::ranges::iota_view<int32_t, int32_t>{ 0, static_cast<int32_t>(480000) };
         std::for_each(std::execution::par, r.begin(), r.end(), [](int32_t i) {
             std::array<float, InterpolantsSize>& interpolants_raw = GBuffer[i];
 
