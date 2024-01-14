@@ -263,7 +263,9 @@ namespace Renderer
                 assert(0 <= x && x < OutputWidth);
                 assert(0 <= y && y < OutputHeight);
                 assert(BackBuffer);
-                BackBuffer[i] = Color(final_color).rgba;
+                size_t coefficient1 = OutputWidth * OutputHeight - OutputWidth;
+                size_t coefficient2 = 2 * OutputWidth;
+                BackBuffer[coefficient1 - (i / OutputWidth) * coefficient2 + i] = Color(final_color).rgba;
             }
         });
     }
@@ -567,11 +569,9 @@ namespace Renderer
         PERF_END();
 
         PERF_START("Buffer to texture");
-        size_t coefficient1 = OutputWidth * OutputHeight - OutputWidth;
-        size_t coefficient2 = 2 * OutputWidth;
         for (size_t i = 0; i < BackBuffer.size(); i++)
         {
-            texture.SetColor(coefficient1 - (i / OutputWidth) * coefficient2 + i, Color(BackBuffer[i]));
+            texture.SetColor(i, Color(BackBuffer[i]));
         }
         PERF_END();
 
