@@ -121,11 +121,11 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 
             HandleInput(scene);
 
-            P_S("Frame time");
             Renderer::Texture result(RenderWidth, RenderHeight);
 
+            Utils::FrameCounter::GetInstance().Start("Frame time");
             renderer->Render(scene, result);
-            P_E();
+            Utils::FrameCounter::GetInstance().End();
 
             std::stringstream ss;
             Utils::FrameCounter::GetInstance().GetPerformanceString(ss);
