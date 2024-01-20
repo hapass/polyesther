@@ -101,7 +101,7 @@ namespace Utils
             }
         }
 
-        std::unordered_map<std::string, Sample> samples;
+        std::map<std::string, Sample> samples;
         std::stack<std::string> lastName;
     };
 }

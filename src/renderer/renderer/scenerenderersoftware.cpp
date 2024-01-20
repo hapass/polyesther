@@ -110,6 +110,12 @@ namespace Renderer
             }
         }
 
+        void CalculateCForZOnly(std::array<Interpolant, InterpolantsSize>& interpolants, int32_t y)
+        {
+            pixelX = static_cast<int32_t>(ceil(begin.x + (y - begin.y) * stepX));
+            currentC[12] = interpolants[12].CalculateC(pixelX - begin.x, y - begin.y, isBeginMin);
+        }
+
         int32_t pixelYBegin;
         int32_t pixelYEnd;
         int32_t pixelX;
@@ -146,8 +152,8 @@ namespace Renderer
             Edge* left = &tr.minMax;
             Edge* right = y >= tr.middleMax.pixelYBegin ? &tr.middleMax : &tr.minMiddle;
 
-            left->CalculateC(tr.interpolants, y);
-            right->CalculateC(tr.interpolants, y); // todo.pavelza: don't need all interpolants?
+            left->CalculateCForZOnly(tr.interpolants, y);
+            right->CalculateCForZOnly(tr.interpolants, y);
 
             if (left->pixelX > right->pixelX)
             {
@@ -159,7 +165,7 @@ namespace Renderer
             for (int32_t x = left->pixelX; x < right->pixelX; x++)
             {
                 float percent = static_cast<float>(x - left->pixelX) / static_cast<float>(right->pixelX - left->pixelX);
-                float z = Lerp(left->currentC[6], right->currentC[6], percent);
+                float z = Lerp(left->currentC[12], right->currentC[12], percent);
                 if (z < ZBuffer[y * OutputWidth + x])
                 {
                     ZBuffer[y * OutputWidth + x] = z;
@@ -188,15 +194,16 @@ namespace Renderer
             for (int32_t x = left->pixelX; x < right->pixelX; x++)
             {
                 float percent = static_cast<float>(x - left->pixelX) / static_cast<float>(right->pixelX - left->pixelX);
-                float z = Lerp(left->currentC[6], right->currentC[6], percent);
+                float z = Lerp(left->currentC[12], right->currentC[12], percent);
                 if (z == ZBuffer[y * OutputWidth + x])
                 {
-                    for (uint32_t i = 0; i < InterpolantsSize; i++)
+                    for (uint32_t i = 0; i < InterpolantsSize - 1; i++)
                     {
                         assert(GBuffer[y * OutputWidth + x][i] == 0.0f);
                         GBuffer[y * OutputWidth + x][i] = Lerp(left->currentC[i], right->currentC[i], percent);
                     }
                     TBuffer[y * OutputWidth + x] = tr.texture;
+                    GBuffer[y * OutputWidth + x][12] = z;
                 }
             }
         }
@@ -205,23 +212,25 @@ namespace Renderer
     void ShadePixels()
     {
         auto r = std::ranges::iota_view<int32_t, int32_t>{ 0, static_cast<int32_t>(OutputWidth * OutputHeight) };
-        //auto r = std::ranges::iota_view<int32_t, int32_t>{ 0, static_cast<int32_t>(480000) };
         std::for_each(std::execution::par, r.begin(), r.end(), [](int32_t i) {
             std::array<float, InterpolantsSize>& interpolants_raw = GBuffer[i];
 
-            if (interpolants_raw[6] != 0.0f)
+            if (interpolants_raw[12] != 0.0f)
             {
-                float tintRed = interpolants_raw[0] / interpolants_raw[5];
-                float tintGreen = interpolants_raw[1] / interpolants_raw[5];
-                float tintBlue = interpolants_raw[2] / interpolants_raw[5];
+                float tintRed = interpolants_raw[0] / interpolants_raw[11];
+                float tintGreen = interpolants_raw[1] / interpolants_raw[11];
+                float tintBlue = interpolants_raw[2] / interpolants_raw[11];
 
-                float normalX = interpolants_raw[7] / interpolants_raw[5];
-                float normalY = interpolants_raw[8] / interpolants_raw[5];
-                float normalZ = interpolants_raw[9] / interpolants_raw[5];
+                float texX = interpolants_raw[3] / interpolants_raw[11];
+                float texY = interpolants_raw[4] / interpolants_raw[11];
 
-                float viewX = interpolants_raw[10] / interpolants_raw[5];
-                float viewY = interpolants_raw[11] / interpolants_raw[5];
-                float viewZ = interpolants_raw[12] / interpolants_raw[5];
+                float normalX = interpolants_raw[5] / interpolants_raw[11];
+                float normalY = interpolants_raw[6] / interpolants_raw[11];
+                float normalZ = interpolants_raw[7] / interpolants_raw[11];
+
+                float viewX = interpolants_raw[8] / interpolants_raw[11];
+                float viewY = interpolants_raw[9] / interpolants_raw[11];
+                float viewZ = interpolants_raw[10] / interpolants_raw[11];
 
                 Vec pos_view{ viewX, viewY, viewZ, 1.0f };
                 Vec normal_vec = normalize({ normalX, normalY, normalZ, 0.0f });
@@ -239,9 +248,9 @@ namespace Renderer
                     uint32_t materialId = TBuffer[i];
 
                     // From 0 to TextureWidth - 1 (TextureWidth pixels in total)
-                    size_t textureX = static_cast<size_t>((interpolants_raw[3] / interpolants_raw[5]) * (Textures[materialId].GetWidth() - 1));
+                    size_t textureX = static_cast<size_t>(texX * (Textures[materialId].GetWidth() - 1));
                     // From 0 to TextureHeight - 1 (TextureHeight pixels in total)
-                    size_t textureY = static_cast<size_t>((interpolants_raw[4] / interpolants_raw[5]) * (Textures[materialId].GetHeight() - 1));
+                    size_t textureY = static_cast<size_t>(texY * (Textures[materialId].GetHeight() - 1));
 
                     // todo.pavelza: 0 height texture undefined behavior
                     textureY = (Textures[materialId].GetHeight() - 1) - textureY; // invert texture coords
@@ -334,21 +343,22 @@ namespace Renderer
         tr.interpolants[3] = GetInterpolant(tr.vertices, [](const VertexS& v) { return v.v.textureCoord.x; });
         tr.interpolants[4] = GetInterpolant(tr.vertices, [](const VertexS& v) { return v.v.textureCoord.y; });
 
-        tr.interpolants[5] = GetInterpolant(tr.vertices, [](const VertexS& v) { return 1.0f; });
+        tr.interpolants[5] = GetInterpolant(tr.vertices, [](const VertexS& v) { return v.v.normal.x; });
+        tr.interpolants[6] = GetInterpolant(tr.vertices, [](const VertexS& v) { return v.v.normal.y; });
+        tr.interpolants[7] = GetInterpolant(tr.vertices, [](const VertexS& v) { return v.v.normal.z; });
+
+        tr.interpolants[8] = GetInterpolant(tr.vertices, [](const VertexS& v) { return v.pos_view.x; });
+        tr.interpolants[9] = GetInterpolant(tr.vertices, [](const VertexS& v) { return v.pos_view.y; });
+        tr.interpolants[10] = GetInterpolant(tr.vertices, [](const VertexS& v) { return v.pos_view.z; });
+
+        tr.interpolants[11] = GetInterpolant(tr.vertices, [](const VertexS& v) { return 1.0f; });
 
         // No division by w, because it is already divided by w.
-        tr.interpolants[6] = Interpolant(
+        tr.interpolants[12] = Interpolant(
             { tr.vertices[0].v.position.x, tr.vertices[0].v.position.y, tr.vertices[0].v.position.z },
             { tr.vertices[1].v.position.x, tr.vertices[1].v.position.y, tr.vertices[1].v.position.z },
             { tr.vertices[2].v.position.x, tr.vertices[2].v.position.y, tr.vertices[2].v.position.z });
 
-        tr.interpolants[7] = GetInterpolant(tr.vertices, [](const VertexS& v) { return v.v.normal.x; });
-        tr.interpolants[8] = GetInterpolant(tr.vertices, [](const VertexS& v) { return v.v.normal.y; });
-        tr.interpolants[9] = GetInterpolant(tr.vertices, [](const VertexS& v) { return v.v.normal.z; });
-
-        tr.interpolants[10] = GetInterpolant(tr.vertices, [](const VertexS& v) { return v.pos_view.x; });
-        tr.interpolants[11] = GetInterpolant(tr.vertices, [](const VertexS& v) { return v.pos_view.y; });
-        tr.interpolants[12] = GetInterpolant(tr.vertices, [](const VertexS& v) { return v.pos_view.z; });
         tr.texture = tr.vertices[0].v.materialId;
 
         tr.minMax = Edge(tr.vertices[0].v.position, tr.vertices[2].v.position, true);
@@ -516,19 +526,26 @@ namespace Renderer
         PERF_START("Clean buffers");
         BackBuffer.resize(OutputWidth * OutputHeight);
         ZBuffer.resize(OutputWidth * OutputHeight);
-        GBuffer.clear();
         GBuffer.resize(OutputWidth * OutputHeight);
-        TBuffer.clear();
         TBuffer.resize(OutputWidth * OutputHeight);
 
         std::fill(BackBuffer.begin(), BackBuffer.end(), Color::Black.rgba);
         std::fill(ZBuffer.begin(), ZBuffer.end(), 2.0f);
+        std::fill(TBuffer.begin(), TBuffer.end(), 0u);
         PERF_END();
 
+        PERF_START("Clean G buffers");
+        auto r = std::ranges::iota_view<size_t, size_t>{ 0, GBuffer.size() };
+        std::for_each(std::execution::par, r.begin(), r.end(), [](size_t i) { std::fill(GBuffer[i].begin(), GBuffer[i].end(), 0.0f); });
+        PERF_END();
+
+        PERF_START("Light transform");
         // calculate light's position in view space
         light.position_view = ViewTransform(scene.camera) * scene.light.position;
         light.light = scene.light;
+        PERF_END();
 
+        PERF_START("Materials");
         if (Textures.size() == 0)
         {
             Textures.resize(scene.models[0].materials.size());
@@ -537,12 +554,15 @@ namespace Renderer
                 Load(scene.models[0].materials[i].textureName, Textures[i]);
             }
         }
+        PERF_END();
 
+        PERF_START("Triangle cache");
         const Model& model = scene.models[0];
 
         static std::vector<Triangle> trianglesCache;
         trianglesCache.reserve(model.indices.size() / 3 * 2);
         trianglesCache.clear();
+        PERF_END();
 
         PERF_START("Add triangles");
         for (uint32_t i = 0; i < model.indices.size() / 3; i++)
