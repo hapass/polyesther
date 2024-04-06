@@ -138,7 +138,7 @@ namespace Utils
        throw std::exception(); \
    } \
 
-#define ENABLE_DETAILED_PERF_LOG
+//#define ENABLE_DETAILED_PERF_LOG
 
 #ifdef ENABLE_DETAILED_PERF_LOG
 #define PERF_START(sampleName) Utils::FrameCounter::GetInstance().Start(sampleName)

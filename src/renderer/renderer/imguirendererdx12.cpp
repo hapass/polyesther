@@ -123,7 +123,11 @@ namespace Renderer
             deviceDX12.GetQueue().AddBarrierToList(textureUploadBuffer, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_GENERIC_READ);
         }
 
-        if (!textureBuffer)
+        if (textureBuffer)
+        {
+            deviceDX12.GetQueue().AddBarrierToList(textureBuffer, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_COPY_DEST);
+        }
+        else
         {
             D3D12_HEAP_PROPERTIES defaultProperties = deviceDX12.GetDevice()->GetCustomHeapProperties(0, D3D12_HEAP_TYPE_DEFAULT);
             D3D_NOT_FAILED(deviceDX12.GetDevice()->CreateCommittedResource(&defaultProperties, D3D12_HEAP_FLAG_NONE, &textureDesc, D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&textureBuffer)));
