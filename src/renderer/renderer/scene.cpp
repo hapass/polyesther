@@ -23,7 +23,7 @@ namespace Renderer
             std::vector<Vec> positions;
             std::vector<Color> colors;
             std::vector<Vec> normals;
-            uint32_t currentMaterialId = 0;
+            int32_t currentMaterialId = -1;
         };
 
         std::string GetFileExtension(const std::string& fileName)

@@ -15,11 +15,19 @@ namespace Renderer
             , texture(texture)
             , deviceDX12(device)
         {
-            const Model& model = scene.models[0];
+            // collect all materials
+            std::vector<std::string> allMaterials;
+            for (const Model& model : scene.models)
+            {
+                for (const Material& mat : model.materials)
+                {
+                    allMaterials.push_back(mat.textureName);
+                }
+            }
 
             // rendering
             const UINT numberOfConstantStructs = UINT(1);
-            const UINT numberOfTextures = UINT(model.materials.size() + 1); // add one extra texture for 0 texture case to even work, and we can use that as an error texture in the future
+            const UINT numberOfTextures = UINT(allMaterials.size() + 1); // add one extra texture for 0 texture case to even work, and we can use that as an error texture in the future
 
             rootDescriptorHeap = CreateRootDescriptorHeap(numberOfConstantStructs + numberOfTextures);
 
@@ -99,32 +107,45 @@ namespace Renderer
 
             // upload static geometry
             std::vector<XVertex> vertexData;
-            for (const Vertex& vert : model.vertices)
+            size_t totalMaterials = 0;
+            for (const Model& model : scene.models)
             {
-                vertexData.push_back(
-                    XVertex({
-                        DirectX::XMFLOAT3(vert.position.x, vert.position.y, vert.position.z),
-                        DirectX::XMFLOAT2(vert.textureCoord.x, vert.textureCoord.y),
-                        DirectX::XMFLOAT3(vert.normal.x, vert.normal.y, vert.normal.z),
-                        DirectX::XMFLOAT3(vert.color.GetVec().x, vert.color.GetVec().y, vert.color.GetVec().z),
-                        UINT(vert.materialId)
-                        })
-                );
+                for (const Vertex& vert : model.vertices)
+                {
+                    vertexData.push_back(
+                        XVertex({
+                            DirectX::XMFLOAT3(vert.position.x, vert.position.y, vert.position.z),
+                            DirectX::XMFLOAT2(vert.textureCoord.x, vert.textureCoord.y),
+                            DirectX::XMFLOAT3(vert.normal.x, vert.normal.y, vert.normal.z),
+                            DirectX::XMFLOAT3(vert.color.GetVec().x, vert.color.GetVec().y, vert.color.GetVec().z),
+                            vert.materialId == -1 ? -1 : INT(totalMaterials + vert.materialId)
+                            })
+                    );
+                }
+                totalMaterials += model.materials.size();
             }
 
             vertexBufferView = UploadDataToGPU<XVertex, D3D12_VERTEX_BUFFER_VIEW>(vertexData);
 
             std::vector<std::uint16_t> indexData;
-            for (uint32_t i : model.indices)
+            for (const Model& model : scene.models)
             {
-                indexData.push_back(static_cast<uint16_t>(i));
+                for (uint32_t i : model.indices)
+                {
+                    indexData.push_back(static_cast<uint16_t>(i));
+                }
             }
 
             indexBufferView = UploadDataToGPU<uint16_t, D3D12_INDEX_BUFFER_VIEW>(indexData);
 
-            for (size_t i = 0; i < model.materials.size(); i++)
+            size_t totalIndex = 0;
+            for (const Model& model : scene.models)
             {
-                UploadTexturesToGPU(model.materials[i].textureName, static_cast<int32_t>(i));
+                for (size_t i = 0; i < model.materials.size(); i++)
+                {
+                    UploadTexturesToGPU(model.materials[i].textureName, static_cast<int32_t>(totalIndex));
+                    totalIndex += 1;
+                }
             }
         }
 
@@ -143,7 +164,6 @@ namespace Renderer
                 0.0f, 0.0f, 0.0f, 1.0f
             };
             DirectX::XMFLOAT4 lightPos = { 0.0f, 0.0f, 0.0f, 0.0f };
-            UINT textureCount = 0;
         };
 
         struct XVertex
@@ -152,7 +172,7 @@ namespace Renderer
             DirectX::XMFLOAT2 TextureCoord;
             DirectX::XMFLOAT3 Normal;
             DirectX::XMFLOAT3 Color;
-            UINT TextureIndex;
+            INT TextureIndex;
         };
 
         uint64_t AlignBytes(uint64_t size, uint64_t alignment = 256)
@@ -167,14 +187,12 @@ namespace Renderer
             return AlignBytes(sizeof(T), alignment);
         }
 
-        void SetConstants(const DirectX::XMMATRIX& mvp, const DirectX::XMMATRIX& mv, const DirectX::XMVECTOR& lightPos, UINT numberOfTextures)
+        void SetConstants(const DirectX::XMMATRIX& mvp, const DirectX::XMMATRIX& mv, const DirectX::XMVECTOR& lightPos)
         {
             Constants constantsStruct;
             DirectX::XMStoreFloat4x4(&constantsStruct.worldViewProj, mvp);
             DirectX::XMStoreFloat4x4(&constantsStruct.worldView, mv);
             DirectX::XMStoreFloat4(&constantsStruct.lightPos, lightPos);
-
-            constantsStruct.textureCount = numberOfTextures;
 
             BYTE* mappedData = nullptr;
             constantBuffer->Map(0, nullptr, (void**)&mappedData);
@@ -689,7 +707,7 @@ namespace Renderer
             Vec position_view = ViewTransform(scene.camera) * scene.light.position;
             DirectX::XMVECTOR lightPos = { position_view.x, position_view.y, position_view.z, position_view.w };
 
-            SetConstants(mvpX, mvX, lightPos, (UINT)scene.models[0].materials.size());
+            SetConstants(mvpX, mvX, lightPos);
 
             D3D12_VIEWPORT viewport;
             viewport.TopLeftX = 0.0f;
@@ -725,7 +743,15 @@ namespace Renderer
 
             deviceDX12.GetQueue().GetList()->SetGraphicsRootDescriptorTable(0, rootDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
 
-            deviceDX12.GetQueue().GetList()->DrawIndexedInstanced((UINT)scene.models[0].indices.size(), 1, 0, 0, 0);
+            UINT lastIndex = 0;
+            UINT lastVertex = 0;
+            for (const Model& model : scene.models)
+            {
+                UINT indexCount = (UINT)model.indices.size();
+                deviceDX12.GetQueue().GetList()->DrawIndexedInstanced(indexCount, 1, lastIndex, lastVertex, 0);
+                lastVertex += model.vertices.size();
+                lastIndex += indexCount;
+            }
 
             deviceDX12.GetQueue().Execute();
 

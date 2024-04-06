@@ -3,7 +3,6 @@ cbuffer cbPerObject : register(b0)
     float4x4 gWorldViewProj;
     float4x4 gWorldView;
     float4 gLightPos;
-    uint gTextureCount;
 };
 
 SamplerState g_sampler : register(s0);
@@ -15,7 +14,7 @@ struct VertexIn
     float2 TexCoord : TEXCOORD;
     float3 Normals : NORMALS;
     float3 Color : COLOR;
-    uint TexIndex : TEXINDEX;
+    int TexIndex : TEXINDEX;
 };
 
 struct VertexOut
@@ -25,7 +24,7 @@ struct VertexOut
     float2 TexCoord : TEXCOORD;
     float3 Normals : NORMALS;
     float3 Color : COLOR;
-    uint TexIndex : TEXINDEX;
+    int TexIndex : TEXINDEX;
 };
 
 VertexOut VS(VertexIn vin)
@@ -68,7 +67,7 @@ float4 PS(VertexOut pin) : SV_Target
 
     float2 texCoord = float2(pin.TexCoord.x, 1.0 - pin.TexCoord.y); 
 
-    float4 frag_color = gTextureCount == 0 ? float4(pin.Color.xyz, 1.0) : g_texture[pin.TexIndex].Sample(g_sampler, texCoord);
+    float4 frag_color = pin.TexIndex == -1 ? float4(pin.Color.xyz, 1.0) : g_texture[pin.TexIndex].Sample(g_sampler, texCoord);
     float4 res = (diffuse + ambient + specular) * frag_color;
     res.w = 1.0f; // fix the alpha being affected by light, noticable only in tests, because in application we correct alpha manually when copying to backbuffer 
     return clamp(res, 0.0f, 1.0f);

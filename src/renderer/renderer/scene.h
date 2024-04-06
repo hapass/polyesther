@@ -9,7 +9,7 @@ namespace Renderer
 {
     struct Vertex
     {
-        uint32_t materialId = 0;
+        int32_t materialId = -1;
         Vec position;
         Vec normal;
         Vec textureCoord;
