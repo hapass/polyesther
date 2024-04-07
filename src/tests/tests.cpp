@@ -258,7 +258,7 @@ namespace Tests
     TEST_CLASS(RendererComparison)
     {
         BEGIN_TEST_METHOD_ATTRIBUTE(InterpolationShouldWorkTheSameInBothRenderers)
-            TEST_IGNORE() // todo.pavelza: this is a hard thing to fix, will do it later when I'm have more background in graphics
+            TEST_IGNORE() // todo.pavelza: this is a hard thing to fix, will do it later when I have more background in graphics
         END_TEST_METHOD_ATTRIBUTE()
 
         TEST_METHOD(InterpolationShouldWorkTheSameInBothRenderers)

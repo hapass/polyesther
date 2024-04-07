@@ -62,10 +62,11 @@ namespace Renderer
             rootSignature = CreateRootSignature(numberOfConstantStructs, numberOfTextures);
 
             // pso
-            ID3D12PipelineState* pso = CreatePSO(shaderPath); // todo.pavelza: should be destroyed somehow?
+            standardPso = CreatePSO(shaderPath); // todo.pavelza: should be destroyed somehow?
+            noCullingPso = CreatePSO(shaderPath, D3D12_CULL_MODE_NONE); // todo.pavelza: should be destroyed somehow?
 
             // queue
-            deviceDX12.GetQueue().SetCurrentPipelineStateObject(pso);
+            deviceDX12.GetQueue().SetCurrentPipelineStateObject(standardPso);
 
             // move constant buffer into correct state
             deviceDX12.GetQueue().AddBarrierToList(constantBuffer, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_GENERIC_READ);
@@ -255,7 +256,7 @@ namespace Renderer
             return result;
         }
 
-        ID3D12PipelineState* CreatePSO(const std::wstring& shaderPath)
+        ID3D12PipelineState* CreatePSO(const std::wstring& shaderPath, D3D12_CULL_MODE cullMode = D3D12_CULL_MODE::D3D12_CULL_MODE_BACK)
         {
             UINT flags = D3DCOMPILE_ENABLE_UNBOUNDED_DESCRIPTOR_TABLES;
 
@@ -309,7 +310,7 @@ namespace Renderer
 
             inputElementDescription[4].SemanticName = "TEXINDEX";
             inputElementDescription[4].SemanticIndex = 0;
-            inputElementDescription[4].Format = DXGI_FORMAT_R32_UINT;
+            inputElementDescription[4].Format = DXGI_FORMAT_R32_SINT;
             inputElementDescription[4].InputSlot = 0;
             inputElementDescription[4].AlignedByteOffset = 44;
             inputElementDescription[4].InputSlotClass = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA;
@@ -322,7 +323,7 @@ namespace Renderer
             psoDescription.PS = { (BYTE*)pixelShaderBlob->GetBufferPointer(), pixelShaderBlob->GetBufferSize() };
 
             psoDescription.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
-            psoDescription.RasterizerState.CullMode = D3D12_CULL_MODE_BACK;
+            psoDescription.RasterizerState.CullMode = cullMode;
             psoDescription.RasterizerState.FrontCounterClockwise = true;
             psoDescription.RasterizerState.DepthBias = D3D12_DEFAULT_DEPTH_BIAS;
             psoDescription.RasterizerState.DepthBiasClamp = D3D12_DEFAULT_DEPTH_BIAS_CLAMP;
@@ -745,14 +746,22 @@ namespace Renderer
 
             UINT lastIndex = 0;
             UINT lastVertex = 0;
-            for (const Model& model : scene.models)
+            for (size_t i = 0; i < scene.models.size(); i++)
             {
+                const Model& model = scene.models[i];
                 UINT indexCount = (UINT)model.indices.size();
+
+                if (i == 1) // todo: must be in data in material
+                {
+                    deviceDX12.GetQueue().SetCurrentPipelineStateObject(noCullingPso);
+                }
+
                 deviceDX12.GetQueue().GetList()->DrawIndexedInstanced(indexCount, 1, lastIndex, lastVertex, 0);
                 lastVertex += model.vertices.size();
                 lastIndex += indexCount;
             }
 
+            deviceDX12.GetQueue().SetCurrentPipelineStateObject(standardPso);
             deviceDX12.GetQueue().Execute();
 
             NOT_FAILED(DownloadTextureFromGPU(currentBuffer, output), false);
@@ -771,6 +780,9 @@ namespace Renderer
         ID3D12RootSignature* rootSignature = nullptr;
         D3D12_VERTEX_BUFFER_VIEW vertexBufferView {};
         D3D12_INDEX_BUFFER_VIEW indexBufferView {};
+
+        ID3D12PipelineState* standardPso = nullptr; // todo.pavelza: should be destroyed somehow?
+        ID3D12PipelineState* noCullingPso = nullptr; // todo.pavelza: should be destroyed somehow?
 
         const DeviceDX12& deviceDX12;
         const Scene& scene;
