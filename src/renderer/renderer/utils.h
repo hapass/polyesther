@@ -138,6 +138,9 @@ namespace Utils
        throw std::exception(); \
    } \
 
+#define ASSERT(call) \
+    if (!(call)) throw std::exception("assert failed!");
+
 //#define ENABLE_DETAILED_PERF_LOG
 
 #ifdef ENABLE_DETAILED_PERF_LOG

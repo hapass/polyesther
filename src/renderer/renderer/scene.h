@@ -31,6 +31,7 @@ namespace Renderer
         std::vector<Material> materials;
         std::vector<Vertex> vertices;
         std::vector<uint32_t> indices;
+        bool backfaceCulling = true;
     };
 
     struct Light

@@ -72,5 +72,3 @@ float4 PS(VertexOut pin) : SV_Target
     res.w = 1.0f; // fix the alpha being affected by light, noticable only in tests, because in application we correct alpha manually when copying to backbuffer 
     return clamp(res, 0.0f, 1.0f);
 }
-
-

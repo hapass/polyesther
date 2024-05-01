@@ -102,7 +102,7 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 
     static Renderer::SceneRendererSoftware softwareRenderer;
     static Renderer::DeviceDX12 device;
-    static Renderer::SceneRendererDX12 hardwareRenderer(AssetsDir + "color.hlsl", device);
+    static Renderer::SceneRendererDX12 hardwareRenderer(AssetsDir, device);
     static Renderer::ImguiRenderer imguiRenderer(device, WindowWidth, WindowHeight, hWnd);
     static Renderer::SceneRenderer* renderer = &hardwareRenderer;
     static Renderer::Scene scene;

@@ -14,13 +14,13 @@ namespace Renderer
 
     struct SceneRendererDX12 : public SceneRenderer
     {
-        SceneRendererDX12(const std::string& path, const DeviceDX12& device) : deviceDX12(device), shaderPath(path) {};
+        SceneRendererDX12(const std::string& path, const DeviceDX12& device) : deviceDX12(device), shaderFolderPath(path) {};
 
         bool Render(const Scene& scene, Texture& texture) override;
 
     private:
         std::shared_ptr<RendererDX12Context> context;
-        std::string shaderPath;
+        std::string shaderFolderPath;
         const DeviceDX12& deviceDX12;
     };
 }

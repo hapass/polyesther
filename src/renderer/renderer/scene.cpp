@@ -51,7 +51,7 @@ namespace Renderer
             return result;
         }
 
-        bool Read(std::stringstream& lineStream, uint32_t elements, float def, Vec& vec)
+        bool Read(std::stringstream& lineStream, uint32_t elements, float defaultVal, Vec& vec)
         {
             uint32_t currentIndex = 0;
             while (currentIndex < 4)
@@ -71,7 +71,7 @@ namespace Renderer
                 }
                 else
                 {
-                    vec.Set(currentIndex, def);
+                    vec.Set(currentIndex, defaultVal);
                 }
 
                 currentIndex++;
@@ -419,6 +419,12 @@ namespace Renderer
                     {
                         if (Load(ReplaceFileNameInFullPath(fullFileName, fileName), model))
                         {
+                            std::string culling;
+                            if (lineStream >> culling)
+                            {
+                                model.backfaceCulling = culling != "culling_off"; // todo.pavelza: add tests
+                            }
+
                             scene.models.push_back(std::move(model));
                         }
                         else

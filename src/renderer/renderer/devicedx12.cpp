@@ -110,4 +110,137 @@ namespace Renderer
     {
         return device;
     }
+
+    RenderTarget::RenderTarget(const DeviceDX12& device, size_t width, size_t height, Type type)
+        : deviceDX12(device)
+        , bufferType(type)
+        , targetWidth(width)
+        , targetHeight(height)
+    {
+        size_t numBuffers = bufferType == Type::GBuffer ? 3 : 1;
+        buffers.resize(numBuffers);
+        renderTargetViewDescriptorHeaps.resize(numBuffers);
+        bufferHandles.resize(numBuffers);
+
+        for (size_t i = 0; i < numBuffers; i++)
+        {
+            CreateBuffer(i, width, height);
+        }
+        CreateDepthBuffer(width, height);
+    }
+
+    RenderTarget::~RenderTarget()
+    {
+        depthStencilBuffer->Release();
+        depthStencilViewDescriptorHeap->Release();
+
+        for (ID3D12Resource* resource : buffers)
+        {
+            resource->Release();
+        }
+        for (ID3D12DescriptorHeap* heap : renderTargetViewDescriptorHeaps)
+        {
+            heap->Release();
+        }
+    }
+
+    void RenderTarget::ClearAndSetRenderTargets(GraphicsQueue& queue)
+    {
+        for (size_t i = 0; i < bufferHandles.size(); i++)
+        {
+            queue.GetList()->ClearRenderTargetView(bufferHandles[i], clearColor, 0, nullptr);
+        }
+        queue.GetList()->ClearDepthStencilView(depthBufferHandle, D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, 1.0f, 0, 0, nullptr);
+        queue.GetList()->OMSetRenderTargets(bufferHandles.size(), bufferHandles.data(), false, &depthBufferHandle);
+    }
+
+    ID3D12Resource* RenderTarget::GetBuffer(size_t i)
+    {
+        return buffers[i];
+    }
+
+    void RenderTarget::CreateBuffer(size_t i, size_t width, size_t height)
+    {
+        ASSERT(renderTargetViewDescriptorHeaps.size() >= i);
+        ASSERT(buffers.size() >= 0);
+        ASSERT(bufferHandles.size() >= 0);
+
+        D3D12_DESCRIPTOR_HEAP_DESC heapDescription;
+        heapDescription.Type = D3D12_DESCRIPTOR_HEAP_TYPE::D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
+        heapDescription.NumDescriptors = 1;
+        heapDescription.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+        heapDescription.NodeMask = 0;
+
+        D3D_NOT_FAILED(deviceDX12.GetDevice()->CreateDescriptorHeap(&heapDescription, IID_PPV_ARGS(&renderTargetViewDescriptorHeaps[i])));
+
+        D3D12_RESOURCE_DESC textureDesc = CreateTextureDescription(DXGI_FORMAT_R8G8B8A8_UNORM, D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET);
+        D3D12_CLEAR_VALUE clearValue = CreateClearValue(textureDesc);
+        D3D12_HEAP_PROPERTIES defaultProperties = deviceDX12.GetDevice()->GetCustomHeapProperties(0, D3D12_HEAP_TYPE_DEFAULT);
+
+        D3D_NOT_FAILED(deviceDX12.GetDevice()->CreateCommittedResource(&defaultProperties, D3D12_HEAP_FLAG_NONE, &textureDesc, D3D12_RESOURCE_STATE_RENDER_TARGET, &clearValue, IID_PPV_ARGS(&buffers[i])));
+        buffers[i]->SetName(L"Render target.");
+
+        bufferHandles[i] = { SIZE_T(INT64(renderTargetViewDescriptorHeaps[i]->GetCPUDescriptorHandleForHeapStart().ptr)) };
+        deviceDX12.GetDevice()->CreateRenderTargetView(buffers[i], nullptr, bufferHandles[i]);
+    }
+
+    void RenderTarget::CreateDepthBuffer(size_t width, size_t height)
+    {
+        D3D12_RESOURCE_DESC depthBufferDescription = CreateTextureDescription(DXGI_FORMAT_D24_UNORM_S8_UINT, D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL);
+        D3D12_CLEAR_VALUE clearValue = CreateClearValue(depthBufferDescription);
+        D3D12_HEAP_PROPERTIES defaultHeapProperties = deviceDX12.GetDevice()->GetCustomHeapProperties(0, D3D12_HEAP_TYPE_DEFAULT);
+
+        D3D_NOT_FAILED(deviceDX12.GetDevice()->CreateCommittedResource(&defaultHeapProperties, D3D12_HEAP_FLAG_NONE, &depthBufferDescription, D3D12_RESOURCE_STATE_COMMON, &clearValue, IID_PPV_ARGS(&depthStencilBuffer)));
+        depthStencilBuffer->SetName(L"Depth stencil buffer.");
+
+        D3D12_DESCRIPTOR_HEAP_DESC heapDescription;
+        heapDescription.Type = D3D12_DESCRIPTOR_HEAP_TYPE::D3D12_DESCRIPTOR_HEAP_TYPE_DSV;
+        heapDescription.NumDescriptors = 1;
+        heapDescription.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+        heapDescription.NodeMask = 0;
+
+        D3D_NOT_FAILED(deviceDX12.GetDevice()->CreateDescriptorHeap(&heapDescription, IID_PPV_ARGS(&depthStencilViewDescriptorHeap)));
+
+        depthBufferHandle = D3D12_CPU_DESCRIPTOR_HANDLE(depthStencilViewDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
+        deviceDX12.GetDevice()->CreateDepthStencilView(depthStencilBuffer, nullptr, depthBufferHandle);
+
+        deviceDX12.GetQueue().AddBarrierToList(depthStencilBuffer, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_DEPTH_WRITE);
+        deviceDX12.GetQueue().Execute();
+    }
+
+    D3D12_CLEAR_VALUE RenderTarget::CreateClearValue(D3D12_RESOURCE_DESC textureDescription)
+    {
+        D3D12_CLEAR_VALUE clearValue = {};
+        clearValue.Format = textureDescription.Format;
+
+        if (textureDescription.Flags & D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL)
+        {
+            clearValue.DepthStencil.Depth = 1.0f;
+            clearValue.DepthStencil.Stencil = 0;
+        }
+        else
+        {
+            std::copy(clearColor, clearColor + 4, clearValue.Color);
+        }
+
+        return clearValue;
+    }
+
+    D3D12_RESOURCE_DESC RenderTarget::CreateTextureDescription(DXGI_FORMAT format, D3D12_RESOURCE_FLAGS flags)
+    {
+        D3D12_RESOURCE_DESC textureDesc = {};
+        textureDesc.Format = format;
+        textureDesc.Flags = flags;
+
+        textureDesc.Alignment = 0;
+        textureDesc.MipLevels = 1;
+        textureDesc.Width = static_cast<UINT64>(targetWidth);
+        textureDesc.Height = static_cast<UINT>(targetHeight);
+        textureDesc.DepthOrArraySize = 1;
+        textureDesc.SampleDesc.Count = 1;
+        textureDesc.SampleDesc.Quality = 0;
+        textureDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+        textureDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+        return textureDesc;
+    }
 }
