@@ -8,6 +8,9 @@
 
 namespace Renderer
 {
+    constexpr UINT NumberOfConstantStructs = UINT(1);
+    constexpr UINT NumberOfGBufferTextures = UINT(3);
+
     struct RendererDX12Context
     {
         RendererDX12Context(const Scene& scene, const Texture& texture, const std::wstring& shaderPath, const DeviceDX12& device)
@@ -26,10 +29,9 @@ namespace Renderer
             }
 
             // rendering
-            const UINT numberOfConstantStructs = UINT(1);
-            const UINT numberOfTextures = UINT(allMaterials.size() + 1); // add one extra texture for 0 texture case to even work, and we can use that as an error texture in the future
+            const UINT numberOfTextures = UINT(allMaterials.size() + 1);
 
-            rootDescriptorHeap = CreateRootDescriptorHeap(numberOfConstantStructs + numberOfTextures);
+            rootDescriptorHeap = CreateRootDescriptorHeap(NumberOfConstantStructs + numberOfTextures + NumberOfGBufferTextures);
 
             // Constant buffer
             D3D12_RESOURCE_DESC uploadBufferDescription;
@@ -59,11 +61,12 @@ namespace Renderer
             deviceDX12.GetDevice()->CreateConstantBufferView(&constantBufferViewDescription, rootDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
 
             // root signature
-            rootSignature = CreateRootSignature(numberOfConstantStructs, numberOfTextures);
+            rootSignature = CreateRootSignature(numberOfTextures);
 
             // pso
             gbufferPSO = CreatePSO(shaderPath + L"gbuffer.hlsl"); // todo.pavelza: should be destroyed somehow?
             noCullingGbufferPso = CreatePSO(shaderPath + L"gbuffer.hlsl", D3D12_CULL_MODE_NONE); // todo.pavelza: should be destroyed somehow?
+            finalImagePSO = CreatePSO(shaderPath + L"default.hlsl");
 
             // queue
             deviceDX12.GetQueue().SetCurrentPipelineStateObject(gbufferPSO);
@@ -71,7 +74,8 @@ namespace Renderer
             // move constant buffer into correct state
             deviceDX12.GetQueue().AddBarrierToList(constantBuffer, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_GENERIC_READ);
 
-            gBuffer = new RenderTarget(deviceDX12, texture.GetWidth(), texture.GetHeight(), RenderTarget::Type::GBuffer);
+            gBuffer = new RenderTarget(deviceDX12, rootDescriptorHeap, texture.GetWidth(), texture.GetHeight(), RenderTarget::Type::GBuffer);
+            finalImage = new RenderTarget(deviceDX12, rootDescriptorHeap, texture.GetWidth(), texture.GetHeight(), RenderTarget::Type::FinalImage);
 
             // upload static geometry
             std::vector<XVertex> vertexData;
@@ -93,6 +97,19 @@ namespace Renderer
                 totalMaterials += model.materials.size();
             }
 
+            // deferred rendering quad
+            vertexData.push_back(XVertex({ DirectX::XMFLOAT3(-1, -1, 0), DirectX::XMFLOAT2(0, 0), DirectX::XMFLOAT3(0, 0, 0), DirectX::XMFLOAT3(0, 0, 0), -1 }));
+            uint16_t lowLeftIndex = static_cast<uint16_t>(vertexData.size() - 1);
+
+            vertexData.push_back(XVertex({ DirectX::XMFLOAT3(-1,  1, 0), DirectX::XMFLOAT2(0, 1), DirectX::XMFLOAT3(0, 0, 0), DirectX::XMFLOAT3(0, 0, 0), -1 }));
+            uint16_t upLeftIndex = static_cast<uint16_t>(vertexData.size() - 1);
+
+            vertexData.push_back(XVertex({ DirectX::XMFLOAT3( 1,  1, 0), DirectX::XMFLOAT2(1, 1), DirectX::XMFLOAT3(0, 0, 0), DirectX::XMFLOAT3(0, 0, 0), -1 }));
+            uint16_t upRightIndex = static_cast<uint16_t>(vertexData.size() - 1);
+
+            vertexData.push_back(XVertex({ DirectX::XMFLOAT3(-1,  1, 0), DirectX::XMFLOAT2(1, 0), DirectX::XMFLOAT3(0, 0, 0), DirectX::XMFLOAT3(0, 0, 0), -1 }));
+            uint16_t lowRightIndex = static_cast<uint16_t>(vertexData.size() - 1);
+
             vertexBufferView = UploadDataToGPU<XVertex, D3D12_VERTEX_BUFFER_VIEW>(vertexData);
 
             std::vector<std::uint16_t> indexData;
@@ -103,6 +120,14 @@ namespace Renderer
                     indexData.push_back(static_cast<uint16_t>(i));
                 }
             }
+
+            indexData.push_back(lowLeftIndex);
+            indexData.push_back(upLeftIndex);
+            indexData.push_back(lowRightIndex);
+
+            indexData.push_back(upLeftIndex);
+            indexData.push_back(upRightIndex);
+            indexData.push_back(lowRightIndex);
 
             indexBufferView = UploadDataToGPU<uint16_t, D3D12_INDEX_BUFFER_VIEW>(indexData);
 
@@ -168,18 +193,18 @@ namespace Renderer
             constantBuffer->Unmap(0, nullptr);
         }
 
-        ID3D12RootSignature* CreateRootSignature(UINT numberOfConstantStructs, UINT numberOfTextures)
+        ID3D12RootSignature* CreateRootSignature(UINT numberOfTextures)
         {
             D3D12_DESCRIPTOR_RANGE constantBufferDescriptorRange;
             constantBufferDescriptorRange.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_CBV;
-            constantBufferDescriptorRange.NumDescriptors = numberOfConstantStructs;
+            constantBufferDescriptorRange.NumDescriptors = NumberOfConstantStructs;
             constantBufferDescriptorRange.BaseShaderRegister = 0;
             constantBufferDescriptorRange.RegisterSpace = 0;
             constantBufferDescriptorRange.OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
             D3D12_DESCRIPTOR_RANGE textureDescriptorRange;
             textureDescriptorRange.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
-            textureDescriptorRange.NumDescriptors = numberOfTextures;
+            textureDescriptorRange.NumDescriptors = numberOfTextures + NumberOfGBufferTextures;
             textureDescriptorRange.BaseShaderRegister = 0;
             textureDescriptorRange.RegisterSpace = 0;
             textureDescriptorRange.OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
@@ -514,8 +539,14 @@ namespace Renderer
             srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
             srvDesc.Texture2D.MipLevels = 1;
 
-            D3D12_CPU_DESCRIPTOR_HANDLE secondConstantBufferHandle{ SIZE_T(INT64(rootDescriptorHeap->GetCPUDescriptorHandleForHeapStart().ptr) + INT64(deviceDX12.GetDevice()->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV) * (index + 1))) };
-            deviceDX12.GetDevice()->CreateShaderResourceView(dataBuffer, &srvDesc, secondConstantBufferHandle);
+            D3D12_CPU_DESCRIPTOR_HANDLE textureHandle = GetRootDescriptorHeapTextureHandle(index + NumberOfGBufferTextures);
+            deviceDX12.GetDevice()->CreateShaderResourceView(dataBuffer, &srvDesc, textureHandle);
+        }
+
+        D3D12_CPU_DESCRIPTOR_HANDLE GetRootDescriptorHeapTextureHandle(int32_t index)
+        {
+            // duplicates in render target
+            return { SIZE_T(INT64(rootDescriptorHeap->GetCPUDescriptorHandleForHeapStart().ptr) + INT64(deviceDX12.GetDevice()->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV) * (index + NumberOfConstantStructs))) };
         }
 
         bool DownloadTextureFromGPU(ID3D12Resource* dataBuffer, Texture& texture)
@@ -656,7 +687,11 @@ namespace Renderer
                 const Model& model = scene.models[i];
                 size_t indexCount = model.indices.size();
 
-                if (!model.backfaceCulling)
+                if (model.backfaceCulling) // todo: sort to minimize switches?
+                {
+                    deviceDX12.GetQueue().SetCurrentPipelineStateObject(gbufferPSO);
+                }
+                else
                 {
                     deviceDX12.GetQueue().SetCurrentPipelineStateObject(noCullingGbufferPso);
                 }
@@ -666,15 +701,18 @@ namespace Renderer
                 lastIndex += indexCount;
             }
 
-            deviceDX12.GetQueue().SetCurrentPipelineStateObject(gbufferPSO);
+            deviceDX12.GetQueue().SetCurrentPipelineStateObject(finalImagePSO);
+            deviceDX12.GetQueue().GetList()->DrawIndexedInstanced((UINT)6, 1, (UINT)lastIndex, (INT)lastVertex, 0);
+
             deviceDX12.GetQueue().Execute();
 
-            NOT_FAILED(DownloadTextureFromGPU(gBuffer->GetBuffer(2), output), false);
+            NOT_FAILED(DownloadTextureFromGPU(finalImage->GetBuffer(0), output), false);
 
             return true;
         }
 
         RenderTarget* gBuffer = nullptr;
+        RenderTarget* finalImage = nullptr;
 
         ID3D12DescriptorHeap* rootDescriptorHeap = nullptr;
 
@@ -686,6 +724,8 @@ namespace Renderer
 
         ID3D12PipelineState* gbufferPSO = nullptr; // todo.pavelza: should be destroyed somehow?
         ID3D12PipelineState* noCullingGbufferPso = nullptr; // todo.pavelza: should be destroyed somehow?
+        ID3D12PipelineState* finalImagePSO = nullptr; // todo.pavelza: should be destroyed somehow?
+
 
         const DeviceDX12& deviceDX12;
         const Scene& scene;

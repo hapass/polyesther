@@ -174,6 +174,29 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
                     scene.camera.pitch,
                     scene.camera.yaw
                 );
+                ImGui::Separator();
+
+                ImGui::Text("Show: ");
+
+                if (ImGui::SmallButton("Final image"))
+                {
+                    scene.debugContext.DisplayedGBufferTextureIndex = -1;
+                }
+
+                if (ImGui::SmallButton("View space positions"))
+                {
+                    scene.debugContext.DisplayedGBufferTextureIndex = 0;
+                }
+
+                if (ImGui::SmallButton("View space normals"))
+                {
+                    scene.debugContext.DisplayedGBufferTextureIndex = 1;
+                }
+
+                if (ImGui::SmallButton("Diffuse"))
+                {
+                    scene.debugContext.DisplayedGBufferTextureIndex = 2;
+                }
 
                 if (ImGui::IsKeyPressed(ImGuiKey::ImGuiKey_R))
                 {

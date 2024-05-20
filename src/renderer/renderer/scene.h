@@ -54,8 +54,14 @@ namespace Renderer
         const Vec left { -1.0f, 0.0f, 0.0f, 0.0f };
     };
 
+    struct DebugContext
+    {
+        int32_t DisplayedGBufferTextureIndex = -1;
+    };
+
     struct Scene
     {
+        DebugContext debugContext;
         Light light;
         Camera camera;
         std::vector<Model> models;

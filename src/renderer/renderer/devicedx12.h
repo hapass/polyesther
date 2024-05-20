@@ -59,7 +59,7 @@ namespace Renderer
             FinalImage
         };
 
-        RenderTarget(const DeviceDX12& device, size_t width, size_t height, Type type);
+        RenderTarget(const DeviceDX12& device, ID3D12DescriptorHeap* srvDescriptorHeap, size_t width, size_t height, Type type);
 
         RenderTarget(const RenderTarget& other) = delete;
         RenderTarget(RenderTarget&& other) noexcept = delete;
@@ -83,11 +83,14 @@ namespace Renderer
 
         ID3D12Resource* depthStencilBuffer = nullptr;
         ID3D12DescriptorHeap* depthStencilViewDescriptorHeap = nullptr;
+        ID3D12DescriptorHeap* rootDescriptorHeap = nullptr;
         D3D12_CPU_DESCRIPTOR_HANDLE depthBufferHandle{};
 
-        std::vector<ID3D12Resource*> buffers;
-        std::vector<ID3D12DescriptorHeap*> renderTargetViewDescriptorHeaps;
-        std::vector<D3D12_CPU_DESCRIPTOR_HANDLE> bufferHandles;
+
+        std::vector<ID3D12Resource*> renderTargets;
+        std::vector<ID3D12DescriptorHeap*> rtvDescriptorHeaps;
+        std::vector<D3D12_CPU_DESCRIPTOR_HANDLE> rtvHandles;
+        std::vector<D3D12_CPU_DESCRIPTOR_HANDLE> srvHandles;
 
         FLOAT clearColor[4] = { 0.0f, 0.f, 0.f, 1.000000000f };
         Type bufferType;

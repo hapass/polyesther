@@ -54,8 +54,11 @@ namespace Renderer
 
     void GraphicsQueue::SetCurrentPipelineStateObject(ID3D12PipelineState* pso)
     {
-        currentPSO = pso;
-        commandList->SetPipelineState(pso);
+        if (pso != currentPSO)
+        {
+            currentPSO = pso;
+            commandList->SetPipelineState(pso);
+        }
     }
 
     void GraphicsQueue::Execute()
@@ -111,16 +114,18 @@ namespace Renderer
         return device;
     }
 
-    RenderTarget::RenderTarget(const DeviceDX12& device, size_t width, size_t height, Type type)
+    RenderTarget::RenderTarget(const DeviceDX12& device, ID3D12DescriptorHeap* srvDescriptorHeap, size_t width, size_t height, Type type)
         : deviceDX12(device)
         , bufferType(type)
         , targetWidth(width)
         , targetHeight(height)
+        , rootDescriptorHeap(srvDescriptorHeap)
     {
         size_t numBuffers = bufferType == Type::GBuffer ? 3 : 1;
-        buffers.resize(numBuffers);
-        renderTargetViewDescriptorHeaps.resize(numBuffers);
-        bufferHandles.resize(numBuffers);
+        renderTargets.resize(numBuffers);
+        rtvDescriptorHeaps.resize(numBuffers);
+        rtvHandles.resize(numBuffers);
+        srvHandles.resize(numBuffers);
 
         for (size_t i = 0; i < numBuffers; i++)
         {
@@ -134,11 +139,11 @@ namespace Renderer
         depthStencilBuffer->Release();
         depthStencilViewDescriptorHeap->Release();
 
-        for (ID3D12Resource* resource : buffers)
+        for (ID3D12Resource* resource : renderTargets)
         {
             resource->Release();
         }
-        for (ID3D12DescriptorHeap* heap : renderTargetViewDescriptorHeaps)
+        for (ID3D12DescriptorHeap* heap : rtvDescriptorHeaps)
         {
             heap->Release();
         }
@@ -146,24 +151,24 @@ namespace Renderer
 
     void RenderTarget::ClearAndSetRenderTargets(GraphicsQueue& queue)
     {
-        for (size_t i = 0; i < bufferHandles.size(); i++)
+        for (size_t i = 0; i < rtvHandles.size(); i++)
         {
-            queue.GetList()->ClearRenderTargetView(bufferHandles[i], clearColor, 0, nullptr);
+            queue.GetList()->ClearRenderTargetView(rtvHandles[i], clearColor, 0, nullptr);
         }
         queue.GetList()->ClearDepthStencilView(depthBufferHandle, D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, 1.0f, 0, 0, nullptr);
-        queue.GetList()->OMSetRenderTargets(bufferHandles.size(), bufferHandles.data(), false, &depthBufferHandle);
+        queue.GetList()->OMSetRenderTargets((UINT)rtvHandles.size(), rtvHandles.data(), false, &depthBufferHandle);
     }
 
     ID3D12Resource* RenderTarget::GetBuffer(size_t i)
     {
-        return buffers[i];
+        return renderTargets[i];
     }
 
     void RenderTarget::CreateBuffer(size_t i, size_t width, size_t height)
     {
-        ASSERT(renderTargetViewDescriptorHeaps.size() >= i);
-        ASSERT(buffers.size() >= 0);
-        ASSERT(bufferHandles.size() >= 0);
+        ASSERT(rtvDescriptorHeaps.size() >= i);
+        ASSERT(renderTargets.size() >= 0);
+        ASSERT(rtvHandles.size() >= 0);
 
         D3D12_DESCRIPTOR_HEAP_DESC heapDescription;
         heapDescription.Type = D3D12_DESCRIPTOR_HEAP_TYPE::D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
@@ -171,17 +176,26 @@ namespace Renderer
         heapDescription.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
         heapDescription.NodeMask = 0;
 
-        D3D_NOT_FAILED(deviceDX12.GetDevice()->CreateDescriptorHeap(&heapDescription, IID_PPV_ARGS(&renderTargetViewDescriptorHeaps[i])));
+        D3D_NOT_FAILED(deviceDX12.GetDevice()->CreateDescriptorHeap(&heapDescription, IID_PPV_ARGS(&rtvDescriptorHeaps[i])));
 
         D3D12_RESOURCE_DESC textureDesc = CreateTextureDescription(DXGI_FORMAT_R8G8B8A8_UNORM, D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET);
         D3D12_CLEAR_VALUE clearValue = CreateClearValue(textureDesc);
         D3D12_HEAP_PROPERTIES defaultProperties = deviceDX12.GetDevice()->GetCustomHeapProperties(0, D3D12_HEAP_TYPE_DEFAULT);
 
-        D3D_NOT_FAILED(deviceDX12.GetDevice()->CreateCommittedResource(&defaultProperties, D3D12_HEAP_FLAG_NONE, &textureDesc, D3D12_RESOURCE_STATE_RENDER_TARGET, &clearValue, IID_PPV_ARGS(&buffers[i])));
-        buffers[i]->SetName(L"Render target.");
+        D3D_NOT_FAILED(deviceDX12.GetDevice()->CreateCommittedResource(&defaultProperties, D3D12_HEAP_FLAG_NONE, &textureDesc, D3D12_RESOURCE_STATE_RENDER_TARGET, &clearValue, IID_PPV_ARGS(&renderTargets[i])));
+        renderTargets[i]->SetName(L"Render target.");
 
-        bufferHandles[i] = { SIZE_T(INT64(renderTargetViewDescriptorHeaps[i]->GetCPUDescriptorHandleForHeapStart().ptr)) };
-        deviceDX12.GetDevice()->CreateRenderTargetView(buffers[i], nullptr, bufferHandles[i]);
+        rtvHandles[i] = { SIZE_T(INT64(rtvDescriptorHeaps[i]->GetCPUDescriptorHandleForHeapStart().ptr)) };
+        deviceDX12.GetDevice()->CreateRenderTargetView(renderTargets[i], nullptr, rtvHandles[i]);
+
+        D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+        srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+        srvDesc.Format = textureDesc.Format;
+        srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+        srvDesc.Texture2D.MipLevels = 1;
+
+        srvHandles[i] = { SIZE_T(INT64(rootDescriptorHeap->GetCPUDescriptorHandleForHeapStart().ptr) + INT64(deviceDX12.GetDevice()->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV) * (i + 1))) };
+        deviceDX12.GetDevice()->CreateShaderResourceView(renderTargets[i], &srvDesc, srvHandles[i]);
     }
 
     void RenderTarget::CreateDepthBuffer(size_t width, size_t height)
