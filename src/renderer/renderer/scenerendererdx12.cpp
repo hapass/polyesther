@@ -64,9 +64,9 @@ namespace Renderer
             rootSignature = CreateRootSignature(numberOfTextures);
 
             // pso
-            gbufferPSO = CreatePSO(shaderPath + L"gbuffer.hlsl"); // todo.pavelza: should be destroyed somehow?
-            noCullingGbufferPso = CreatePSO(shaderPath + L"gbuffer.hlsl", D3D12_CULL_MODE_NONE); // todo.pavelza: should be destroyed somehow?
-            finalImagePSO = CreatePSO(shaderPath + L"default.hlsl");
+            gbufferPSO = CreatePSO(shaderPath + L"gbuffer.hlsl", D3D12_CULL_MODE_BACK, 3); // todo.pavelza: should be destroyed somehow?
+            noCullingGbufferPso = CreatePSO(shaderPath + L"gbuffer.hlsl", D3D12_CULL_MODE_NONE, 3); // todo.pavelza: should be destroyed somehow?
+            finalImagePSO = CreatePSO(shaderPath + L"default.hlsl", D3D12_CULL_MODE_NONE, 1);
 
             // queue
             deviceDX12.GetQueue().SetCurrentPipelineStateObject(gbufferPSO);
@@ -248,7 +248,7 @@ namespace Renderer
             return result;
         }
 
-        ID3D12PipelineState* CreatePSO(const std::wstring& shaderPath, D3D12_CULL_MODE cullMode = D3D12_CULL_MODE::D3D12_CULL_MODE_BACK)
+        ID3D12PipelineState* CreatePSO(const std::wstring& shaderPath, D3D12_CULL_MODE cullMode = D3D12_CULL_MODE::D3D12_CULL_MODE_BACK, int32_t numRenderTargets = 1)
         {
             UINT flags = D3DCOMPILE_ENABLE_UNBOUNDED_DESCRIPTOR_TABLES;
 
@@ -362,8 +362,13 @@ namespace Renderer
 
             psoDescription.SampleMask = UINT_MAX;
             psoDescription.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
-            psoDescription.NumRenderTargets = 1;
-            psoDescription.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
+            psoDescription.NumRenderTargets = numRenderTargets;
+
+            for (UINT i = 0; i < numRenderTargets; ++i)
+            {
+                psoDescription.RTVFormats[i] = DXGI_FORMAT_R8G8B8A8_UNORM;
+            }
+
             psoDescription.SampleDesc.Count = 1;
             psoDescription.SampleDesc.Quality = 0;
             psoDescription.DSVFormat = DXGI_FORMAT_D24_UNORM_S8_UINT;
@@ -701,12 +706,16 @@ namespace Renderer
                 lastIndex += indexCount;
             }
 
+            deviceDX12.GetQueue().Execute();
+
+            finalImage->ClearAndSetRenderTargets(deviceDX12.GetQueue()); // should set everything after execute
+
             deviceDX12.GetQueue().SetCurrentPipelineStateObject(finalImagePSO);
             deviceDX12.GetQueue().GetList()->DrawIndexedInstanced((UINT)6, 1, (UINT)lastIndex, (INT)lastVertex, 0);
 
             deviceDX12.GetQueue().Execute();
 
-            NOT_FAILED(DownloadTextureFromGPU(finalImage->GetBuffer(0), output), false);
+            NOT_FAILED(DownloadTextureFromGPU(gBuffer->GetBuffer(2), output), false); // TEXTURES failure
 
             return true;
         }
