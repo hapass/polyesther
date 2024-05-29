@@ -9,7 +9,7 @@
 namespace Renderer
 {
     constexpr UINT NumberOfConstantStructs = UINT(1);
-    constexpr UINT NumberOfGBufferTextures = UINT(3);
+    constexpr UINT NumberOfGBufferTextures = UINT(4);
 
     struct RendererDX12Context
     {
@@ -90,7 +90,7 @@ namespace Renderer
                             DirectX::XMFLOAT2(vert.textureCoord.x, vert.textureCoord.y),
                             DirectX::XMFLOAT3(vert.normal.x, vert.normal.y, vert.normal.z),
                             DirectX::XMFLOAT3(vert.color.GetVec().x, vert.color.GetVec().y, vert.color.GetVec().z),
-                            vert.materialId == -1 ? -1 : INT(totalMaterials + vert.materialId)
+                            vert.materialId == -1 ? -1 : INT(totalMaterials + vert.materialId + NumberOfGBufferTextures)
                             })
                     );
                 }
@@ -708,14 +708,29 @@ namespace Renderer
 
             deviceDX12.GetQueue().Execute();
 
-            finalImage->ClearAndSetRenderTargets(deviceDX12.GetQueue()); // should set everything after execute
+            // draw lighting
+
+            deviceDX12.GetQueue().GetList()->RSSetViewports(1, &viewport);
+            deviceDX12.GetQueue().GetList()->RSSetScissorRects(1, &scissor);
+
+            finalImage->ClearAndSetRenderTargets(deviceDX12.GetQueue());
+
+            deviceDX12.GetQueue().GetList()->SetDescriptorHeaps(1, descriptorHeaps);
+            deviceDX12.GetQueue().GetList()->SetGraphicsRootSignature(rootSignature);
+
+            deviceDX12.GetQueue().GetList()->IASetVertexBuffers(0, 1, &vertexBufferView);
+            deviceDX12.GetQueue().GetList()->IASetIndexBuffer(&indexBufferView);
+
+            deviceDX12.GetQueue().GetList()->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+            deviceDX12.GetQueue().GetList()->SetGraphicsRootDescriptorTable(0, rootDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
 
             deviceDX12.GetQueue().SetCurrentPipelineStateObject(finalImagePSO);
             deviceDX12.GetQueue().GetList()->DrawIndexedInstanced((UINT)6, 1, (UINT)lastIndex, (INT)lastVertex, 0);
 
             deviceDX12.GetQueue().Execute();
 
-            NOT_FAILED(DownloadTextureFromGPU(gBuffer->GetBuffer(2), output), false); // TEXTURES failure
+            NOT_FAILED(DownloadTextureFromGPU(finalImage->GetBuffer(0), output), false);
 
             return true;
         }
