@@ -104,10 +104,10 @@ namespace Renderer
             vertexData.push_back(XVertex({ DirectX::XMFLOAT3(-1,  1, 0), DirectX::XMFLOAT2(0, 1), DirectX::XMFLOAT3(0, 0, 0), DirectX::XMFLOAT3(0, 0, 0), -1 }));
             uint16_t upLeftIndex = static_cast<uint16_t>(vertexData.size() - 1);
 
-            vertexData.push_back(XVertex({ DirectX::XMFLOAT3( 1,  1, 0), DirectX::XMFLOAT2(1, 1), DirectX::XMFLOAT3(0, 0, 0), DirectX::XMFLOAT3(0, 0, 0), -1 }));
+            vertexData.push_back(XVertex({ DirectX::XMFLOAT3(1,  1, 0), DirectX::XMFLOAT2(1, 1), DirectX::XMFLOAT3(0, 0, 0), DirectX::XMFLOAT3(0, 0, 0), -1 }));
             uint16_t upRightIndex = static_cast<uint16_t>(vertexData.size() - 1);
 
-            vertexData.push_back(XVertex({ DirectX::XMFLOAT3(-1,  1, 0), DirectX::XMFLOAT2(1, 0), DirectX::XMFLOAT3(0, 0, 0), DirectX::XMFLOAT3(0, 0, 0), -1 }));
+            vertexData.push_back(XVertex({ DirectX::XMFLOAT3(1,  -1, 0), DirectX::XMFLOAT2(1, 0), DirectX::XMFLOAT3(0, 0, 0), DirectX::XMFLOAT3(0, 0, 0), -1 }));
             uint16_t lowRightIndex = static_cast<uint16_t>(vertexData.size() - 1);
 
             vertexBufferView = UploadDataToGPU<XVertex, D3D12_VERTEX_BUFFER_VIEW>(vertexData);
@@ -726,7 +726,7 @@ namespace Renderer
             deviceDX12.GetQueue().GetList()->SetGraphicsRootDescriptorTable(0, rootDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
 
             deviceDX12.GetQueue().SetCurrentPipelineStateObject(finalImagePSO);
-            deviceDX12.GetQueue().GetList()->DrawIndexedInstanced((UINT)6, 1, (UINT)lastIndex, (INT)lastVertex, 0);
+            deviceDX12.GetQueue().GetList()->DrawIndexedInstanced((UINT)6, 1, (UINT)lastIndex, (INT)0, 0);
 
             deviceDX12.GetQueue().Execute();
 

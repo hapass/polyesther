@@ -183,7 +183,15 @@ namespace Renderer
         D3D12_HEAP_PROPERTIES defaultProperties = deviceDX12.GetDevice()->GetCustomHeapProperties(0, D3D12_HEAP_TYPE_DEFAULT);
 
         D3D_NOT_FAILED(deviceDX12.GetDevice()->CreateCommittedResource(&defaultProperties, D3D12_HEAP_FLAG_NONE, &textureDesc, D3D12_RESOURCE_STATE_RENDER_TARGET, &clearValue, IID_PPV_ARGS(&renderTargets[i])));
-        renderTargets[i]->SetName(L"Render target.");
+        
+        if (bufferType == FinalImage)
+        {
+            renderTargets[i]->SetName(L"Final image.");
+        }
+        else
+        {
+            renderTargets[i]->SetName((L"GBuffer: " + std::to_wstring(i)).c_str());
+        }
 
         rtvHandles[i] = { SIZE_T(INT64(rtvDescriptorHeaps[i]->GetCPUDescriptorHandleForHeapStart().ptr)) };
         deviceDX12.GetDevice()->CreateRenderTargetView(renderTargets[i], nullptr, rtvHandles[i]);
