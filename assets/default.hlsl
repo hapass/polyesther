@@ -35,9 +35,9 @@ VertexOut VS(VertexIn vin)
 
 float4 PS(VertexOut pin) : SV_Target
 {
-    float4 pos_view = g_texture[0].Sample(g_sampler, pin.TexCoord);
+    float4 pos_view = g_texture[1].Sample(g_sampler, pin.TexCoord);
 
-    float4 normal_vec = g_texture[1].Sample(g_sampler, pin.TexCoord);
+    float4 normal_vec = g_texture[2].Sample(g_sampler, pin.TexCoord);
     float4 light_vec = normalize(gLightPos - pos_view);
 
     float4 light_color = { 1.0f, 1.0f, 1.0f, 1.0f };
@@ -52,7 +52,7 @@ float4 PS(VertexOut pin) : SV_Target
     float specAmount = max(dot(normalize(pos_view), reflect(light_vec, normal_vec)), 0.0f);
     float4 specular = light_color * pow(specAmount, specularShininess) * specularStrength;
 
-    float4 frag_color = g_texture[2].Sample(g_sampler, pin.TexCoord);
+    float4 frag_color = g_texture[3].Sample(g_sampler, pin.TexCoord);
     float4 res = (diffuse + ambient + specular) * frag_color;
     res.w = 1.0f; // fix the alpha being affected by light, noticable only in tests, because in application we correct alpha manually when copying to backbuffer 
     return clamp(res, 0.0f, 1.0f);
