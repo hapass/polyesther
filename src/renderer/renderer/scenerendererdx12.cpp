@@ -129,7 +129,6 @@ namespace Renderer
             indexData.push_back(lowRightIndex);
             indexData.push_back(upRightIndex);
 
-
             indexBufferView = UploadDataToGPU<uint16_t, D3D12_INDEX_BUFFER_VIEW>(indexData);
 
             size_t totalIndex = 0;

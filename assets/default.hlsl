@@ -28,7 +28,7 @@ VertexOut VS(VertexIn vin)
     VertexOut vout;
 
     vout.PosH = float4(vin.PosL, 1.0f);
-    vout.TexCoord = vin.TexCoord;
+    vout.TexCoord = float2(vin.TexCoord.x, 1 - vin.TexCoord.y);
 
     return vout;
 }
