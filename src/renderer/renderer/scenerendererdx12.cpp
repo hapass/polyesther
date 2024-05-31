@@ -66,7 +66,7 @@ namespace Renderer
             // pso
             gbufferPSO = CreatePSO(shaderPath + L"gbuffer.hlsl", D3D12_CULL_MODE_BACK, 3); // todo.pavelza: should be destroyed somehow?
             noCullingGbufferPso = CreatePSO(shaderPath + L"gbuffer.hlsl", D3D12_CULL_MODE_NONE, 3); // todo.pavelza: should be destroyed somehow?
-            finalImagePSO = CreatePSO(shaderPath + L"default.hlsl", D3D12_CULL_MODE_NONE, 1);
+            finalImagePSO = CreatePSO(shaderPath + L"default.hlsl", D3D12_CULL_MODE_BACK, 1);
 
             // queue
             deviceDX12.GetQueue().SetCurrentPipelineStateObject(gbufferPSO);
@@ -122,12 +122,13 @@ namespace Renderer
             }
 
             indexData.push_back(lowLeftIndex);
-            indexData.push_back(upLeftIndex);
             indexData.push_back(lowRightIndex);
+            indexData.push_back(upLeftIndex);
 
             indexData.push_back(upLeftIndex);
-            indexData.push_back(upRightIndex);
             indexData.push_back(lowRightIndex);
+            indexData.push_back(upRightIndex);
+
 
             indexBufferView = UploadDataToGPU<uint16_t, D3D12_INDEX_BUFFER_VIEW>(indexData);
 
