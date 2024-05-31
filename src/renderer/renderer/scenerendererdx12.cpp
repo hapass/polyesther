@@ -366,7 +366,7 @@ namespace Renderer
 
             for (UINT i = 0; i < numRenderTargets; ++i)
             {
-                psoDescription.RTVFormats[i] = DXGI_FORMAT_R8G8B8A8_UNORM;
+                psoDescription.RTVFormats[i] = numRenderTargets == 3 ? DXGI_FORMAT_R32G32B32A32_FLOAT : DXGI_FORMAT_R8G8B8A8_UNORM;
             }
 
             psoDescription.SampleDesc.Count = 1;

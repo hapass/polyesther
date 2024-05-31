@@ -178,7 +178,10 @@ namespace Renderer
 
         D3D_NOT_FAILED(deviceDX12.GetDevice()->CreateDescriptorHeap(&heapDescription, IID_PPV_ARGS(&rtvDescriptorHeaps[i])));
 
-        D3D12_RESOURCE_DESC textureDesc = CreateTextureDescription(DXGI_FORMAT_R8G8B8A8_UNORM, D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET);
+
+        DXGI_FORMAT format = bufferType == GBuffer ? DXGI_FORMAT_R32G32B32A32_FLOAT : DXGI_FORMAT_R8G8B8A8_UNORM;
+
+        D3D12_RESOURCE_DESC textureDesc = CreateTextureDescription(format, D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET);
         D3D12_CLEAR_VALUE clearValue = CreateClearValue(textureDesc);
         D3D12_HEAP_PROPERTIES defaultProperties = deviceDX12.GetDevice()->GetCustomHeapProperties(0, D3D12_HEAP_TYPE_DEFAULT);
 
