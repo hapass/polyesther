@@ -287,4 +287,35 @@ namespace Tests
             Assert::AreEqual(0u, differentPixels);
         }
     };
+
+    TEST_CLASS(SigParser)
+    {
+        TEST_METHOD(SigParserShouldParseSigCorrectly)
+        {
+            Renderer::SigDefinition definition;
+            bool success = Renderer::Load(AssetsDir + "signature.sig", definition);
+
+            Assert::IsTrue(std::get<0>(definition.constants[0]) == "gWorldViewProj");
+            Assert::IsTrue(std::get<0>(definition.constants[1]) == "gWorldView");
+            Assert::IsTrue(std::get<0>(definition.constants[2]) == "gLightPos");
+
+            Assert::IsTrue(std::get<1>(definition.constants[0]) == "float4x4");
+            Assert::IsTrue(std::get<1>(definition.constants[1]) == "float4x4");
+            Assert::IsTrue(std::get<1>(definition.constants[2]) == "float4");
+
+            Assert::IsTrue(std::get<0>(definition.vertex[0]) == "POSITION");
+            Assert::IsTrue(std::get<0>(definition.vertex[1]) == "TEXCOORD");
+            Assert::IsTrue(std::get<0>(definition.vertex[2]) == "NORMALS");
+            Assert::IsTrue(std::get<0>(definition.vertex[3]) == "COLOR");
+            Assert::IsTrue(std::get<0>(definition.vertex[4]) == "TEXINDEX");
+
+            Assert::IsTrue(std::get<1>(definition.vertex[0]) == "DXGI_FORMAT_R32G32B32_FLOAT");
+            Assert::IsTrue(std::get<1>(definition.vertex[1]) == "DXGI_FORMAT_R32G32_FLOAT");
+            Assert::IsTrue(std::get<1>(definition.vertex[2]) == "DXGI_FORMAT_R32G32B32_FLOAT");
+            Assert::IsTrue(std::get<1>(definition.vertex[3]) == "DXGI_FORMAT_R32G32B32_FLOAT");
+            Assert::IsTrue(std::get<1>(definition.vertex[4]) == "DXGI_FORMAT_R32_SINT");
+
+            Assert::IsTrue(success);
+        }
+    };
 }

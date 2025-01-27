@@ -6,10 +6,61 @@
 #include <DirectXMath.h>
 #include <d3dcompiler.h>
 
+// todo: verify if needed
+#include <fstream>
+#include <sstream>
+#include <string>
+#include <tuple>
+#include <map>
+#include <cassert>
+#include <iostream>
+
+
 namespace Renderer
 {
     constexpr UINT NumberOfConstantStructs = UINT(1);
     constexpr UINT NumberOfGBufferTextures = UINT(4);
+
+    struct GPU
+    {
+
+        GPU(const std::wstring& shaderPath)
+        {
+
+        }
+    };
+
+
+    struct PSOBuilder
+    {
+    };
+
+    bool Load(const std::string& path, SigDefinition& definition)
+    {
+        std::fstream sigFile(path);
+
+        std::string definitionType = "none";
+        std::string line;
+        while (std::getline(sigFile, line))
+        {
+            if (line == "constants" || line == "vertex") definitionType = line;
+            else
+            {
+                auto& result = definitionType == "constants" ? definition.constants : definition.vertex;
+                std::stringstream lineStream(line);
+                std::string val, type;
+                if (lineStream >> val && lineStream >> type)
+                {
+                    result.push_back({ val, type });
+                }
+                else
+                {
+                    REPORT_ERROR();
+                }
+            }
+        }
+        return true;
+    }
 
     struct RendererDX12Context
     {
