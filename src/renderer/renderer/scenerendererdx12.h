@@ -14,7 +14,13 @@ namespace Renderer
     
     struct SigDefinition
     {
-        std::vector<std::tuple<std::string, std::string>> vertex;
+        struct VertexAttribute
+        {
+            std::string semanticName;
+            DXGI_FORMAT format;
+        };
+
+        std::vector<VertexAttribute> vertexAttributes;
         std::vector<std::tuple<std::string, std::string>> constants;
     };
 

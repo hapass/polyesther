@@ -293,27 +293,27 @@ namespace Tests
         TEST_METHOD(SigParserShouldParseSigCorrectly)
         {
             Renderer::SigDefinition definition;
-            bool success = Renderer::Load(AssetsDir + "signature.sig", definition);
+            bool success = Renderer::Load(AssetsDir + "default.hlsl", definition);
 
             Assert::IsTrue(std::get<0>(definition.constants[0]) == "gWorldViewProj");
             Assert::IsTrue(std::get<0>(definition.constants[1]) == "gWorldView");
             Assert::IsTrue(std::get<0>(definition.constants[2]) == "gLightPos");
 
-            Assert::IsTrue(std::get<1>(definition.constants[0]) == "float4x4");
-            Assert::IsTrue(std::get<1>(definition.constants[1]) == "float4x4");
-            Assert::IsTrue(std::get<1>(definition.constants[2]) == "float4");
+            Assert::IsTrue(std::get<1>(definition.constants[0]) == "DirectX::XMFLOAT4x4");
+            Assert::IsTrue(std::get<1>(definition.constants[1]) == "DirectX::XMFLOAT4x4");
+            Assert::IsTrue(std::get<1>(definition.constants[2]) == "DirectX::XMFLOAT4");
 
-            Assert::IsTrue(std::get<0>(definition.vertex[0]) == "POSITION");
-            Assert::IsTrue(std::get<0>(definition.vertex[1]) == "TEXCOORD");
-            Assert::IsTrue(std::get<0>(definition.vertex[2]) == "NORMALS");
-            Assert::IsTrue(std::get<0>(definition.vertex[3]) == "COLOR");
-            Assert::IsTrue(std::get<0>(definition.vertex[4]) == "TEXINDEX");
+            Assert::IsTrue(definition.vertexAttributes[0].semanticName == "POSITION");
+            Assert::IsTrue(definition.vertexAttributes[1].semanticName == "TEXCOORD");
+            Assert::IsTrue(definition.vertexAttributes[2].semanticName == "NORMALS");
+            Assert::IsTrue(definition.vertexAttributes[3].semanticName == "COLOR");
+            Assert::IsTrue(definition.vertexAttributes[4].semanticName == "TEXINDEX");
 
-            Assert::IsTrue(std::get<1>(definition.vertex[0]) == "DXGI_FORMAT_R32G32B32_FLOAT");
-            Assert::IsTrue(std::get<1>(definition.vertex[1]) == "DXGI_FORMAT_R32G32_FLOAT");
-            Assert::IsTrue(std::get<1>(definition.vertex[2]) == "DXGI_FORMAT_R32G32B32_FLOAT");
-            Assert::IsTrue(std::get<1>(definition.vertex[3]) == "DXGI_FORMAT_R32G32B32_FLOAT");
-            Assert::IsTrue(std::get<1>(definition.vertex[4]) == "DXGI_FORMAT_R32_SINT");
+            Assert::IsTrue(definition.vertexAttributes[0].format == DXGI_FORMAT_R32G32B32_FLOAT);
+            Assert::IsTrue(definition.vertexAttributes[1].format == DXGI_FORMAT_R32G32_FLOAT);
+            Assert::IsTrue(definition.vertexAttributes[2].format == DXGI_FORMAT_R32G32B32_FLOAT);
+            Assert::IsTrue(definition.vertexAttributes[3].format == DXGI_FORMAT_R32G32B32_FLOAT);
+            Assert::IsTrue(definition.vertexAttributes[4].format == DXGI_FORMAT_R32_SINT);
 
             Assert::IsTrue(success);
         }

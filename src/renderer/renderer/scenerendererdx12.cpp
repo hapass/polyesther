@@ -5,6 +5,7 @@
 #include <d3d12.h>
 #include <DirectXMath.h>
 #include <d3dcompiler.h>
+#include <d3d12shader.h>
 
 // todo: verify if needed
 #include <fstream>
@@ -35,30 +36,166 @@ namespace Renderer
     {
     };
 
+    ID3D12ShaderReflection* CreateShaderReflection(const std::wstring& shaderPath, const std::string& shaderType, const std::string& shaderModel)
+    {
+        UINT flags = D3DCOMPILE_ENABLE_UNBOUNDED_DESCRIPTOR_TABLES;
+        ID3DBlob* blob = nullptr;
+        D3D_NOT_FAILED(D3DCompileFromFile(shaderPath.c_str(), nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE, shaderType.c_str(), shaderModel.c_str(), flags, 0, &blob, nullptr));
+
+        ID3D12ShaderReflection* reflector = nullptr;
+        D3D_NOT_FAILED(D3DReflect(blob->GetBufferPointer(), blob->GetBufferSize(), IID_PPV_ARGS(&reflector)));
+
+        return reflector;
+    }
+
     bool Load(const std::string& path, SigDefinition& definition)
     {
-        std::fstream sigFile(path);
+        std::wstring shaderPath(path.begin(), path.end());
 
-        std::string definitionType = "none";
-        std::string line;
-        while (std::getline(sigFile, line))
+        if (ID3D12ShaderReflection* vertexShaderReflector = CreateShaderReflection(shaderPath, "VS", "vs_5_1"))
         {
-            if (line == "constants" || line == "vertex") definitionType = line;
-            else
+            D3D12_SHADER_DESC shaderDesc;
+            vertexShaderReflector->GetDesc(&shaderDesc);
+
+            for (UINT i = 0; i < shaderDesc.InputParameters; i++)
             {
-                auto& result = definitionType == "constants" ? definition.constants : definition.vertex;
-                std::stringstream lineStream(line);
-                std::string val, type;
-                if (lineStream >> val && lineStream >> type)
+                D3D12_SIGNATURE_PARAMETER_DESC paramDesc;
+                vertexShaderReflector->GetInputParameterDesc(i, &paramDesc);
+
+                int componentCount = 0;
+                if (paramDesc.Mask & 0x1) componentCount++;
+                if (paramDesc.Mask & 0x2) componentCount++;
+                if (paramDesc.Mask & 0x4) componentCount++;
+                if (paramDesc.Mask & 0x8) componentCount++;
+
+                DXGI_FORMAT format = DXGI_FORMAT_UNKNOWN;
+                if (paramDesc.ComponentType == D3D_REGISTER_COMPONENT_FLOAT32)
                 {
-                    result.push_back({ val, type });
+                    switch (componentCount)
+                    {
+                        case 1: format = DXGI_FORMAT_R32_FLOAT; break;
+                        case 2: format = DXGI_FORMAT_R32G32_FLOAT; break;
+                        case 3: format = DXGI_FORMAT_R32G32B32_FLOAT; break;
+                        case 4: format = DXGI_FORMAT_R32G32B32A32_FLOAT; break;
+                    }
                 }
-                else
+                else if (paramDesc.ComponentType == D3D_REGISTER_COMPONENT_UINT32)
                 {
-                    REPORT_ERROR();
+                    switch (componentCount)
+                    {
+                        case 1: format = DXGI_FORMAT_R32_UINT; break;
+                        case 2: format = DXGI_FORMAT_R32G32_UINT; break;
+                        case 3: format = DXGI_FORMAT_R32G32B32_UINT; break;
+                        case 4: format = DXGI_FORMAT_R32G32B32A32_UINT; break;
+                    }
+                }
+                else if (paramDesc.ComponentType == D3D_REGISTER_COMPONENT_SINT32)
+                {
+                    switch (componentCount)
+                    {
+                        case 1: format = DXGI_FORMAT_R32_SINT; break;
+                        case 2: format = DXGI_FORMAT_R32G32_SINT; break;
+                        case 3: format = DXGI_FORMAT_R32G32B32_SINT; break;
+                        case 4: format = DXGI_FORMAT_R32G32B32A32_SINT; break;
+                    }
+                }
+
+                definition.vertexAttributes.push_back({ paramDesc.SemanticName, format });
+            }
+
+            vertexShaderReflector->Release();
+        }
+
+        if (ID3D12ShaderReflection* pixelShaderReflector = CreateShaderReflection(shaderPath, "PS", "ps_5_1"))
+        {
+            D3D12_SHADER_DESC shaderDesc;
+            pixelShaderReflector->GetDesc(&shaderDesc);
+
+            for (UINT i = 0; i < shaderDesc.ConstantBuffers; i++)
+            {
+                ID3D12ShaderReflectionConstantBuffer* constantBuffer = pixelShaderReflector->GetConstantBufferByIndex(i);
+                D3D12_SHADER_BUFFER_DESC bufferDesc;
+                constantBuffer->GetDesc(&bufferDesc);
+
+                for (UINT j = 0; j < bufferDesc.Variables; j++)
+                {
+                    ID3D12ShaderReflectionVariable* variable = constantBuffer->GetVariableByIndex(j);
+                    D3D12_SHADER_VARIABLE_DESC variableDescription;
+                    variable->GetDesc(&variableDescription);
+
+                    ID3D12ShaderReflectionType* type = variable->GetType();
+                    D3D12_SHADER_TYPE_DESC typeDescription;
+                    type->GetDesc(&typeDescription);
+
+                    std::string typeName = "unknown";
+                    switch (typeDescription.Type)
+                    {
+                    case D3D_SVT_BOOL:
+                        switch (typeDescription.Class)
+                        {
+                        case D3D_SVC_SCALAR:
+                            typeName = "bool";
+                            break;
+                        }
+                        break;
+                    case D3D_SVT_INT:
+                        switch (typeDescription.Class)
+                        {
+                        case D3D_SVC_SCALAR:
+                            typeName = "int32_t";
+                            break;
+                        case D3D_SVC_VECTOR:
+                            typeName = "DirectX::XMINT" + std::to_string(typeDescription.Columns);
+                            break;
+                        case D3D_SVC_MATRIX_ROWS:
+                            typeName = "DirectX::XMINT" + std::to_string(typeDescription.Rows) + "x" + std::to_string(typeDescription.Columns);
+                            break;
+                        case D3D_SVC_MATRIX_COLUMNS:
+                            typeName = "DirectX::XMINT" + std::to_string(typeDescription.Columns) + "x" + std::to_string(typeDescription.Rows);
+                            break;
+                        }
+                        break;
+                    case D3D_SVT_UINT:
+                        switch (typeDescription.Class)
+                        {
+                        case D3D_SVC_SCALAR:
+                            typeName = "uint32_t";
+                            break;
+                        case D3D_SVC_VECTOR:
+                            typeName = "DirectX::XMUINT" + std::to_string(typeDescription.Columns);
+                            break;
+                        case D3D_SVC_MATRIX_ROWS:
+                            typeName = "DirectX::XMUINT" + std::to_string(typeDescription.Rows) + "x" + std::to_string(typeDescription.Columns);
+                            break;
+                        case D3D_SVC_MATRIX_COLUMNS:
+                            typeName = "DirectX::XMUINT" + std::to_string(typeDescription.Columns) + "x" + std::to_string(typeDescription.Rows);
+                            break;
+                        }
+                        break;
+                    case D3D_SVT_FLOAT:
+                        switch (typeDescription.Class)
+                        {
+                        case D3D_SVC_SCALAR:
+                            typeName = "float";
+                            break;
+                        case D3D_SVC_VECTOR:
+                            typeName = "DirectX::XMFLOAT" + std::to_string(typeDescription.Columns);
+                            break;
+                        case D3D_SVC_MATRIX_ROWS:
+                            typeName = "DirectX::XMFLOAT" + std::to_string(typeDescription.Rows) + "x" + std::to_string(typeDescription.Columns);
+                            break;
+                        case D3D_SVC_MATRIX_COLUMNS:
+                            typeName = "DirectX::XMFLOAT" + std::to_string(typeDescription.Columns) + "x" + std::to_string(typeDescription.Rows);
+                            break;
+                        }
+                        break;
+                    }
+
+                    definition.constants.push_back({ variableDescription.Name, typeName });
                 }
             }
         }
+
         return true;
     }
 
