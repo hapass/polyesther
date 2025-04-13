@@ -1,0 +1,21 @@
+name: BuildAndTest
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Build
+      working-directory: ${{env.GITHUB_WORKSPACE}}
+      run: build.bat
