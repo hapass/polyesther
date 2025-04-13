@@ -22,7 +22,18 @@ set B_SOLUTION_DIR=%CD%\
 :: /LIBPATH    - Specifies the directory where library files (.lib) are located for linking.
 :: /LTCG       - Link-Time Code Generation allows the compiler and linker to work together more closely to optimize the final binary.
 
+echo ------------------------------------------------
+echo Solution Dir is set to %B_SOLUTION_DIR%
+echo ------------------------------------------------
+echo Visual Studio environment is initialized from %B_VCVARSALL_PATH%
+
+mkdir build
 pushd build
+
+echo ------------------------------------------------
+echo Building renderer...
+echo ------------------------------------------------
+
 cl^
  /I"..\src\renderer"^
  /I"..\extern\imgui"^
@@ -36,6 +47,10 @@ cl^
  ../src/renderer/renderer.cpp
 
 lib /OUT:renderer.lib renderer.obj
+
+echo ------------------------------------------------
+echo Building application...
+echo ------------------------------------------------
 
 cl^
  /I"..\src\renderer"^
@@ -55,6 +70,10 @@ cl^
  /link^
  renderer.lib
 
+echo ------------------------------------------------
+echo Building tests...
+echo ------------------------------------------------
+
 cl^
  /I"..\src\renderer"^
  /I"..\src\tests"^
@@ -72,6 +91,11 @@ cl^
  /link^
  /LIBPATH:"%VCInstallDir%Auxiliary\VS\UnitTest\lib"^
  renderer.lib
+
 popd
+
+echo ------------------------------------------------
+echo Testing...
+echo ------------------------------------------------
 
 call "vstest.console.exe" build\tests.dll

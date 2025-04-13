@@ -6,7 +6,7 @@ Simple obj model viewer. Renders obj models with software rasterizer or DX12 ren
 
 1. Clone the repository with submodules.
 1. Install [VisualStudio](https://visualstudio.microsoft.com/downloads/) with MSVC Platform Toolset v143.
-1. Run build.bat.
+1. Run build.bat
 
 ## TODO
 
