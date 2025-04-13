@@ -20,23 +20,56 @@ set B_SOLUTION_DIR=%CD%\
 :: /LIBPATH    - Specifies the directory where library files (.lib) are located for linking.
 :: /LTCG       - Link-Time Code Generation allows the compiler and linker to work together more closely to optimize the final binary.
 
-pushd src\tests
+pushd build
 cl^
- /I"%VCInstallDir%Auxiliary\VS\UnitTest\include"^
- /I"..\..\extern\imgui"^
- /I"..\..\extern\imgui\backends"^
- /I"..\renderer"^
+ /I"..\src\renderer"^
+ /I"..\extern\imgui"^
+ /I"..\extern\imgui\backends"^
+ "/DNDEBUG"^
+ /std:c++20^
+ /EHsc^
+ /Zi^
+ /MD^
+ /c^
+ ../src/renderer/renderer.cpp
+
+lib /OUT:renderer.lib renderer.obj
+
+cl^
+ /I"..\src\renderer"^
+ /I"..\src\application"^
+ /I"..\extern\imgui"^
+ /I"..\extern\imgui\backends"^
  "/D_SOLUTIONDIR=R\"(%B_SOLUTION_DIR%)\""^
+ /DNDEBUG^
+ /D_CONSOLE^
+ /DUNICODE^
+ /D_UNICODE^
+ /std:c++20^
+ /EHsc^
+ /Zi^
+ /MD^
+ ../src/application/application.cpp^
+ /link^
+ renderer.lib
+
+cl^
+ /I"..\src\renderer"^
+ /I"..\src\tests"^
+ /I"%VCInstallDir%Auxiliary\VS\UnitTest\include"^
+ /I"..\extern\imgui"^
+ /I"..\extern\imgui\backends"^
+ "/D_SOLUTIONDIR=R\"(%B_SOLUTION_DIR%)\""^
+ "/DNDEBUG"^
  /std:c++20^
  /EHsc^
  /LD^
  /MD^
  /Zi^
- tests.cpp^
+ ../src/tests/tests.cpp^
  /link^
- /LTCG^
  /LIBPATH:"%VCInstallDir%Auxiliary\VS\UnitTest\lib"^
- "..\..\x64\Release\renderer.lib"
+ renderer.lib
 popd
 
-call "vstest.console.exe" src\tests\tests.dll
+call "vstest.console.exe" build\tests.dll

@@ -1,11 +1,8 @@
 #include <renderer/scenerenderersoftware.h>
 
-#define _USE_MATH_DEFINES
-
 #include <stdint.h>
 #include <algorithm>
 #include <vector>
-#include <cmath>
 #include <cassert>
 #include <iostream>
 #include <array>

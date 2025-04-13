@@ -1,5 +1,3 @@
-#define _USE_MATH_DEFINES
-
 #include <Windows.h>
 
 #include <renderer/math.h>

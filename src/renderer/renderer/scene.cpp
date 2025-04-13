@@ -1,5 +1,3 @@
-#define _USE_MATH_DEFINES
-
 #include <renderer/scene.h>
 
 #include <renderer/utils.h>

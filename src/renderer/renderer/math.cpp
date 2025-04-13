@@ -1,8 +1,5 @@
-#pragma once
-
 #include <renderer/math.h>
 #include <cassert>
-#include <cmath>
 #include <tuple>
 
 using namespace std;
