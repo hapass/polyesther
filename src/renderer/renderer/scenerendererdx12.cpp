@@ -7,6 +7,9 @@
 #include <d3dcompiler.h>
 #include <d3d12shader.h>
 
+// include after dx12
+#include <renderer/generated/signature.h>
+
 // todo: verify if needed
 #include <fstream>
 #include <sstream>
@@ -15,7 +18,6 @@
 #include <map>
 #include <cassert>
 #include <iostream>
-
 
 namespace Renderer
 {
@@ -67,6 +69,7 @@ namespace Renderer
                 if (paramDesc.Mask & 0x2) componentCount++;
                 if (paramDesc.Mask & 0x4) componentCount++;
                 if (paramDesc.Mask & 0x8) componentCount++;
+
 
                 DXGI_FORMAT format = DXGI_FORMAT_UNKNOWN;
                 if (paramDesc.ComponentType == D3D_REGISTER_COMPONENT_FLOAT32)
@@ -330,32 +333,6 @@ namespace Renderer
             }
         }
 
-        struct Constants
-        {
-            DirectX::XMFLOAT4X4 worldViewProj = {
-                1.0f, 0.0f, 0.0f, 0.0f,
-                0.0f, 1.0f, 0.0f, 0.0f,
-                0.0f, 0.0f, 1.0f, 0.0f,
-                0.0f, 0.0f, 0.0f, 1.0f
-            };
-            DirectX::XMFLOAT4X4 worldView = {
-                1.0f, 0.0f, 0.0f, 0.0f,
-                0.0f, 1.0f, 0.0f, 0.0f,
-                0.0f, 0.0f, 1.0f, 0.0f,
-                0.0f, 0.0f, 0.0f, 1.0f
-            };
-            DirectX::XMFLOAT4 lightPos = { 0.0f, 0.0f, 0.0f, 0.0f };
-        };
-
-        struct XVertex
-        {
-            DirectX::XMFLOAT3 Pos;
-            DirectX::XMFLOAT2 TextureCoord;
-            DirectX::XMFLOAT3 Normal;
-            DirectX::XMFLOAT3 Color;
-            INT TextureIndex;
-        };
-
         uint64_t AlignBytes(uint64_t size, uint64_t alignment = 256)
         {
             const uint64_t upperBound = size + alignment - 1;
@@ -552,7 +529,7 @@ namespace Renderer
             psoDescription.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
             psoDescription.NumRenderTargets = numRenderTargets;
 
-            for (UINT i = 0; i < numRenderTargets; ++i)
+            for (int32_t i = 0; i < numRenderTargets; ++i)
             {
                 psoDescription.RTVFormats[i] = numRenderTargets == 3 ? DXGI_FORMAT_R32G32B32A32_FLOAT : DXGI_FORMAT_R8G8B8A8_UNORM;
             }
@@ -946,6 +923,7 @@ namespace Renderer
 
     bool SceneRendererDX12::Render(const Scene& scene, Texture& texture)
     {
+        //todo.pavelza: still can render only one scene technically, assuming scene is not changed completely, so what's the point of creating it like this and passing scene here instead of ctor?
         if (!context)
         {
             context = std::make_shared<RendererDX12Context>(scene, texture, std::wstring(shaderFolderPath.begin(), shaderFolderPath.end()), deviceDX12);

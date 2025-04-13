@@ -20,6 +20,7 @@
     <ClInclude Include="..\..\extern\imgui\imstb_truetype.h" />
     <ClInclude Include="renderer\color.h" />
     <ClInclude Include="renderer\devicedx12.h" />
+    <ClInclude Include="renderer\generated\signature.h" />
     <ClInclude Include="renderer\imguirendererdx12.h" />
     <ClInclude Include="renderer\math.h" />
     <ClInclude Include="renderer\scene.h" />

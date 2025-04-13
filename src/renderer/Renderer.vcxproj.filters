@@ -7,6 +7,9 @@
     <Filter Include="Renderer">
       <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Renderer\Generated">
+      <UniqueIdentifier>{86335da1-6b2c-48e7-8323-d18d7ebf176d}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\extern\imgui\imconfig.h">
@@ -60,7 +63,9 @@
     <ClInclude Include="..\..\extern\imgui\backends\imgui_impl_dx12.h">
       <Filter>Imgui</Filter>
     </ClInclude>
-    <ClInclude Include="renderer\scene.h" />
+    <ClInclude Include="renderer\generated\signature.h">
+      <Filter>Renderer\Generated</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="renderer\color.cpp">
