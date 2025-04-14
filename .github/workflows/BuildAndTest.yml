@@ -22,3 +22,8 @@ jobs:
       working-directory: ${{env.GITHUB_WORKSPACE}}
       shell: cmd
       run: build.bat
+
+    - uses: actions/upload-artifact@v4
+      with:
+        path: assets
+        retention-days: 1
