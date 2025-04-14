@@ -1,6 +1,8 @@
 #include <renderer/devicedx12.h>
 #include <renderer/utils.h>
 
+#include <dxgi1_4.h>
+
 namespace Renderer
 {
     GraphicsQueue::GraphicsQueue(ID3D12Device* device)
@@ -87,14 +89,27 @@ namespace Renderer
         }
     }
 
-    DeviceDX12::DeviceDX12()
+    DeviceDX12::DeviceDX12(bool useWarp)
     {
         ID3D12Debug* debugController = nullptr;
         D3D_NOT_FAILED(D3D12GetDebugInterface(IID_PPV_ARGS(&debugController)));
         debugController->EnableDebugLayer();
         debugController->Release();
 
-        D3D_NOT_FAILED(D3D12CreateDevice(NULL, D3D_FEATURE_LEVEL_12_1, IID_PPV_ARGS(&device)));
+        IDXGIFactory4* factory = nullptr;
+        D3D_NOT_FAILED(CreateDXGIFactory1(IID_PPV_ARGS(&factory)));
+        
+        if (useWarp)
+        {
+            IDXGIAdapter* warpAdapter;
+            D3D_NOT_FAILED(factory->EnumWarpAdapter(IID_PPV_ARGS(&warpAdapter)));
+
+            D3D_NOT_FAILED(D3D12CreateDevice(warpAdapter, D3D_FEATURE_LEVEL_12_1, IID_PPV_ARGS(&device)));
+        }
+        else
+        {
+            D3D_NOT_FAILED(D3D12CreateDevice(NULL, D3D_FEATURE_LEVEL_12_1, IID_PPV_ARGS(&device)));
+        }
 
         graphicsQueue = std::make_unique<GraphicsQueue>(device);
     }

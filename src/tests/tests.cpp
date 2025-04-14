@@ -190,7 +190,7 @@ namespace Tests
             Renderer::Scene scene;
             bool success = Renderer::Load(AssetsDir + "cars\\scene.sce", scene);
 
-            Renderer::DeviceDX12 device;
+            Renderer::DeviceDX12 device(true);
             Renderer::SceneRendererDX12 renderer(AssetsDir, device);
 
             Renderer::Texture texture(200, 150); // todo.pavelza: test error if texture has no dimensions and passed to render
@@ -207,7 +207,7 @@ namespace Tests
             Renderer::Scene scene;
             bool success = Renderer::Load(TriangleDir + "scene.sce", scene);
 
-            Renderer::DeviceDX12 device;
+            Renderer::DeviceDX12 device(true);
             Renderer::SceneRendererDX12 renderer(AssetsDir, device);
 
             Renderer::Texture texture(200, 150);
@@ -268,7 +268,7 @@ namespace Tests
 
             Renderer::SceneRendererSoftware renderer;
 
-            Renderer::DeviceDX12 device;
+            Renderer::DeviceDX12 device(true);
             Renderer::SceneRendererDX12 hardwareRenderer(AssetsDir + "color.hlsl", device);
 
             uint32_t width = 200;

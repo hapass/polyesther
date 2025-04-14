@@ -40,7 +40,7 @@ namespace Renderer
 
     struct DeviceDX12
     {
-        DeviceDX12();
+        DeviceDX12(bool useWarp = false);
         ~DeviceDX12();
 
         GraphicsQueue& GetQueue() const;

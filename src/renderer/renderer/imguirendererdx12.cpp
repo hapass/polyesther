@@ -50,7 +50,7 @@ namespace Renderer
         swapChainDescription.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
         swapChainDescription.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
 
-        IDXGIFactory* factory = nullptr;
+        IDXGIFactory4* factory = nullptr; // clear?
         D3D_NOT_FAILED(CreateDXGIFactory(IID_PPV_ARGS(&factory)));
 
         IDXGISwapChain* tempSwapChain = nullptr;
