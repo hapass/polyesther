@@ -5,10 +5,9 @@
 #include <d3d12.h>
 #include <DirectXMath.h>
 #include <d3dcompiler.h>
-#include <d3d12shader.h>
 
 // include after dx12
-#include <renderer/generated/signature.h>
+#include <generated/signature.h>
 
 // todo: verify if needed
 #include <fstream>
@@ -37,170 +36,6 @@ namespace Renderer
     struct PSOBuilder
     {
     };
-
-    ID3D12ShaderReflection* CreateShaderReflection(const std::wstring& shaderPath, const std::string& shaderType, const std::string& shaderModel)
-    {
-        UINT flags = D3DCOMPILE_ENABLE_UNBOUNDED_DESCRIPTOR_TABLES;
-        ID3DBlob* blob = nullptr;
-        D3D_NOT_FAILED(D3DCompileFromFile(shaderPath.c_str(), nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE, shaderType.c_str(), shaderModel.c_str(), flags, 0, &blob, nullptr));
-
-        ID3D12ShaderReflection* reflector = nullptr;
-        D3D_NOT_FAILED(D3DReflect(blob->GetBufferPointer(), blob->GetBufferSize(), IID_PPV_ARGS(&reflector)));
-
-        return reflector;
-    }
-
-    bool Load(const std::string& path, SigDefinition& definition)
-    {
-        std::wstring shaderPath(path.begin(), path.end());
-
-        if (ID3D12ShaderReflection* vertexShaderReflector = CreateShaderReflection(shaderPath, "VS", "vs_5_1"))
-        {
-            D3D12_SHADER_DESC shaderDesc;
-            vertexShaderReflector->GetDesc(&shaderDesc);
-
-            for (UINT i = 0; i < shaderDesc.InputParameters; i++)
-            {
-                D3D12_SIGNATURE_PARAMETER_DESC paramDesc;
-                vertexShaderReflector->GetInputParameterDesc(i, &paramDesc);
-
-                int componentCount = 0;
-                if (paramDesc.Mask & 0x1) componentCount++;
-                if (paramDesc.Mask & 0x2) componentCount++;
-                if (paramDesc.Mask & 0x4) componentCount++;
-                if (paramDesc.Mask & 0x8) componentCount++;
-
-
-                DXGI_FORMAT format = DXGI_FORMAT_UNKNOWN;
-                if (paramDesc.ComponentType == D3D_REGISTER_COMPONENT_FLOAT32)
-                {
-                    switch (componentCount)
-                    {
-                        case 1: format = DXGI_FORMAT_R32_FLOAT; break;
-                        case 2: format = DXGI_FORMAT_R32G32_FLOAT; break;
-                        case 3: format = DXGI_FORMAT_R32G32B32_FLOAT; break;
-                        case 4: format = DXGI_FORMAT_R32G32B32A32_FLOAT; break;
-                    }
-                }
-                else if (paramDesc.ComponentType == D3D_REGISTER_COMPONENT_UINT32)
-                {
-                    switch (componentCount)
-                    {
-                        case 1: format = DXGI_FORMAT_R32_UINT; break;
-                        case 2: format = DXGI_FORMAT_R32G32_UINT; break;
-                        case 3: format = DXGI_FORMAT_R32G32B32_UINT; break;
-                        case 4: format = DXGI_FORMAT_R32G32B32A32_UINT; break;
-                    }
-                }
-                else if (paramDesc.ComponentType == D3D_REGISTER_COMPONENT_SINT32)
-                {
-                    switch (componentCount)
-                    {
-                        case 1: format = DXGI_FORMAT_R32_SINT; break;
-                        case 2: format = DXGI_FORMAT_R32G32_SINT; break;
-                        case 3: format = DXGI_FORMAT_R32G32B32_SINT; break;
-                        case 4: format = DXGI_FORMAT_R32G32B32A32_SINT; break;
-                    }
-                }
-
-                definition.vertexAttributes.push_back({ paramDesc.SemanticName, format });
-            }
-
-            vertexShaderReflector->Release();
-        }
-
-        if (ID3D12ShaderReflection* pixelShaderReflector = CreateShaderReflection(shaderPath, "PS", "ps_5_1"))
-        {
-            D3D12_SHADER_DESC shaderDesc;
-            pixelShaderReflector->GetDesc(&shaderDesc);
-
-            for (UINT i = 0; i < shaderDesc.ConstantBuffers; i++)
-            {
-                ID3D12ShaderReflectionConstantBuffer* constantBuffer = pixelShaderReflector->GetConstantBufferByIndex(i);
-                D3D12_SHADER_BUFFER_DESC bufferDesc;
-                constantBuffer->GetDesc(&bufferDesc);
-
-                for (UINT j = 0; j < bufferDesc.Variables; j++)
-                {
-                    ID3D12ShaderReflectionVariable* variable = constantBuffer->GetVariableByIndex(j);
-                    D3D12_SHADER_VARIABLE_DESC variableDescription;
-                    variable->GetDesc(&variableDescription);
-
-                    ID3D12ShaderReflectionType* type = variable->GetType();
-                    D3D12_SHADER_TYPE_DESC typeDescription;
-                    type->GetDesc(&typeDescription);
-
-                    std::string typeName = "unknown";
-                    switch (typeDescription.Type)
-                    {
-                    case D3D_SVT_BOOL:
-                        switch (typeDescription.Class)
-                        {
-                        case D3D_SVC_SCALAR:
-                            typeName = "bool";
-                            break;
-                        }
-                        break;
-                    case D3D_SVT_INT:
-                        switch (typeDescription.Class)
-                        {
-                        case D3D_SVC_SCALAR:
-                            typeName = "int32_t";
-                            break;
-                        case D3D_SVC_VECTOR:
-                            typeName = "DirectX::XMINT" + std::to_string(typeDescription.Columns);
-                            break;
-                        case D3D_SVC_MATRIX_ROWS:
-                            typeName = "DirectX::XMINT" + std::to_string(typeDescription.Rows) + "x" + std::to_string(typeDescription.Columns);
-                            break;
-                        case D3D_SVC_MATRIX_COLUMNS:
-                            typeName = "DirectX::XMINT" + std::to_string(typeDescription.Columns) + "x" + std::to_string(typeDescription.Rows);
-                            break;
-                        }
-                        break;
-                    case D3D_SVT_UINT:
-                        switch (typeDescription.Class)
-                        {
-                        case D3D_SVC_SCALAR:
-                            typeName = "uint32_t";
-                            break;
-                        case D3D_SVC_VECTOR:
-                            typeName = "DirectX::XMUINT" + std::to_string(typeDescription.Columns);
-                            break;
-                        case D3D_SVC_MATRIX_ROWS:
-                            typeName = "DirectX::XMUINT" + std::to_string(typeDescription.Rows) + "x" + std::to_string(typeDescription.Columns);
-                            break;
-                        case D3D_SVC_MATRIX_COLUMNS:
-                            typeName = "DirectX::XMUINT" + std::to_string(typeDescription.Columns) + "x" + std::to_string(typeDescription.Rows);
-                            break;
-                        }
-                        break;
-                    case D3D_SVT_FLOAT:
-                        switch (typeDescription.Class)
-                        {
-                        case D3D_SVC_SCALAR:
-                            typeName = "float";
-                            break;
-                        case D3D_SVC_VECTOR:
-                            typeName = "DirectX::XMFLOAT" + std::to_string(typeDescription.Columns);
-                            break;
-                        case D3D_SVC_MATRIX_ROWS:
-                            typeName = "DirectX::XMFLOAT" + std::to_string(typeDescription.Rows) + "x" + std::to_string(typeDescription.Columns);
-                            break;
-                        case D3D_SVC_MATRIX_COLUMNS:
-                            typeName = "DirectX::XMFLOAT" + std::to_string(typeDescription.Columns) + "x" + std::to_string(typeDescription.Rows);
-                            break;
-                        }
-                        break;
-                    }
-
-                    definition.constants.push_back({ variableDescription.Name, typeName });
-                }
-            }
-        }
-
-        return true;
-    }
 
     struct RendererDX12Context
     {
@@ -348,9 +183,9 @@ namespace Renderer
         void SetConstants(const DirectX::XMMATRIX& mvp, const DirectX::XMMATRIX& mv, const DirectX::XMVECTOR& lightPos)
         {
             Constants constantsStruct;
-            DirectX::XMStoreFloat4x4(&constantsStruct.worldViewProj, mvp);
-            DirectX::XMStoreFloat4x4(&constantsStruct.worldView, mv);
-            DirectX::XMStoreFloat4(&constantsStruct.lightPos, lightPos);
+            DirectX::XMStoreFloat4x4(&constantsStruct.gWorldViewProj, mvp);
+            DirectX::XMStoreFloat4x4(&constantsStruct.gWorldView, mv);
+            DirectX::XMStoreFloat4(&constantsStruct.gLightPos, lightPos);
 
             BYTE* mappedData = nullptr;
             constantBuffer->Map(0, nullptr, (void**)&mappedData);
@@ -431,51 +266,25 @@ namespace Renderer
             ID3DBlob* pixelShaderBlob = nullptr;
             D3D_NOT_FAILED(D3DCompileFromFile(shaderPath.c_str(), nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE, "PS", "ps_5_1", flags, 0, &pixelShaderBlob, nullptr));
 
-            constexpr size_t vertexFieldsCount = 5;
-            D3D12_INPUT_ELEMENT_DESC inputElementDescription[vertexFieldsCount];
+            D3D12_INPUT_ELEMENT_DESC inputElementDescription[XVertexMetadata::vertexAttributesCount];
 
-            inputElementDescription[0].SemanticName = "POSITION";
-            inputElementDescription[0].SemanticIndex = 0;
-            inputElementDescription[0].Format = DXGI_FORMAT_R32G32B32_FLOAT;
-            inputElementDescription[0].InputSlot = 0;
-            inputElementDescription[0].AlignedByteOffset = 0;
-            inputElementDescription[0].InputSlotClass = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA;
-            inputElementDescription[0].InstanceDataStepRate = 0;
+            uint32_t offset = 0;
+            for (size_t i = 0; i < XVertexMetadata::vertexAttributes.size(); i++)
+            {
+                const XVertexMetadata::VertexAttribute& attribute = XVertexMetadata::vertexAttributes[i];
+                inputElementDescription[i].SemanticName = attribute.semanticName;
+                inputElementDescription[i].SemanticIndex = 0;
+                inputElementDescription[i].Format = attribute.format;
+                inputElementDescription[i].InputSlot = 0;
+                inputElementDescription[i].AlignedByteOffset = offset;
+                inputElementDescription[i].InputSlotClass = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA;
+                inputElementDescription[i].InstanceDataStepRate = 0;
 
-            inputElementDescription[1].SemanticName = "TEXCOORD";
-            inputElementDescription[1].SemanticIndex = 0;
-            inputElementDescription[1].Format = DXGI_FORMAT_R32G32_FLOAT;
-            inputElementDescription[1].InputSlot = 0;
-            inputElementDescription[1].AlignedByteOffset = 12;
-            inputElementDescription[1].InputSlotClass = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA;
-            inputElementDescription[1].InstanceDataStepRate = 0;
-
-            inputElementDescription[2].SemanticName = "NORMALS";
-            inputElementDescription[2].SemanticIndex = 0;
-            inputElementDescription[2].Format = DXGI_FORMAT_R32G32B32_FLOAT;
-            inputElementDescription[2].InputSlot = 0;
-            inputElementDescription[2].AlignedByteOffset = 20;
-            inputElementDescription[2].InputSlotClass = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA;
-            inputElementDescription[2].InstanceDataStepRate = 0;
-
-            inputElementDescription[3].SemanticName = "COLOR";
-            inputElementDescription[3].SemanticIndex = 0;
-            inputElementDescription[3].Format = DXGI_FORMAT_R32G32B32_FLOAT;
-            inputElementDescription[3].InputSlot = 0;
-            inputElementDescription[3].AlignedByteOffset = 32;
-            inputElementDescription[3].InputSlotClass = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA;
-            inputElementDescription[3].InstanceDataStepRate = 0;
-
-            inputElementDescription[4].SemanticName = "TEXINDEX";
-            inputElementDescription[4].SemanticIndex = 0;
-            inputElementDescription[4].Format = DXGI_FORMAT_R32_SINT;
-            inputElementDescription[4].InputSlot = 0;
-            inputElementDescription[4].AlignedByteOffset = 44;
-            inputElementDescription[4].InputSlotClass = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA;
-            inputElementDescription[4].InstanceDataStepRate = 0;
+                offset += attribute.sizeInBytes;
+            }
 
             D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDescription = {};
-            psoDescription.InputLayout = { inputElementDescription, vertexFieldsCount };
+            psoDescription.InputLayout = { inputElementDescription, XVertexMetadata::vertexAttributesCount };
             psoDescription.pRootSignature = rootSignature;
             psoDescription.VS = { (BYTE*)vertexShaderBlob->GetBufferPointer(), vertexShaderBlob->GetBufferSize() };
             psoDescription.PS = { (BYTE*)pixelShaderBlob->GetBufferPointer(), pixelShaderBlob->GetBufferSize() };

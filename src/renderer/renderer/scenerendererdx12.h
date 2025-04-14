@@ -11,18 +11,6 @@
 namespace Renderer
 {
     struct RendererDX12Context;
-    
-    struct SigDefinition
-    {
-        struct VertexAttribute
-        {
-            std::string semanticName;
-            DXGI_FORMAT format;
-        };
-
-        std::vector<VertexAttribute> vertexAttributes;
-        std::vector<std::tuple<std::string, std::string>> constants;
-    };
 
     struct SceneRendererDX12 : public SceneRenderer
     {
@@ -35,6 +23,4 @@ namespace Renderer
         std::string shaderFolderPath;
         const DeviceDX12& deviceDX12;
     };
-
-    bool Load(const std::string& path, SigDefinition& definition);
 }

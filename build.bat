@@ -28,10 +28,28 @@ mkdir build
 pushd build
 
 echo ------------------------------------------------
+echo Building signature...
+echo ------------------------------------------------
+
+cl^
+ /I"..\src\signature"^
+ /I"..\src\renderer"^
+ /DNDEBUG^
+ /D_CONSOLE^
+ /std:c++20^
+ /EHsc^
+ /Zi^
+ /MD^
+ ../src/signature/signature.cpp
+
+call "signature.exe"
+
+echo ------------------------------------------------
 echo Building renderer...
 echo ------------------------------------------------
 
 cl^
+ /I"."^
  /I"..\src\renderer"^
  /I"..\extern\imgui"^
  /I"..\extern\imgui\backends"^
