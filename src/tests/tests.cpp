@@ -30,6 +30,7 @@ namespace Tests
     namespace
     {
         std::string SolutionDir = _SOLUTIONDIR;
+        std::string BuildDir = SolutionDir + "build\\";
         std::string AssetsDir = SolutionDir + "assets\\";
         std::string TestsDir = AssetsDir + "tests\\";
         std::string QuadsDir = TestsDir + "quads\\";
@@ -195,12 +196,19 @@ namespace Tests
 
             Renderer::Texture texture(200, 150); // todo.pavelza: test error if texture has no dimensions and passed to render
             renderer.Render(scene, texture);
-            Renderer::Save(TestsDir + "reference_dx12_warp.bmp", texture);
+            Renderer::Save(BuildDir + "dx12.bmp", texture);
 
             Renderer::Texture reference;
             Renderer::Load(TestsDir + "reference_dx12.bmp", reference);
 
-            Assert::IsTrue(true);
+            Renderer::Texture result(200, 150);
+            uint32_t differentPixelsCount = 0;
+            Renderer::Diff(texture, reference, result, differentPixelsCount);
+
+            Renderer::Save(BuildDir + "dx12_diff.bmp", result);
+
+            float error = static_cast<float>(differentPixelsCount) / (200.0f * 150.0f);
+            Assert::IsTrue(error < 0.01);
         }
 
         // TEST_METHOD(RenderShouldProperlyRenderColoredTriangleScene)
@@ -271,7 +279,7 @@ namespace Tests
             Renderer::SceneRendererSoftware renderer;
 
             Renderer::DeviceDX12 device(true);
-            Renderer::SceneRendererDX12 hardwareRenderer(AssetsDir + "color.hlsl", device);
+            Renderer::SceneRendererDX12 hardwareRenderer(AssetsDir, device);
 
             uint32_t width = 200;
             uint32_t height = 150;
