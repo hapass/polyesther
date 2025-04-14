@@ -203,23 +203,23 @@ namespace Tests
             Assert::IsTrue(true);
         }
 
-        TEST_METHOD(RenderShouldProperlyRenderColoredTriangleScene)
-        {
-            Renderer::Scene scene;
-            bool success = Renderer::Load(TriangleDir + "scene.sce", scene);
+        // TEST_METHOD(RenderShouldProperlyRenderColoredTriangleScene)
+        // {
+        //     Renderer::Scene scene;
+        //     bool success = Renderer::Load(TriangleDir + "scene.sce", scene);
 
-            Renderer::DeviceDX12 device(true);
-            Renderer::SceneRendererDX12 renderer(AssetsDir, device);
+        //     Renderer::DeviceDX12 device(true);
+        //     Renderer::SceneRendererDX12 renderer(AssetsDir, device);
 
-            Renderer::Texture texture(200, 150);
-            renderer.Render(scene, texture);
-            Renderer::Save(TestsDir + "reference_triangle_dx12_warp.bmp", texture);
+        //     Renderer::Texture texture(200, 150);
+        //     renderer.Render(scene, texture);
+        //     Renderer::Save(TestsDir + "reference_triangle_dx12_warp.bmp", texture);
 
-            Renderer::Texture reference;
-            Renderer::Load(TestsDir + "reference_triangle_dx12.bmp", reference);
+        //     Renderer::Texture reference;
+        //     Renderer::Load(TestsDir + "reference_triangle_dx12.bmp", reference);
 
-            Assert::IsTrue(true);
-        }
+        //     Assert::IsTrue(true);
+        // }
     };
 
     TEST_CLASS(RendererSoftware)

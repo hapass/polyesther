@@ -98,4 +98,4 @@ echo ------------------------------------------------
 echo Testing...
 echo ------------------------------------------------
 
-call "vstest.console.exe" build\tests.dll /InIsolation
+call "vstest.console.exe" build\tests.dll /blame
