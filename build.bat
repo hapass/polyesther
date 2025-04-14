@@ -7,7 +7,6 @@ set B_VCVARSALL_PATH=%B_VS_PATH%\VC\Auxiliary\Build\vcvarsall.bat
 if not defined B_IS_ENVIRONMENT_CONFIGURED ( call "%B_VCVARSALL_PATH%" x64 )
 
 set B_IS_ENVIRONMENT_CONFIGURED=1
-set B_SOLUTION_DIR=%CD%\
 
 :: Use platform toolset v143
 
@@ -22,8 +21,6 @@ set B_SOLUTION_DIR=%CD%\
 :: /LIBPATH    - Specifies the directory where library files (.lib) are located for linking.
 :: /LTCG       - Link-Time Code Generation allows the compiler and linker to work together more closely to optimize the final binary.
 
-echo ------------------------------------------------
-echo Solution Dir is set to %B_SOLUTION_DIR%
 echo ------------------------------------------------
 echo Visual Studio environment is initialized from %B_VCVARSALL_PATH%
 
@@ -57,7 +54,6 @@ cl^
  /I"..\src\application"^
  /I"..\extern\imgui"^
  /I"..\extern\imgui\backends"^
- "/D_SOLUTIONDIR=R\"(%B_SOLUTION_DIR%)\""^
  /DNDEBUG^
  /D_CONSOLE^
  /DUNICODE^
@@ -80,7 +76,6 @@ cl^
  /I"%VCInstallDir%Auxiliary\VS\UnitTest\include"^
  /I"..\extern\imgui"^
  /I"..\extern\imgui\backends"^
- "/D_SOLUTIONDIR=R\"(%B_SOLUTION_DIR%)\""^
  "/DNDEBUG"^
  /std:c++20^
  /EHsc^

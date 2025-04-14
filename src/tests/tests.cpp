@@ -6,6 +6,7 @@
 #include <renderer/scenerenderersoftware.h>
 
 #include <functional>
+#include <filesystem>
 
 namespace Microsoft
 {
@@ -29,20 +30,31 @@ namespace Tests
 {
     namespace
     {
-        std::string SolutionDir = _SOLUTIONDIR;
-        std::string BuildDir = SolutionDir + "build\\";
-        std::string AssetsDir = SolutionDir + "assets\\";
-        std::string TestsDir = AssetsDir + "tests\\";
-        std::string QuadsDir = TestsDir + "quads\\";
-        std::string TriangleDir = TestsDir + "triangle\\";
+        std::string BuildDir;
+        std::string AssetsDir;
+        std::string TestsDir;
+        std::string QuadsDir;
+        std::string TriangleDir;
     }
 
     TEST_MODULE_INITIALIZE(TestsInitialize)
     {
+        BuildDir = std::filesystem::current_path().string() + "\\";
+        AssetsDir = BuildDir + "..\\assets\\";
+        TestsDir = AssetsDir + "tests\\";
+        QuadsDir = TestsDir + "quads\\";
+        TriangleDir = TestsDir + "triangle\\";
+
         Utils::DebugUtils::GetInstance().AddOutput([](const std::string& message)
         {
             Logger::WriteMessage(message.c_str());
         });
+
+        LOG("BuildDir: " << BuildDir);
+        LOG("AssetsDir: " << AssetsDir);
+        LOG("TestsDir: " << TestsDir);
+        LOG("QuadsDir: " << QuadsDir);
+        LOG("TriangleDir: " << TriangleDir);
     }
 
     TEST_MODULE_CLEANUP(TestsCleanup)
