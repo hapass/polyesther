@@ -1,6 +1,7 @@
 #include <renderer/scenerendererdx12.h>
-#include <renderer/utils.h>
 #include <renderer/devicedx12.h>
+
+#include <utils.h>
 
 #include <d3d12.h>
 #include <DirectXMath.h>

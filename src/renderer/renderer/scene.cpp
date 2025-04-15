@@ -1,6 +1,6 @@
 #include <renderer/scene.h>
 
-#include <renderer/utils.h>
+#include <utils.h>
 
 #include <fstream>
 #include <sstream>

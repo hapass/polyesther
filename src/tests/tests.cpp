@@ -1,7 +1,8 @@
 #include <CppUnitTest.h>
 
+#include <utils.h>
+
 #include <renderer/scene.h>
-#include <renderer/utils.h>
 #include <renderer/scenerendererdx12.h>
 #include <renderer/scenerenderersoftware.h>
 

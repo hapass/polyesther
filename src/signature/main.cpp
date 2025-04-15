@@ -11,7 +11,7 @@
 #include <iostream>
 #include <fstream>
 
-#include <renderer/utils.h> // todo.pavelza: should be moved to some common folder
+#include <utils.h>
 
 #pragma comment(lib, "D3d12.lib")
 #pragma comment(lib, "DXGI.lib")

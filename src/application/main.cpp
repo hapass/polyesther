@@ -7,7 +7,8 @@
 #include <renderer/color.h>
 #include <renderer/scene.h>
 #include <renderer/texture.h>
-#include <renderer/utils.h>
+
+#include <utils.h>
 
 #include <imgui.h>
 #include <imgui_impl_dx12.h>

@@ -21,6 +21,14 @@ set B_IS_ENVIRONMENT_CONFIGURED=1
 :: /LIBPATH    - Specifies the directory where library files (.lib) are located for linking.
 :: /LTCG       - Link-Time Code Generation allows the compiler and linker to work together more closely to optimize the final binary.
 
+set B_UNICODE_FLAGS=/DUNICODE /D_UNICODE
+
+set B_COMMON_FLAGS=/DNDEBUG /std:c++20 /EHsc /MD /Zi
+set B_COMMON_INCLUDES=/I"..\src\renderer" /I"..\src\common" /I"..\extern\imgui" /I"..\extern\imgui\backends"
+
+set B_TESTS_INCLUDES=/I"%VCInstallDir%Auxiliary\VS\UnitTest\include"
+set B_TESTS_LIBPATH=/LIBPATH:"%VCInstallDir%Auxiliary\VS\UnitTest\lib"
+
 echo ------------------------------------------------
 echo Visual Studio environment is initialized from %B_VCVARSALL_PATH%
 
@@ -31,79 +39,27 @@ echo ------------------------------------------------
 echo Building signature...
 echo ------------------------------------------------
 
-cl^
- /I"..\src\signature"^
- /I"..\src\renderer"^
- /DNDEBUG^
- /D_CONSOLE^
- /std:c++20^
- /EHsc^
- /Zi^
- /MD^
- ../src/signature/signature.cpp
-
+cl /I"..\src\signature" /I"..\src\common" /D_CONSOLE %B_COMMON_FLAGS% ../src/signature/signature.cpp
 call "signature.exe"
 
 echo ------------------------------------------------
 echo Building renderer...
 echo ------------------------------------------------
 
-cl^
- /I"."^
- /I"..\src\renderer"^
- /I"..\extern\imgui"^
- /I"..\extern\imgui\backends"^
- "/DNDEBUG"^
- /std:c++20^
- /EHsc^
- /Zi^
- /MD^
- /c^
- ../src/renderer/renderer.cpp
-
+cl /I"." %B_COMMON_INCLUDES% %B_COMMON_FLAGS% /c ../src/renderer/renderer.cpp
 lib /OUT:renderer.lib renderer.obj
 
 echo ------------------------------------------------
 echo Building application...
 echo ------------------------------------------------
 
-cl^
- /I"..\src\renderer"^
- /I"..\src\application"^
- /I"..\extern\imgui"^
- /I"..\extern\imgui\backends"^
- /DNDEBUG^
- /D_CONSOLE^
- /DUNICODE^
- /D_UNICODE^
- /std:c++20^
- /EHsc^
- /Zi^
- /MD^
- ../src/application/application.cpp^
- /link^
- renderer.lib
+cl /I"..\src\application" %B_COMMON_INCLUDES% /D_CONSOLE %B_UNICODE_FLAGS% %B_COMMON_FLAGS% ../src/application/application.cpp /link renderer.lib
 
 echo ------------------------------------------------
 echo Building tests...
 echo ------------------------------------------------
 
-cl^
- /I"..\src\renderer"^
- /I"..\src\tests"^
- /I"%VCInstallDir%Auxiliary\VS\UnitTest\include"^
- /I"..\extern\imgui"^
- /I"..\extern\imgui\backends"^
- "/DNDEBUG"^
- /std:c++20^
- /EHsc^
- /LD^
- /MD^
- /Zi^
- ../src/tests/tests.cpp^
- /link^
- /LIBPATH:"%VCInstallDir%Auxiliary\VS\UnitTest\lib"^
- renderer.lib
+cl /I"..\src\tests" %B_COMMON_INCLUDES% %B_TESTS_INCLUDES% %B_COMMON_FLAGS% /LD ../src/tests/tests.cpp /link %B_TESTS_LIBPATH% renderer.lib
 
 popd
 
