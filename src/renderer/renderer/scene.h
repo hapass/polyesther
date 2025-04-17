@@ -61,6 +61,7 @@ namespace Renderer
 
     struct Scene
     {
+        std::string name;
         DebugContext debugContext;
         Light light;
         Camera camera;

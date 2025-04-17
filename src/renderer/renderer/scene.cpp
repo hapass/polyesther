@@ -36,6 +36,23 @@ namespace Renderer
             return result.substr(pos + 1);
         }
 
+        std::string GetSceneName(const std::string& fullFileName)
+        {
+            size_t pos = fullFileName.rfind('\\');
+            if (pos == std::string::npos || pos == fullFileName.size() - 1)
+            {
+                return std::string();
+            }
+
+            size_t second_to_last_pos = fullFileName.rfind('\\', pos - 1);
+            if (second_to_last_pos == std::string::npos)
+            {
+                return std::string();
+            }
+
+            return fullFileName.substr(second_to_last_pos + 1, pos - second_to_last_pos - 1);
+        }
+
         std::string ReplaceFileNameInFullPath(const std::string& fullFileName, const std::string& newFileName)
         {
             std::string result(fullFileName);
@@ -397,6 +414,8 @@ namespace Renderer
         const char* EXTENSION_MODEL = "obj";
         const char* EXTENSION_LIGHT = "lig";
         const char* EXTENSION_CAMERA = "cam";
+
+        scene.name = GetSceneName(fullFileName);
 
         std::fstream file(fullFileName);
         std::string line;

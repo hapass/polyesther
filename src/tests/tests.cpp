@@ -73,6 +73,7 @@ namespace Tests
 
             // everything is loaded
             Assert::IsTrue(success);
+            Assert::AreEqual(std::string("quads"), scene.name);
 
             // there are two models
             Assert::AreEqual(size_t(2), scene.models.size());
@@ -194,6 +195,27 @@ namespace Tests
             bool success = Renderer::Load("", scene);
 
             Assert::IsFalse(success);
+            Assert::AreEqual(std::string(), scene.name);
+
+            success = Renderer::Load("NonExistantDrive:\\", scene);
+
+            Assert::IsFalse(success);
+            Assert::AreEqual(std::string(), scene.name);
+
+            success = Renderer::Load("NonExistantDrive:\\scene.sce", scene);
+
+            Assert::IsFalse(success);
+            Assert::AreEqual(std::string(), scene.name);
+
+            success = Renderer::Load("\\", scene);
+
+            Assert::IsFalse(success);
+            Assert::AreEqual(std::string(), scene.name);
+
+            success = Renderer::Load("\\\\", scene);
+
+            Assert::IsFalse(success);
+            Assert::AreEqual(std::string(), scene.name);
         }
     };
 
@@ -203,6 +225,9 @@ namespace Tests
         {
             Renderer::Scene scene;
             bool success = Renderer::Load(AssetsDir + "cars\\scene.sce", scene);
+
+            Assert::IsTrue(success);
+            Assert::AreEqual(std::string("cars"), scene.name);
 
             Renderer::DeviceDX12 device(true);
             Renderer::SceneRendererDX12 renderer(AssetsDir, device);
@@ -228,6 +253,9 @@ namespace Tests
         {
             Renderer::Scene scene;
             bool success = Renderer::Load(TriangleDir + "scene.sce", scene);
+
+            Assert::IsTrue(success);
+            Assert::AreEqual(std::string("triangle"), scene.name);
 
             Renderer::DeviceDX12 device(true);
             Renderer::SceneRendererDX12 renderer(AssetsDir, device);
@@ -257,6 +285,9 @@ namespace Tests
             Renderer::Scene scene;
             bool success = Renderer::Load(AssetsDir + "cars\\scene.sce", scene);
 
+            Assert::IsTrue(success);
+            Assert::AreEqual(std::string("cars"), scene.name);
+
             Renderer::SceneRendererSoftware renderer;
 
             Renderer::Texture texture(200, 150);
@@ -272,6 +303,9 @@ namespace Tests
         {
             Renderer::Scene scene;
             bool success = Renderer::Load(TriangleDir + "scene.sce", scene);
+
+            Assert::IsTrue(success);
+            Assert::AreEqual(std::string("triangle"), scene.name);
 
             Renderer::SceneRendererSoftware renderer;
 
