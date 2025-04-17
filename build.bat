@@ -23,8 +23,8 @@ set B_IS_ENVIRONMENT_CONFIGURED=1
 
 set B_UNICODE_FLAGS=/DUNICODE /D_UNICODE
 
-set B_DEBUG_ARGS=/Zi
-if /i "%1"=="release" set B_DEBUG_ARGS=
+set B_DEBUG_ARGS=/Zi /Od
+if /i "%1"=="release" set B_DEBUG_ARGS=/O2
 
 set B_COMMON_FLAGS=/DNDEBUG /std:c++20 /EHsc /MD %B_DEBUG_ARGS%
 set B_COMMON_INCLUDES=/I"..\src\renderer" /I"..\src\common" /I"..\extern\imgui" /I"..\extern\imgui\backends"
