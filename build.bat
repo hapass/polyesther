@@ -8,9 +8,7 @@ if not defined B_IS_ENVIRONMENT_CONFIGURED ( call "%B_VCVARSALL_PATH%" x64 )
 
 set B_IS_ENVIRONMENT_CONFIGURED=1
 
-:: Use platform toolset v143
-
-:: Quick refresher
+:: Quick refresher for cl flags used in this bat file.
 :: /I          - Specifies the directory for include files (header files).
 :: /D          - Defines a macro with a specific value for use during compilation.
 :: /std:c++20  - Enables the use of the C++20 standard for compilation.
@@ -19,7 +17,9 @@ set B_IS_ENVIRONMENT_CONFIGURED=1
 :: /MD         - Links against the multithreaded dynamic runtime library (DLL CRT).
 :: /link       - Indicates that linker options follow this argument.
 :: /LIBPATH    - Specifies the directory where library files (.lib) are located for linking.
-:: /LTCG       - Link-Time Code Generation allows the compiler and linker to work together more closely to optimize the final binary.
+:: /Od         - Disables optimizations to improve debugging and speed up compilation.
+:: /O2         - Enables full optimization for speed, favoring performance over size.
+:: /c          - Compiles source files without linking, producing object files (.obj).
 
 set B_UNICODE_FLAGS=/DUNICODE /D_UNICODE
 
