@@ -41,7 +41,7 @@ namespace Tests
     TEST_MODULE_INITIALIZE(TestsInitialize)
     {
         BuildDir = std::filesystem::current_path().string() + "\\";
-        AssetsDir = BuildDir + "..\\assets\\";
+        AssetsDir = BuildDir + "assets\\";
         TestsDir = AssetsDir + "tests\\";
         QuadsDir = TestsDir + "quads\\";
         TriangleDir = TestsDir + "triangle\\";
@@ -65,7 +65,6 @@ namespace Tests
 
     TEST_CLASS(Scene)
     {
-    public:
         TEST_METHOD(LoadShouldSucceedWhenThereIsSceneFile)
         {
             Renderer::Scene scene;

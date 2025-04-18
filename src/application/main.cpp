@@ -98,7 +98,7 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
     if (LRESULT r = ImGui_ImplWin32_WndProcHandler(hWnd, uMsg, wParam, lParam))
         return r;
 
-    static std::string AssetsDir = std::filesystem::current_path().string() + "\\..\\assets\\";
+    static std::string AssetsDir = std::filesystem::current_path().string() + "\\assets\\";
 
     static Renderer::SceneRendererSoftware softwareRenderer;
     static Renderer::DeviceDX12 device;

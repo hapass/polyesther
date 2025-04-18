@@ -30,6 +30,13 @@ echo ------------------------------------------------
 echo Visual Studio environment is initialized from %B_VCVARSALL_PATH%
 
 mkdir build
+
+echo ------------------------------------------------
+echo Copy assets...
+echo ------------------------------------------------
+
+call robocopy "assets" "build\assets" /MIR
+
 pushd build
 
 echo ------------------------------------------------
@@ -58,10 +65,10 @@ echo ------------------------------------------------
 
 cl /I"..\src\tests" %B_COMMON_INCLUDES% %B_TESTS_INCLUDES% %B_COMMON_FLAGS% /LD ../src/tests/tests.cpp /link %B_TESTS_LIBPATH% renderer.lib
 
-popd
-
 echo ------------------------------------------------
 echo Testing...
 echo ------------------------------------------------
 
-call "vstest.console.exe" build\tests.dll /blame
+call "vstest.console.exe" tests.dll /blame
+
+popd
