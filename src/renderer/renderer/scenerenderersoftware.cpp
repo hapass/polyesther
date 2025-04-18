@@ -125,6 +125,8 @@ namespace Renderer
 
     struct SceneRendererSoftwareContext
     {
+        std::string sceneName;
+
         size_t OutputWidth;
         size_t OutputHeight;
 
@@ -515,13 +517,14 @@ namespace Renderer
         }
     };
 
-    SceneRendererSoftware::SceneRendererSoftware()
-    {
-        context = std::make_shared<SceneRendererSoftwareContext>();
-    }
-
     bool SceneRendererSoftware::Render(const Scene& scene, Texture& texture)
     {
+        if (context == nullptr || context->sceneName != scene.name)
+        {
+            context = std::make_shared<SceneRendererSoftwareContext>();
+            context->sceneName = scene.name;
+        }
+
         context->OutputWidth = texture.GetWidth();
         context->OutputHeight = texture.GetHeight();
 

@@ -26,13 +26,10 @@ namespace Renderer
 
     struct GPU
     {
-
         GPU(const std::wstring& shaderPath)
         {
-
         }
     };
-
 
     struct PSOBuilder
     {
@@ -710,14 +707,14 @@ namespace Renderer
             return true;
         }
 
-        RenderTarget* gBuffer = nullptr;
-        RenderTarget* finalImage = nullptr;
+        RenderTarget* gBuffer = nullptr; // todo.pavelza - lifetime?
+        RenderTarget* finalImage = nullptr; // todo.pavelza - lifetime?
 
-        ID3D12DescriptorHeap* rootDescriptorHeap = nullptr;
+        ID3D12DescriptorHeap* rootDescriptorHeap = nullptr; // todo.pavelza - lifetime?
 
-        ID3D12Resource* constantBuffer = nullptr;
+        ID3D12Resource* constantBuffer = nullptr; // todo.pavelza - lifetime?
 
-        ID3D12RootSignature* rootSignature = nullptr;
+        ID3D12RootSignature* rootSignature = nullptr; // todo.pavelza - lifetime?
         D3D12_VERTEX_BUFFER_VIEW vertexBufferView {};
         D3D12_INDEX_BUFFER_VIEW indexBufferView {};
 
@@ -729,14 +726,17 @@ namespace Renderer
         const DeviceDX12& deviceDX12;
         const Scene& scene;
         const Texture& texture;
+
+        std::string sceneName;
     };
 
     bool SceneRendererDX12::Render(const Scene& scene, Texture& texture)
     {
-        //todo.pavelza: still can render only one scene technically, assuming scene is not changed completely, so what's the point of creating it like this and passing scene here instead of ctor?
-        if (!context)
+        //todo.pavelza: manage lifetime of DX12 objects before switching scenes will work
+        if (context == nullptr || context->sceneName != scene.name)
         {
             context = std::make_shared<RendererDX12Context>(scene, texture, std::wstring(shaderFolderPath.begin(), shaderFolderPath.end()), deviceDX12);
+            context->sceneName = scene.name;
         }
 
         return context->Render(texture);
