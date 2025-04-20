@@ -2,6 +2,9 @@
 #define _USE_MATH_DEFINES
 #define IMGUI_DEFINE_MATH_OPERATORS
 
+#include <wrl/client.h>
+using Microsoft::WRL::ComPtr;
+
 #include <cmath>
 
 #include <renderer/math.cpp>

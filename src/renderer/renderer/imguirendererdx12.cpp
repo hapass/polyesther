@@ -6,14 +6,30 @@
 
 namespace Renderer
 {
+    struct ImguiRendererContext
+    {
+        ComPtr<ID3D12Resource> mainRenderTargetResource[2] = {};
+        D3D12_CPU_DESCRIPTOR_HANDLE mainRenderTargetDescriptor[2] = {};
+
+        ComPtr<IDXGISwapChain3> swapChain;
+        ComPtr<ID3D12DescriptorHeap> rootDescriptorHeap;
+
+        ComPtr<ID3D12Resource> textureUploadBuffer;
+        ComPtr<ID3D12Resource> textureBuffer;
+
+        ComPtr<ID3D12DescriptorHeap> backBufferDescHeap;
+    };
+
     ImguiRenderer::ImguiRenderer(const DeviceDX12& device, uint32_t gameWidth, uint32_t gameHeight, HWND window)
         : deviceDX12(device)
     {
+        context = std::make_shared<ImguiRendererContext>();
+
         D3D12_DESCRIPTOR_HEAP_DESC desc = {};
         desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
         desc.NumDescriptors = 2;
         desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
-        D3D_NOT_FAILED(device.GetDevice()->CreateDescriptorHeap(&desc, IID_PPV_ARGS(&rootDescriptorHeap)));
+        D3D_NOT_FAILED(device.GetDevice()->CreateDescriptorHeap(&desc, IID_PPV_ARGS(&context->rootDescriptorHeap)));
 
         IMGUI_CHECKVERSION();
         ImGui::CreateContext();
@@ -24,9 +40,9 @@ namespace Renderer
         //io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;       // Enable Multi-Viewport / Platform Windows
 
         ImGui_ImplDX12_Init(device.GetDevice(), 1,
-            DXGI_FORMAT_R8G8B8A8_UNORM, rootDescriptorHeap,
-            rootDescriptorHeap->GetCPUDescriptorHandleForHeapStart(),
-            rootDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
+            DXGI_FORMAT_R8G8B8A8_UNORM, context->rootDescriptorHeap.Get(),
+            context->rootDescriptorHeap->GetCPUDescriptorHandleForHeapStart(),
+            context->rootDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
 
         DXGI_SWAP_CHAIN_DESC swapChainDescription;
 
@@ -50,36 +66,35 @@ namespace Renderer
         swapChainDescription.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
         swapChainDescription.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
 
-        IDXGIFactory4* factory = nullptr; // clear?
+        ComPtr<IDXGIFactory4> factory;
         D3D_NOT_FAILED(CreateDXGIFactory(IID_PPV_ARGS(&factory)));
 
-        IDXGISwapChain* tempSwapChain = nullptr;
+        ComPtr<IDXGISwapChain> tempSwapChain;
         D3D_NOT_FAILED(factory->CreateSwapChain(device.GetQueue().GetQueue(), &swapChainDescription, &tempSwapChain));
 
-        tempSwapChain->QueryInterface<IDXGISwapChain3>(&swapChain);
+        tempSwapChain->QueryInterface<IDXGISwapChain3>(&context->swapChain);
 
-        ID3D12DescriptorHeap* backBufferDescHeap = nullptr;
         D3D12_DESCRIPTOR_HEAP_DESC backBufferDescHeapDesc = {};
         backBufferDescHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
         backBufferDescHeapDesc.NumDescriptors = 2;
         backBufferDescHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
         backBufferDescHeapDesc.NodeMask = 1;
-        D3D_NOT_FAILED(deviceDX12.GetDevice()->CreateDescriptorHeap(&backBufferDescHeapDesc, IID_PPV_ARGS(&backBufferDescHeap)));
+        D3D_NOT_FAILED(deviceDX12.GetDevice()->CreateDescriptorHeap(&backBufferDescHeapDesc, IID_PPV_ARGS(&context->backBufferDescHeap)));
 
         SIZE_T rtvDescriptorSize = deviceDX12.GetDevice()->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
-        D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = backBufferDescHeap->GetCPUDescriptorHandleForHeapStart();
+        D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = context->backBufferDescHeap->GetCPUDescriptorHandleForHeapStart();
         for (UINT i = 0; i < 2; i++)
         {
-            mainRenderTargetDescriptor[i] = rtvHandle;
+            context->mainRenderTargetDescriptor[i] = rtvHandle;
             rtvHandle.ptr += rtvDescriptorSize;
         }
 
         for (UINT i = 0; i < 2; i++)
         {
-            ID3D12Resource* pBackBuffer = nullptr;
-            swapChain->GetBuffer(i, IID_PPV_ARGS(&pBackBuffer));
-            deviceDX12.GetDevice()->CreateRenderTargetView(pBackBuffer, nullptr, mainRenderTargetDescriptor[i]);
-            mainRenderTargetResource[i] = pBackBuffer;
+            ComPtr<ID3D12Resource> pBackBuffer;
+            context->swapChain->GetBuffer(i, IID_PPV_ARGS(&pBackBuffer));
+            deviceDX12.GetDevice()->CreateRenderTargetView(pBackBuffer.Get(), nullptr, context->mainRenderTargetDescriptor[i]);
+            context->mainRenderTargetResource[i] = pBackBuffer;
         }
     }
 
@@ -102,7 +117,7 @@ namespace Renderer
         UINT64 totalBytes = 0;
         deviceDX12.GetDevice()->GetCopyableFootprints(&textureDesc, 0, 1, 0, &footprint, &numRows, &rowSizeInBytes, &totalBytes);
 
-        if (!textureUploadBuffer)
+        if (!context->textureUploadBuffer)
         {
             D3D12_RESOURCE_DESC uploadBufferDescription;
             uploadBufferDescription.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
@@ -118,45 +133,45 @@ namespace Renderer
             uploadBufferDescription.Flags = D3D12_RESOURCE_FLAG_NONE;
 
             D3D12_HEAP_PROPERTIES uploadProperties = deviceDX12.GetDevice()->GetCustomHeapProperties(0, D3D12_HEAP_TYPE_UPLOAD);
-            D3D_NOT_FAILED(deviceDX12.GetDevice()->CreateCommittedResource(&uploadProperties, D3D12_HEAP_FLAG_NONE, &uploadBufferDescription, D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&textureUploadBuffer)));
-            textureUploadBuffer->SetName(L"Imgui texture upload buffer.");
-            deviceDX12.GetQueue().AddBarrierToList(textureUploadBuffer, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_GENERIC_READ);
+            D3D_NOT_FAILED(deviceDX12.GetDevice()->CreateCommittedResource(&uploadProperties, D3D12_HEAP_FLAG_NONE, &uploadBufferDescription, D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&context->textureUploadBuffer)));
+            context->textureUploadBuffer->SetName(L"Imgui texture upload buffer.");
+            deviceDX12.GetQueue().AddBarrierToList(context->textureUploadBuffer.Get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_GENERIC_READ);
         }
 
-        if (textureBuffer)
+        if (context->textureBuffer)
         {
-            deviceDX12.GetQueue().AddBarrierToList(textureBuffer, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_COPY_DEST);
+            deviceDX12.GetQueue().AddBarrierToList(context->textureBuffer.Get(), D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_COPY_DEST);
         }
         else
         {
             D3D12_HEAP_PROPERTIES defaultProperties = deviceDX12.GetDevice()->GetCustomHeapProperties(0, D3D12_HEAP_TYPE_DEFAULT);
-            D3D_NOT_FAILED(deviceDX12.GetDevice()->CreateCommittedResource(&defaultProperties, D3D12_HEAP_FLAG_NONE, &textureDesc, D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&textureBuffer)));
-            textureBuffer->SetName(L"Imgui texture buffer");
-            deviceDX12.GetQueue().AddBarrierToList(textureBuffer, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_COPY_DEST);
+            D3D_NOT_FAILED(deviceDX12.GetDevice()->CreateCommittedResource(&defaultProperties, D3D12_HEAP_FLAG_NONE, &textureDesc, D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&context->textureBuffer)));
+            context->textureBuffer->SetName(L"Imgui texture buffer");
+            deviceDX12.GetQueue().AddBarrierToList(context->textureBuffer.Get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_COPY_DEST);
         }
 
         BYTE* mappedData = nullptr;
-        textureUploadBuffer->Map(0, nullptr, (void**)&mappedData);
+        context->textureUploadBuffer->Map(0, nullptr, (void**)&mappedData);
 
         for (size_t i = 0; i < numRows; i++)
         {
             memcpy(mappedData + footprint.Footprint.RowPitch * i, texture.GetBuffer() + rowSizeInBytes * i, rowSizeInBytes);
         }
-        textureUploadBuffer->Unmap(0, nullptr);
+        context->textureUploadBuffer->Unmap(0, nullptr);
 
         D3D12_TEXTURE_COPY_LOCATION dest;
-        dest.pResource = textureBuffer;
+        dest.pResource = context->textureBuffer.Get();
         dest.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
         dest.PlacedFootprint = {};
         dest.SubresourceIndex = 0;
 
         D3D12_TEXTURE_COPY_LOCATION src;
-        src.pResource = textureUploadBuffer;
+        src.pResource = context->textureUploadBuffer.Get();
         src.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
         src.PlacedFootprint = footprint;
 
         deviceDX12.GetQueue().GetList()->CopyTextureRegion(&dest, 0, 0, 0, &src, nullptr);
-        deviceDX12.GetQueue().AddBarrierToList(textureBuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_GENERIC_READ);
+        deviceDX12.GetQueue().AddBarrierToList(context->textureBuffer.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_GENERIC_READ);
 
         deviceDX12.GetQueue().Execute();
 
@@ -167,9 +182,9 @@ namespace Renderer
         srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
         srvDesc.Texture2D.MipLevels = 1;
 
-        D3D12_CPU_DESCRIPTOR_HANDLE textureCPUDescriptor { SIZE_T(INT64(rootDescriptorHeap->GetCPUDescriptorHandleForHeapStart().ptr) + INT64(deviceDX12.GetDevice()->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV))) };
-        D3D12_GPU_DESCRIPTOR_HANDLE textureGPUDescriptor { UINT64(INT64(rootDescriptorHeap->GetGPUDescriptorHandleForHeapStart().ptr) + INT64(deviceDX12.GetDevice()->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV))) };
-        deviceDX12.GetDevice()->CreateShaderResourceView(textureBuffer, &srvDesc, textureCPUDescriptor);
+        D3D12_CPU_DESCRIPTOR_HANDLE textureCPUDescriptor { SIZE_T(INT64(context->rootDescriptorHeap->GetCPUDescriptorHandleForHeapStart().ptr) + INT64(deviceDX12.GetDevice()->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV))) };
+        D3D12_GPU_DESCRIPTOR_HANDLE textureGPUDescriptor { UINT64(INT64(context->rootDescriptorHeap->GetGPUDescriptorHandleForHeapStart().ptr) + INT64(deviceDX12.GetDevice()->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV))) };
+        deviceDX12.GetDevice()->CreateShaderResourceView(context->textureBuffer.Get(), &srvDesc, textureCPUDescriptor);
 
         return textureGPUDescriptor;
     }
@@ -186,18 +201,18 @@ namespace Renderer
 
         ImGui::Render();
 
-        UINT backBufferIdx = swapChain->GetCurrentBackBufferIndex();
+        UINT backBufferIdx = context->swapChain->GetCurrentBackBufferIndex();
 
-        deviceDX12.GetQueue().AddBarrierToList(mainRenderTargetResource[backBufferIdx], D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET);
+        deviceDX12.GetQueue().AddBarrierToList(context->mainRenderTargetResource[backBufferIdx].Get(), D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET);
 
         // Render Dear ImGui graphics
         const float clear_color_with_alpha[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
-        deviceDX12.GetQueue().GetList()->ClearRenderTargetView(mainRenderTargetDescriptor[backBufferIdx], clear_color_with_alpha, 0, nullptr);
-        deviceDX12.GetQueue().GetList()->OMSetRenderTargets(1, &mainRenderTargetDescriptor[backBufferIdx], FALSE, nullptr);
-        deviceDX12.GetQueue().GetList()->SetDescriptorHeaps(1, &rootDescriptorHeap);
+        deviceDX12.GetQueue().GetList()->ClearRenderTargetView(context->mainRenderTargetDescriptor[backBufferIdx], clear_color_with_alpha, 0, nullptr);
+        deviceDX12.GetQueue().GetList()->OMSetRenderTargets(1, &context->mainRenderTargetDescriptor[backBufferIdx], FALSE, nullptr);
+        deviceDX12.GetQueue().GetList()->SetDescriptorHeaps(1, context->rootDescriptorHeap.GetAddressOf());
         ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), deviceDX12.GetQueue().GetList());
 
-        deviceDX12.GetQueue().AddBarrierToList(mainRenderTargetResource[backBufferIdx], D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT);
+        deviceDX12.GetQueue().AddBarrierToList(context->mainRenderTargetResource[backBufferIdx].Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT);
         deviceDX12.GetQueue().Execute();
 
         // Update and Render additional Platform Windows
@@ -205,6 +220,6 @@ namespace Renderer
         //ImGui::RenderPlatformWindowsDefault(nullptr, (void*)deviceDX12.GetQueue().GetList());
 
         // todo.pavelza: shutdown, clean, etc
-        swapChain->Present(1, 0);
+        context->swapChain->Present(1, 0);
     }
 }
