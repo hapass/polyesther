@@ -24,11 +24,6 @@ namespace
     constexpr int32_t RenderWidth = 800;
     constexpr int32_t RenderHeight = 600;
 
-    const char* GetCurrentRendererName(std::unique_ptr<Renderer::SceneRendererDX12>& hardwareRenderer, Renderer::SceneRenderer* renderer)
-    {
-        return renderer == hardwareRenderer.get() ? "Hardware Rasterizer" : "Software Rasterizer";
-    }
-
     void CorrectRotation(float& angle)
     {
         if (angle < 0)
@@ -93,46 +88,82 @@ namespace
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
+struct WindowContext
+{
+    WindowContext(HWND hWnd)
+        : assetsDir(std::filesystem::current_path().string() + "\\assets\\")
+        , hardwareRenderer(assetsDir, device)
+        , imguiRenderer(device, WindowWidth, WindowHeight, hWnd)
+    {
+        NOT_FAILED(Renderer::Load(assetsDir + "cars\\scene.sce", scene), false);
+        renderer = &hardwareRenderer;
+    }
+
+    const char* GetCurrentRendererName() const
+    {
+        return renderer == &hardwareRenderer ? "Hardware Rasterizer" : "Software Rasterizer";
+    }
+
+    Renderer::SceneRenderer& GetCurrentRenderer()
+    {
+        return *renderer;
+    }
+
+    void ToggleRenderer()
+    {
+        if (renderer == &hardwareRenderer)
+        {
+            renderer = &softwareRenderer;
+        }
+        else
+        {
+            renderer = &hardwareRenderer;
+        }
+    }
+
+    std::string assetsDir;
+
+    Renderer::SceneRendererSoftware softwareRenderer;
+    Renderer::DeviceDX12 device;
+    Renderer::SceneRendererDX12 hardwareRenderer;
+    Renderer::ImguiRenderer imguiRenderer;
+    Renderer::Scene scene;
+
+private:
+    Renderer::SceneRenderer* renderer = nullptr;
+};
+
 LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
     if (LRESULT r = ImGui_ImplWin32_WndProcHandler(hWnd, uMsg, wParam, lParam))
         return r;
 
-    static std::string AssetsDir = std::filesystem::current_path().string() + "\\assets\\";
-
-    static std::unique_ptr<Renderer::SceneRendererSoftware> softwareRenderer = std::make_unique<Renderer::SceneRendererSoftware>();
-
-    static std::unique_ptr<Renderer::DeviceDX12> device = std::make_unique<Renderer::DeviceDX12>();
-    static std::unique_ptr<Renderer::SceneRendererDX12> hardwareRenderer = std::make_unique<Renderer::SceneRendererDX12>(AssetsDir, *device);
-    static std::unique_ptr<Renderer::ImguiRenderer> imguiRenderer = std::make_unique<Renderer::ImguiRenderer>(*device, WindowWidth, WindowHeight, hWnd); // todo.pavelza: will crash on exit
-
-    static Renderer::SceneRenderer* renderer = hardwareRenderer.get();
-    static std::unique_ptr<Renderer::Scene> scene = std::make_unique<Renderer::Scene>();
+    static std::unique_ptr<WindowContext> windowContext;
 
     switch (uMsg)
     {
         case WM_CREATE:
         {
+            windowContext = std::make_unique<WindowContext>(hWnd);
             ImGui_ImplWin32_Init(hWnd);
-            NOT_FAILED(Renderer::Load(AssetsDir + "cars\\scene.sce", *scene), false);
             return 0;
         }
         case WM_PAINT:
         {
             ImGui_ImplWin32_NewFrame();
 
-            HandleInput(*scene);
+            HandleInput(windowContext->scene);
 
             Renderer::Texture result(RenderWidth, RenderHeight);
 
             Utils::FrameCounter::GetInstance().Start("Frame time");
-            renderer->Render(*scene, result);
+            windowContext->GetCurrentRenderer().Render(windowContext->scene, result);
             Utils::FrameCounter::GetInstance().End();
 
             std::stringstream ss;
             Utils::FrameCounter::GetInstance().GetPerformanceString(ss);
 
-            imguiRenderer->Render(result, [&result, &ss](ImTextureID id) {
+            windowContext->imguiRenderer.Render(result, [&result, &ss](ImTextureID id) {
                 if (ImGui::BeginMainMenuBar())
                 {
                     if (ImGui::BeginMenu("File"))
@@ -155,7 +186,7 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 
                 ImGui::Text("Current rasterizer: ");
                 ImGui::SameLine();
-                ImGui::Text(GetCurrentRendererName(hardwareRenderer, renderer));
+                ImGui::Text(windowContext->GetCurrentRendererName());
                 ImGui::Separator();
                 ImGui::Text("Help:");
                 ImGui::Text("Press R to switch renderer.");
@@ -168,13 +199,13 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 
                 ImGui::Text("Camera:");
                 ImGui::Text("x: %f; y: %f; z: %f",
-                    scene->camera.position.x,
-                    scene->camera.position.y,
-                    scene->camera.position.z
+                    windowContext->scene.camera.position.x,
+                    windowContext->scene.camera.position.y,
+                    windowContext->scene.camera.position.z
                 );
                 ImGui::Text("pitch: %f; yaw: %f",
-                    scene->camera.pitch,
-                    scene->camera.yaw
+                    windowContext->scene.camera.pitch,
+                    windowContext->scene.camera.yaw
                 );
                 ImGui::Separator();
 
@@ -182,34 +213,27 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 
                 if (ImGui::SmallButton("Final image"))
                 {
-                    scene->debugContext.DisplayedGBufferTextureIndex = -1;
+                    windowContext->scene.debugContext.DisplayedGBufferTextureIndex = -1;
                 }
 
                 if (ImGui::SmallButton("View space positions"))
                 {
-                    scene->debugContext.DisplayedGBufferTextureIndex = 0;
+                    windowContext->scene.debugContext.DisplayedGBufferTextureIndex = 0;
                 }
 
                 if (ImGui::SmallButton("View space normals"))
                 {
-                    scene->debugContext.DisplayedGBufferTextureIndex = 1;
+                    windowContext->scene.debugContext.DisplayedGBufferTextureIndex = 1;
                 }
 
                 if (ImGui::SmallButton("Diffuse"))
                 {
-                    scene->debugContext.DisplayedGBufferTextureIndex = 2;
+                    windowContext->scene.debugContext.DisplayedGBufferTextureIndex = 2;
                 }
 
                 if (ImGui::IsKeyPressed(ImGuiKey::ImGuiKey_R))
                 {
-                    if (renderer == hardwareRenderer.get())
-                    {
-                        renderer = softwareRenderer.get();
-                    }
-                    else
-                    {
-                        renderer = hardwareRenderer.get();
-                    }
+                    windowContext->ToggleRenderer();
                 }
 
                 ImGui::End();
@@ -219,14 +243,7 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
         }
         case WM_DESTROY:
         {
-            scene.reset();
-            renderer = nullptr;
-
-            imguiRenderer.reset();
-            hardwareRenderer.reset();
-            device.reset();
-            softwareRenderer.reset();
-
+            windowContext.reset();
             PostQuitMessage(0);
             return 0;
         }
