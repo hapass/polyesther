@@ -25,9 +25,9 @@ namespace Renderer
 
         void Execute();
 
-    private:
         void WaitForCommandListCompletion();
 
+    private:
         ID3D12PipelineState* currentPSO = nullptr; // not owned
         ID3D12CommandAllocator* allocator = nullptr;
         ID3D12GraphicsCommandList* commandList = nullptr;

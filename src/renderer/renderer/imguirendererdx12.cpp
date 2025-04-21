@@ -30,6 +30,7 @@ namespace Renderer
         desc.NumDescriptors = 2;
         desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
         D3D_NOT_FAILED(device.GetDevice()->CreateDescriptorHeap(&desc, IID_PPV_ARGS(&context->rootDescriptorHeap)));
+        context->rootDescriptorHeap->SetName(L"Imgui Root Descriptor Heap.");
 
         IMGUI_CHECKVERSION();
         ImGui::CreateContext();
@@ -37,7 +38,6 @@ namespace Renderer
         io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
         io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
         io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;         // Enable Docking
-        //io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;       // Enable Multi-Viewport / Platform Windows
 
         ImGui_ImplDX12_Init(device.GetDevice(), 1,
             DXGI_FORMAT_R8G8B8A8_UNORM, context->rootDescriptorHeap.Get(),
@@ -95,6 +95,7 @@ namespace Renderer
             context->swapChain->GetBuffer(i, IID_PPV_ARGS(&pBackBuffer));
             deviceDX12.GetDevice()->CreateRenderTargetView(pBackBuffer.Get(), nullptr, context->mainRenderTargetDescriptor[i]);
             context->mainRenderTargetResource[i] = pBackBuffer;
+            pBackBuffer->SetName(L"Imgui Main Render Target Resource.");
         }
     }
 
@@ -146,7 +147,7 @@ namespace Renderer
         {
             D3D12_HEAP_PROPERTIES defaultProperties = deviceDX12.GetDevice()->GetCustomHeapProperties(0, D3D12_HEAP_TYPE_DEFAULT);
             D3D_NOT_FAILED(deviceDX12.GetDevice()->CreateCommittedResource(&defaultProperties, D3D12_HEAP_FLAG_NONE, &textureDesc, D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&context->textureBuffer)));
-            context->textureBuffer->SetName(L"Imgui texture buffer");
+            context->textureBuffer->SetName(L"Imgui texture buffer.");
             deviceDX12.GetQueue().AddBarrierToList(context->textureBuffer.Get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_COPY_DEST);
         }
 
@@ -215,11 +216,13 @@ namespace Renderer
         deviceDX12.GetQueue().AddBarrierToList(context->mainRenderTargetResource[backBufferIdx].Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT);
         deviceDX12.GetQueue().Execute();
 
-        // Update and Render additional Platform Windows
-        //ImGui::UpdatePlatformWindows();
-        //ImGui::RenderPlatformWindowsDefault(nullptr, (void*)deviceDX12.GetQueue().GetList());
-
-        // todo.pavelza: shutdown, clean, etc
         context->swapChain->Present(1, 0);
+    }
+
+    ImguiRenderer::~ImguiRenderer()
+    {
+        deviceDX12.GetQueue().WaitForCommandListCompletion();
+        ImGui_ImplDX12_Shutdown();
+        context.reset();
     }
 }
