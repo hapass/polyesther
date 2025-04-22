@@ -228,7 +228,7 @@ namespace Tests
             Assert::IsTrue(success);
             Assert::AreEqual(std::string("cars"), scene.name);
 
-            Renderer::DeviceDX12 device(true);
+            Renderer::DeviceDX12 device(Renderer::DeviceDX12::Mode::UseSoftwareRasterizer);
             Renderer::SceneRendererDX12 renderer(AssetsDir, device);
 
             Renderer::Texture texture(200, 150); // todo.pavelza: test error if texture has no dimensions and passed to render
@@ -256,7 +256,7 @@ namespace Tests
             Assert::IsTrue(success);
             Assert::AreEqual(std::string("triangle"), scene.name);
 
-            Renderer::DeviceDX12 device(true);
+            Renderer::DeviceDX12 device(Renderer::DeviceDX12::Mode::UseSoftwareRasterizer);
             Renderer::SceneRendererDX12 renderer(AssetsDir, device);
 
             Renderer::Texture texture(200, 150);

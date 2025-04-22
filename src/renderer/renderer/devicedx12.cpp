@@ -90,7 +90,7 @@ namespace Renderer
         }
     }
 
-    DeviceDX12::DeviceDX12(bool useWarp)
+    DeviceDX12::DeviceDX12(Mode mode)
     {
         ID3D12Debug* debugController = nullptr;
         D3D_NOT_FAILED(D3D12GetDebugInterface(IID_PPV_ARGS(&debugController)));
@@ -100,24 +100,18 @@ namespace Renderer
         IDXGIFactory4* factory = nullptr;
         D3D_NOT_FAILED(CreateDXGIFactory1(IID_PPV_ARGS(&factory)));
         
-        if (useWarp)
+        if (mode == Mode::UseSoftwareRasterizer)
         {
-            IDXGIAdapter* warpAdapter;
+            ComPtr<IDXGIAdapter> warpAdapter;
             D3D_NOT_FAILED(factory->EnumWarpAdapter(IID_PPV_ARGS(&warpAdapter)));
-
-            D3D_NOT_FAILED(D3D12CreateDevice(warpAdapter, D3D_FEATURE_LEVEL_12_1, IID_PPV_ARGS(&device)));
+            D3D_NOT_FAILED(D3D12CreateDevice(warpAdapter.Get(), D3D_FEATURE_LEVEL_12_1, IID_PPV_ARGS(&device)));
         }
         else
         {
             D3D_NOT_FAILED(D3D12CreateDevice(NULL, D3D_FEATURE_LEVEL_12_1, IID_PPV_ARGS(&device)));
         }
 
-        graphicsQueue = std::make_unique<GraphicsQueue>(device);
-    }
-
-    DeviceDX12::~DeviceDX12()
-    {
-        device->Release();
+        graphicsQueue = std::make_unique<GraphicsQueue>(device.Get());
     }
 
     GraphicsQueue& DeviceDX12::GetQueue() const
@@ -127,7 +121,7 @@ namespace Renderer
 
     ID3D12Device* DeviceDX12::GetDevice() const
     {
-        return device;
+        return device.Get();
     }
 
     RenderTarget::RenderTarget(const DeviceDX12& device, ID3D12DescriptorHeap* srvDescriptorHeap, size_t width, size_t height, Type type)

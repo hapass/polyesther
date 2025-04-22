@@ -1,5 +1,6 @@
 #pragma once
 
+#include <wrl/client.h>
 #include <d3d12.h>
 #include <memory>
 #include <vector>
@@ -40,15 +41,20 @@ namespace Renderer
 
     struct DeviceDX12
     {
-        DeviceDX12(bool useWarp = false);
-        ~DeviceDX12();
+        enum class Mode
+        {
+            Default,
+            UseSoftwareRasterizer
+        };
+
+        DeviceDX12(Mode mode = Mode::Default);
 
         GraphicsQueue& GetQueue() const;
         ID3D12Device* GetDevice() const;
 
     private:
         std::unique_ptr<GraphicsQueue> graphicsQueue;
-        ID3D12Device* device = nullptr;
+        Microsoft::WRL::ComPtr<ID3D12Device> device;
     };
 
     struct RenderTarget
@@ -86,10 +92,9 @@ namespace Renderer
         ID3D12DescriptorHeap* rootDescriptorHeap = nullptr;
         D3D12_CPU_DESCRIPTOR_HANDLE depthBufferHandle{};
 
-
         std::vector<ID3D12Resource*> renderTargets;
         std::vector<ID3D12DescriptorHeap*> rtvDescriptorHeaps;
-        std::vector<D3D12_CPU_DESCRIPTOR_HANDLE> rtvHandles;
+        std::vector<D3D12_CPU_DESCRIPTOR_HANDLE> rtvHandles; 
         std::vector<D3D12_CPU_DESCRIPTOR_HANDLE> srvHandles;
 
         FLOAT clearColor[4] = { 0.0f, 0.f, 0.f, 1.000000000f };
