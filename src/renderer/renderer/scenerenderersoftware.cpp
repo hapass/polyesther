@@ -267,9 +267,6 @@ namespace Renderer
 
                     assert(OutputWidth > 0);
                     assert(OutputHeight > 0);
-                    assert(0 <= x && x < OutputWidth);
-                    assert(0 <= y && y < OutputHeight);
-                    assert(BackBuffer);
                     size_t coefficient1 = OutputWidth * OutputHeight - OutputWidth;
                     size_t coefficient2 = 2 * OutputWidth;
                     BackBuffer[coefficient1 - (i / OutputWidth) * coefficient2 + i] = Color(final_color).rgba;
@@ -312,7 +309,7 @@ namespace Renderer
 
         void AddRawTriangle(Triangle& tr)
         {
-            assert(vertices.size() == 3);
+            assert(tr.vertices.size() == 3);
 
             for (VertexS& v : tr.vertices)
             {

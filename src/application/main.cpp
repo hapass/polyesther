@@ -16,8 +16,8 @@
 
 #include <filesystem>
 
-constexpr int32_t WindowWidth = 1920;
-constexpr int32_t WindowHeight = 1080;
+constexpr int32_t WindowWidth = 1280;
+constexpr int32_t WindowHeight = 720;
 
 constexpr int32_t RenderWidth = 800;
 constexpr int32_t RenderHeight = 600;

@@ -246,23 +246,37 @@ namespace Renderer
             return result;
         }
 
+        void LogCompilationErrorAndReleaseBlob(HRESULT compileResult, ID3DBlob*& errorBlob)
+        {
+            if (compileResult != S_OK)
+            {
+                if (errorBlob != nullptr)
+                {
+                    LOG("Message: " << (char*)errorBlob->GetBufferPointer());
+                    errorBlob->Release();
+                    errorBlob = nullptr;
+                }
+                D3D_NOT_FAILED(compileResult);
+            }
+        }
+
         ID3D12PipelineState* CreatePSO(const std::wstring& shaderPath, D3D12_CULL_MODE cullMode = D3D12_CULL_MODE::D3D12_CULL_MODE_BACK, int32_t numRenderTargets = 1)
         {
             UINT flags = D3DCOMPILE_ENABLE_UNBOUNDED_DESCRIPTOR_TABLES;
 
-            ID3DBlob* errorBlob = nullptr;
-            ID3DBlob* vertexShaderBlob = nullptr;
-            //D3D_NOT_FAILED(D3DCompileFromFile(shaderPath.c_str(), nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE, "VS", "vs_5_1", flags, 0, &vertexShaderBlob, nullptr));
-            D3DCompileFromFile(shaderPath.c_str(), nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE, "VS", "vs_5_1", flags, 0, &vertexShaderBlob, &errorBlob);
+#ifdef _NDEBUG
+            flags |= D3DCOMPILE_DEBUG;
+#endif
 
-            if (errorBlob)
-            {
-                LOG((char*)errorBlob->GetBufferPointer());
-                errorBlob->Release();
-            }
+            ID3DBlob* errorBlob = nullptr;
+
+            ID3DBlob* vertexShaderBlob = nullptr;
+            HRESULT compileResult = D3DCompileFromFile(shaderPath.c_str(), nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE, "VS", "vs_5_1", flags, 0, &vertexShaderBlob, &errorBlob);
+            LogCompilationErrorAndReleaseBlob(compileResult, errorBlob);
 
             ID3DBlob* pixelShaderBlob = nullptr;
-            D3D_NOT_FAILED(D3DCompileFromFile(shaderPath.c_str(), nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE, "PS", "ps_5_1", flags, 0, &pixelShaderBlob, nullptr));
+            compileResult = D3DCompileFromFile(shaderPath.c_str(), nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE, "PS", "ps_5_1", flags, 0, &pixelShaderBlob, &errorBlob);
+            LogCompilationErrorAndReleaseBlob(compileResult, errorBlob);
 
             D3D12_INPUT_ELEMENT_DESC inputElementDescription[XVertexMetadata::vertexAttributesCount];
 

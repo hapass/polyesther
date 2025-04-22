@@ -17,10 +17,10 @@ call "shell.bat"
 
 set B_UNICODE_FLAGS=/DUNICODE /D_UNICODE
 
-set B_DEBUG_ARGS=/Zi /Od
-if /i "%1"=="release" set B_DEBUG_ARGS=/O2
+set B_DEBUG_DEPENDANT_ARGS=/Zi /Od /D_DEBUG /MDd
+if /i "%1"=="release" set B_DEBUG_DEPENDANT_ARGS=/O2 /DNDEBUG /MD
 
-set B_COMMON_FLAGS=/DNDEBUG /std:c++20 /EHsc /MD %B_DEBUG_ARGS%
+set B_COMMON_FLAGS=/std:c++20 /EHsc %B_DEBUG_DEPENDANT_ARGS%
 set B_COMMON_INCLUDES=/I"..\src\renderer" /I"..\src\common" /I"..\extern\imgui" /I"..\extern\imgui\backends"
 
 set B_TESTS_INCLUDES=/I"%VCInstallDir%Auxiliary\VS\UnitTest\include"
