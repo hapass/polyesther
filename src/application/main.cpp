@@ -16,73 +16,70 @@
 
 #include <filesystem>
 
-namespace
+constexpr int32_t WindowWidth = 1920;
+constexpr int32_t WindowHeight = 1080;
+
+constexpr int32_t RenderWidth = 800;
+constexpr int32_t RenderHeight = 600;
+
+void CorrectRotation(float& angle)
 {
-    constexpr int32_t WindowWidth = 1920;
-    constexpr int32_t WindowHeight = 1080;
-
-    constexpr int32_t RenderWidth = 800;
-    constexpr int32_t RenderHeight = 600;
-
-    void CorrectRotation(float& angle)
+    if (angle < 0)
     {
-        if (angle < 0)
-        {
-            angle += static_cast<float>(M_PI) * 2;
-        }
-        else if (angle > static_cast<float>(M_PI) * 2)
-        {
-            angle -= static_cast<float>(M_PI) * 2;
-        }
+        angle += static_cast<float>(M_PI) * 2;
+    }
+    else if (angle > static_cast<float>(M_PI) * 2)
+    {
+        angle -= static_cast<float>(M_PI) * 2;
+    }
+}
+
+void HandleInput(Renderer::Scene& scene)
+{
+    if (ImGui::IsKeyDown(ImGuiKey::ImGuiKey_UpArrow))
+    {
+        scene.camera.pitch -= 0.01f;
     }
 
-    void HandleInput(Renderer::Scene& scene)
+    if (ImGui::IsKeyDown(ImGuiKey::ImGuiKey_DownArrow))
     {
-        if (ImGui::IsKeyDown(ImGuiKey::ImGuiKey_UpArrow))
-        {
-            scene.camera.pitch -= 0.01f;
-        }
+        scene.camera.pitch += 0.01f;
+    }
 
-        if (ImGui::IsKeyDown(ImGuiKey::ImGuiKey_DownArrow))
-        {
-            scene.camera.pitch += 0.01f;
-        }
+    if (ImGui::IsKeyDown(ImGuiKey::ImGuiKey_RightArrow))
+    {
+        scene.camera.yaw -= 0.01f;
+    }
 
-        if (ImGui::IsKeyDown(ImGuiKey::ImGuiKey_RightArrow))
-        {
-            scene.camera.yaw -= 0.01f;
-        }
+    if (ImGui::IsKeyDown(ImGuiKey::ImGuiKey_LeftArrow))
+    {
+        scene.camera.yaw += 0.01f;
+    }
 
-        if (ImGui::IsKeyDown(ImGuiKey::ImGuiKey_LeftArrow))
-        {
-            scene.camera.yaw += 0.01f;
-        }
+    CorrectRotation(scene.camera.pitch);
+    CorrectRotation(scene.camera.yaw);
 
-        CorrectRotation(scene.camera.pitch);
-        CorrectRotation(scene.camera.yaw);
+    Renderer::Vec forward = Renderer::CameraTransform(scene.camera) * scene.camera.forward;
+    Renderer::Vec left = Renderer::CameraTransform(scene.camera) * scene.camera.left;
 
-        Renderer::Vec forward = Renderer::CameraTransform(scene.camera) * scene.camera.forward;
-        Renderer::Vec left = Renderer::CameraTransform(scene.camera) * scene.camera.left;
+    if (ImGui::IsKeyDown(ImGuiKey::ImGuiKey_W))
+    {
+        scene.camera.position = scene.camera.position + forward * 0.1f;
+    }
 
-        if (ImGui::IsKeyDown(ImGuiKey::ImGuiKey_W))
-        {
-            scene.camera.position = scene.camera.position + forward * 0.1f;
-        }
+    if (ImGui::IsKeyDown(ImGuiKey::ImGuiKey_A))
+    {
+        scene.camera.position = scene.camera.position + left * 0.1f;
+    }
 
-        if (ImGui::IsKeyDown(ImGuiKey::ImGuiKey_A))
-        {
-            scene.camera.position = scene.camera.position + left * 0.1f;
-        }
+    if (ImGui::IsKeyDown(ImGuiKey::ImGuiKey_S))
+    {
+        scene.camera.position = scene.camera.position - forward * 0.1f;
+    }
 
-        if (ImGui::IsKeyDown(ImGuiKey::ImGuiKey_S))
-        {
-            scene.camera.position = scene.camera.position - forward * 0.1f;
-        }
-
-        if (ImGui::IsKeyDown(ImGuiKey::ImGuiKey_D))
-        {
-            scene.camera.position = scene.camera.position - left * 0.1f;
-        }
+    if (ImGui::IsKeyDown(ImGuiKey::ImGuiKey_D))
+    {
+        scene.camera.position = scene.camera.position - left * 0.1f;
     }
 }
 
@@ -99,28 +96,6 @@ struct WindowContext
         renderer = &hardwareRenderer;
     }
 
-    const char* GetCurrentRendererName() const
-    {
-        return renderer == &hardwareRenderer ? "Hardware Rasterizer" : "Software Rasterizer";
-    }
-
-    Renderer::SceneRenderer& GetCurrentRenderer()
-    {
-        return *renderer;
-    }
-
-    void ToggleRenderer()
-    {
-        if (renderer == &hardwareRenderer)
-        {
-            renderer = &softwareRenderer;
-        }
-        else
-        {
-            renderer = &hardwareRenderer;
-        }
-    }
-
     std::string assetsDir;
 
     Renderer::SceneRendererSoftware softwareRenderer;
@@ -129,7 +104,6 @@ struct WindowContext
     Renderer::ImguiRenderer imguiRenderer;
     Renderer::Scene scene;
 
-private:
     Renderer::SceneRenderer* renderer = nullptr;
 };
 
@@ -157,7 +131,7 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
             Renderer::Texture result(RenderWidth, RenderHeight);
 
             Utils::FrameCounter::GetInstance().Start("Frame time");
-            windowContext->GetCurrentRenderer().Render(windowContext->scene, result);
+            windowContext->renderer->Render(windowContext->scene, result);
             Utils::FrameCounter::GetInstance().End();
 
             std::stringstream ss;
@@ -186,7 +160,7 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 
                 ImGui::Text("Current rasterizer: ");
                 ImGui::SameLine();
-                ImGui::Text(windowContext->GetCurrentRendererName());
+                ImGui::Text(windowContext->renderer == &windowContext->hardwareRenderer ? "Hardware Rasterizer" : "Software Rasterizer");
                 ImGui::Separator();
                 ImGui::Text("Help:");
                 ImGui::Text("Press R to switch renderer.");
@@ -233,7 +207,9 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 
                 if (ImGui::IsKeyPressed(ImGuiKey::ImGuiKey_R))
                 {
-                    windowContext->ToggleRenderer();
+                    windowContext->renderer = windowContext->renderer == &windowContext->hardwareRenderer ? 
+                        (Renderer::SceneRenderer*)&windowContext->softwareRenderer :
+                        (Renderer::SceneRenderer*)&windowContext->hardwareRenderer;
                 }
 
                 ImGui::End();

@@ -722,7 +722,6 @@ namespace Renderer
         ID3D12PipelineState* noCullingGbufferPso = nullptr; // todo.pavelza: should be destroyed somehow?
         ID3D12PipelineState* finalImagePSO = nullptr; // todo.pavelza: should be destroyed somehow?
 
-
         const DeviceDX12& deviceDX12;
         const Scene& scene;
         const Texture& texture;
