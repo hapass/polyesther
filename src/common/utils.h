@@ -141,8 +141,6 @@ namespace Utils
 #define ASSERT(call) \
     if (!(call)) throw std::exception("assert failed!");
 
-//#define ENABLE_DETAILED_PERF_LOG
-
 #ifdef ENABLE_DETAILED_PERF_LOG
 #define PERF_START(sampleName) Utils::FrameCounter::GetInstance().Start(sampleName)
 #define PERF_END() Utils::FrameCounter::GetInstance().End()

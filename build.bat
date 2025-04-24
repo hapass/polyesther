@@ -19,6 +19,7 @@ set B_UNICODE_FLAGS=/DUNICODE /D_UNICODE
 
 set B_DEBUG_DEPENDANT_ARGS=/Zi /Od /D_DEBUG /MDd
 if /i "%1"=="release" set B_DEBUG_DEPENDANT_ARGS=/O2 /DNDEBUG /MD
+if /i "%1"=="profile" set B_DEBUG_DEPENDANT_ARGS=/O2 /DNDEBUG /MD /DENABLE_DETAILED_PERF_LOG
 
 set B_COMMON_FLAGS=/std:c++20 /EHsc %B_DEBUG_DEPENDANT_ARGS%
 set B_COMMON_INCLUDES=/I"..\src\renderer" /I"..\src\common" /I"..\extern\imgui" /I"..\extern\imgui\backends"
@@ -36,6 +37,7 @@ echo Copy assets...
 echo ------------------------------------------------
 
 call robocopy "assets" "build\assets" /MIR
+call :FailIfError 8
 
 pushd build
 
@@ -44,6 +46,8 @@ echo Building signature...
 echo ------------------------------------------------
 
 cl /I"..\src\signature" /I"..\src\common" /D_CONSOLE %B_COMMON_FLAGS% ../src/signature/signature.cpp
+call :FailIfError 1
+
 call "signature.exe"
 
 echo ------------------------------------------------
@@ -51,24 +55,38 @@ echo Building renderer...
 echo ------------------------------------------------
 
 cl /I"." %B_COMMON_INCLUDES% %B_COMMON_FLAGS% /c ../src/renderer/renderer.cpp
+call :FailIfError 1
+
 lib /OUT:renderer.lib renderer.obj
+call :FailIfError 1
 
 echo ------------------------------------------------
 echo Building application...
 echo ------------------------------------------------
 
 cl /I"..\src\application" %B_COMMON_INCLUDES% /D_CONSOLE %B_UNICODE_FLAGS% %B_COMMON_FLAGS% ../src/application/application.cpp /link renderer.lib
+call :FailIfError 1
 
 echo ------------------------------------------------
 echo Building tests...
 echo ------------------------------------------------
 
 cl /I"..\src\tests" %B_COMMON_INCLUDES% %B_TESTS_INCLUDES% %B_COMMON_FLAGS% /LD ../src/tests/tests.cpp /link %B_TESTS_LIBPATH% renderer.lib
+call :FailIfError 1
 
 echo ------------------------------------------------
 echo Testing...
 echo ------------------------------------------------
 
 call "vstest.console.exe" tests.dll /blame
+call :FailIfError 1
 
 popd
+
+exit /b 0
+
+:: Tools
+
+:FailIfError
+if errorlevel %1 ( exit 1 )
+exit /b 0

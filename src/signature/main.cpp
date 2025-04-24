@@ -207,50 +207,52 @@ bool Load(const std::string& path, SigDefinition& definition)
 int main()
 {
     SigDefinition definition;
-    bool success = Load((std::filesystem::current_path() / ".." / "assets" / "default.hlsl").string(), definition);
-    assert(success);
-
-    std::filesystem::path generatedDir = std::filesystem::current_path() / "generated";
-    std::filesystem::create_directory(generatedDir);
-    std::ofstream file((generatedDir / "signature.h").string());
-
-    if (file.is_open())
+    if (Load((std::filesystem::current_path() / ".." / "assets" / "default.hlsl").string(), definition))
     {
-        file << "#pragma once\n";
-        file << "struct Constants\n";
-        file << "{\n";
-        for (auto& tuple : definition.constants) file << "    " << std::get<1>(tuple) << " " << std::get<0>(tuple) << ";\n";
-        file << "};\n";
+        std::filesystem::path generatedDir = std::filesystem::current_path() / "generated";
+        std::filesystem::create_directory(generatedDir);
+        std::ofstream file((generatedDir / "signature.h").string());
 
-        file << "struct XVertex\n";
-        file << "{\n";
-        for (auto& vertexAttribute : definition.vertexAttributes) file << "    " << vertexAttribute.type << " " << vertexAttribute.name << ";\n";
-        file << "};\n";
-
-        file << "struct XVertexMetadata\n";
-        file << "{\n";
-        file << "    " << "struct VertexAttribute\n";
-        file << "    " << "{\n";
-        file << "    " << "    " << "const char* semanticName;\n";
-        file << "    " << "    " << "const DXGI_FORMAT format;\n";
-        file << "    " << "    " << "const uint32_t sizeInBytes;\n";
-        file << "    " << "};\n";
-
-        file << "    " << "static constexpr size_t vertexAttributesCount = " << definition.vertexAttributes.size() << ";\n";
-
-        file << "    " << "static constexpr std::array<VertexAttribute, vertexAttributesCount> vertexAttributes {{";
-        for (size_t i = 0; i < definition.vertexAttributes.size(); i++)
+        if (file.is_open())
         {
-            auto& vertexAttribute = definition.vertexAttributes[i];
-            file << "{" << "\"" << vertexAttribute.semanticName << "\", static_cast<DXGI_FORMAT>(" << vertexAttribute.format << "), " << vertexAttribute.sizeInBytes << "}";
+            file << "#pragma once\n";
+            file << "struct Constants\n";
+            file << "{\n";
+            for (auto& tuple : definition.constants) file << "    " << std::get<1>(tuple) << " " << std::get<0>(tuple) << ";\n";
+            file << "};\n";
 
-            if ((i + 1) != definition.vertexAttributes.size()) file << ","; else file << "}};\n";
+            file << "struct XVertex\n";
+            file << "{\n";
+            for (auto& vertexAttribute : definition.vertexAttributes) file << "    " << vertexAttribute.type << " " << vertexAttribute.name << ";\n";
+            file << "};\n";
+
+            file << "struct XVertexMetadata\n";
+            file << "{\n";
+            file << "    " << "struct VertexAttribute\n";
+            file << "    " << "{\n";
+            file << "    " << "    " << "const char* semanticName;\n";
+            file << "    " << "    " << "const DXGI_FORMAT format;\n";
+            file << "    " << "    " << "const uint32_t sizeInBytes;\n";
+            file << "    " << "};\n";
+
+            file << "    " << "static constexpr size_t vertexAttributesCount = " << definition.vertexAttributes.size() << ";\n";
+
+            file << "    " << "static constexpr std::array<VertexAttribute, vertexAttributesCount> vertexAttributes {{";
+            for (size_t i = 0; i < definition.vertexAttributes.size(); i++)
+            {
+                auto& vertexAttribute = definition.vertexAttributes[i];
+                file << "{" << "\"" << vertexAttribute.semanticName << "\", static_cast<DXGI_FORMAT>(" << vertexAttribute.format << "), " << vertexAttribute.sizeInBytes << "}";
+
+                if ((i + 1) != definition.vertexAttributes.size()) file << ","; else file << "}};\n";
+            }
+
+            file << "};\n";
+
+            std::cout << "Signature has been generated." << std::endl;
+            return 0;
         }
-
-        file << "};\n";
-
-        std::cout << "Signature has been generated." << std::endl;
     }
 
-    return 0;
+    std::cout << "Signature generation failed." << std::endl;
+    return 1;
 }
