@@ -83,12 +83,11 @@ namespace Renderer
 
     DeviceDX12::DeviceDX12(Mode mode)
     {
-        ID3D12Debug* debugController = nullptr;
+        ComPtr<ID3D12Debug> debugController;
         D3D_NOT_FAILED(D3D12GetDebugInterface(IID_PPV_ARGS(&debugController)));
         debugController->EnableDebugLayer();
-        debugController->Release();
 
-        IDXGIFactory4* factory = nullptr;
+        ComPtr<IDXGIFactory4> factory;
         D3D_NOT_FAILED(CreateDXGIFactory1(IID_PPV_ARGS(&factory)));
         
         if (mode == Mode::UseSoftwareRasterizer)
@@ -120,7 +119,6 @@ namespace Renderer
         , bufferType(type)
         , targetWidth(width)
         , targetHeight(height)
-        , rootDescriptorHeap(srvDescriptorHeap)
     {
         size_t numBuffers = bufferType == Type::GBuffer ? 3 : 1;
         renderTargets.resize(numBuffers);
@@ -130,24 +128,9 @@ namespace Renderer
 
         for (size_t i = 0; i < numBuffers; i++)
         {
-            CreateBuffer(i, width, height);
+            CreateBuffer(i, width, height, srvDescriptorHeap);
         }
         CreateDepthBuffer(width, height);
-    }
-
-    RenderTarget::~RenderTarget()
-    {
-        depthStencilBuffer->Release();
-        depthStencilViewDescriptorHeap->Release();
-
-        for (ID3D12Resource* resource : renderTargets)
-        {
-            resource->Release();
-        }
-        for (ID3D12DescriptorHeap* heap : rtvDescriptorHeaps)
-        {
-            heap->Release();
-        }
     }
 
     void RenderTarget::ClearAndSetRenderTargets(GraphicsQueue& queue)
@@ -162,10 +145,10 @@ namespace Renderer
 
     ID3D12Resource* RenderTarget::GetBuffer(size_t i)
     {
-        return renderTargets[i];
+        return renderTargets[i].Get();
     }
 
-    void RenderTarget::CreateBuffer(size_t i, size_t width, size_t height)
+    void RenderTarget::CreateBuffer(size_t i, size_t width, size_t height, ID3D12DescriptorHeap* srvDescriptorHeap)
     {
         ASSERT(rtvDescriptorHeaps.size() >= i);
         ASSERT(renderTargets.size() >= 0);
@@ -197,7 +180,7 @@ namespace Renderer
         }
 
         rtvHandles[i] = { SIZE_T(INT64(rtvDescriptorHeaps[i]->GetCPUDescriptorHandleForHeapStart().ptr)) };
-        deviceDX12.GetDevice()->CreateRenderTargetView(renderTargets[i], nullptr, rtvHandles[i]);
+        deviceDX12.GetDevice()->CreateRenderTargetView(renderTargets[i].Get(), nullptr, rtvHandles[i]);
 
         D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
         srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
@@ -205,8 +188,8 @@ namespace Renderer
         srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
         srvDesc.Texture2D.MipLevels = 1;
 
-        srvHandles[i] = { SIZE_T(INT64(rootDescriptorHeap->GetCPUDescriptorHandleForHeapStart().ptr) + INT64(deviceDX12.GetDevice()->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV) * (bufferType == FinalImage ? (i + 1) : (i + 2)))) };
-        deviceDX12.GetDevice()->CreateShaderResourceView(renderTargets[i], &srvDesc, srvHandles[i]);
+        srvHandles[i] = { SIZE_T(INT64(srvDescriptorHeap->GetCPUDescriptorHandleForHeapStart().ptr) + INT64(deviceDX12.GetDevice()->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV) * (bufferType == FinalImage ? (i + 1) : (i + 2)))) };
+        deviceDX12.GetDevice()->CreateShaderResourceView(renderTargets[i].Get(), &srvDesc, srvHandles[i]);
     }
 
     void RenderTarget::CreateDepthBuffer(size_t width, size_t height)
@@ -227,9 +210,9 @@ namespace Renderer
         D3D_NOT_FAILED(deviceDX12.GetDevice()->CreateDescriptorHeap(&heapDescription, IID_PPV_ARGS(&depthStencilViewDescriptorHeap)));
 
         depthBufferHandle = D3D12_CPU_DESCRIPTOR_HANDLE(depthStencilViewDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
-        deviceDX12.GetDevice()->CreateDepthStencilView(depthStencilBuffer, nullptr, depthBufferHandle);
+        deviceDX12.GetDevice()->CreateDepthStencilView(depthStencilBuffer.Get(), nullptr, depthBufferHandle);
 
-        deviceDX12.GetQueue().AddBarrierToList(depthStencilBuffer, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_DEPTH_WRITE);
+        deviceDX12.GetQueue().AddBarrierToList(depthStencilBuffer.Get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_DEPTH_WRITE);
         deviceDX12.GetQueue().Execute();
     }
 

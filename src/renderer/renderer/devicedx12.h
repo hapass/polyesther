@@ -73,7 +73,7 @@ namespace Renderer
         RenderTarget& operator=(const RenderTarget& other) = delete;
         RenderTarget& operator=(RenderTarget&& other) noexcept = delete;
 
-        ~RenderTarget();
+        ~RenderTarget() = default;
 
         void ClearAndSetRenderTargets(GraphicsQueue& queue);
 
@@ -81,20 +81,19 @@ namespace Renderer
 
     private:
         void CreateDepthBuffer(size_t width, size_t height);
-        void CreateBuffer(size_t i, size_t width, size_t height);
+        void CreateBuffer(size_t i, size_t width, size_t height, ID3D12DescriptorHeap* srvDescriptorHeap);
 
         D3D12_CLEAR_VALUE CreateClearValue(D3D12_RESOURCE_DESC textureDescription);
         D3D12_RESOURCE_DESC CreateTextureDescription(DXGI_FORMAT format, D3D12_RESOURCE_FLAGS flags = D3D12_RESOURCE_FLAG_NONE);
 
         const DeviceDX12& deviceDX12;
 
-        ID3D12Resource* depthStencilBuffer = nullptr;
-        ID3D12DescriptorHeap* depthStencilViewDescriptorHeap = nullptr;
-        ID3D12DescriptorHeap* rootDescriptorHeap = nullptr;
+        Microsoft::WRL::ComPtr<ID3D12Resource> depthStencilBuffer;
+        Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> depthStencilViewDescriptorHeap;
         D3D12_CPU_DESCRIPTOR_HANDLE depthBufferHandle{};
 
-        std::vector<ID3D12Resource*> renderTargets;
-        std::vector<ID3D12DescriptorHeap*> rtvDescriptorHeaps;
+        std::vector<Microsoft::WRL::ComPtr<ID3D12Resource>> renderTargets;
+        std::vector<Microsoft::WRL::ComPtr<ID3D12DescriptorHeap>> rtvDescriptorHeaps;
         std::vector<D3D12_CPU_DESCRIPTOR_HANDLE> rtvHandles; 
         std::vector<D3D12_CPU_DESCRIPTOR_HANDLE> srvHandles;
 
