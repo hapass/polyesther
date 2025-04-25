@@ -16,7 +16,7 @@ namespace Renderer
         GraphicsQueue& operator=(const GraphicsQueue& other) = delete;
         GraphicsQueue& operator=(GraphicsQueue&& other) noexcept = delete;
 
-        ~GraphicsQueue();
+        ~GraphicsQueue() = default;
 
         ID3D12GraphicsCommandList* GetList();
         ID3D12CommandQueue* GetQueue();
@@ -30,10 +30,11 @@ namespace Renderer
 
     private:
         ID3D12PipelineState* currentPSO = nullptr; // not owned
-        ID3D12CommandAllocator* allocator = nullptr;
-        ID3D12GraphicsCommandList* commandList = nullptr;
-        ID3D12CommandQueue* queue = nullptr;
-        ID3D12Fence* fence = nullptr;
+
+        Microsoft::WRL::ComPtr<ID3D12CommandAllocator> allocator;
+        Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList> commandList;
+        Microsoft::WRL::ComPtr<ID3D12CommandQueue> queue;
+        Microsoft::WRL::ComPtr<ID3D12Fence> fence;
 
         UINT64 currentFenceValue = 0;
         HANDLE fenceEventHandle = 0;

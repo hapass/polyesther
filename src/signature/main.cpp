@@ -7,7 +7,6 @@
 
 #include <filesystem>
 #include <string>
-#include <cassert>
 #include <iostream>
 #include <fstream>
 

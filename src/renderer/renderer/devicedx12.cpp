@@ -14,7 +14,7 @@ namespace Renderer
         queue->SetName(L"Main command queue.");
 
         D3D_NOT_FAILED(device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&allocator)));
-        D3D_NOT_FAILED(device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, allocator, nullptr, IID_PPV_ARGS(&commandList)));
+        D3D_NOT_FAILED(device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, allocator.Get(), nullptr, IID_PPV_ARGS(&commandList)));
 
         commandList->SetName(L"Main command list.");
 
@@ -22,23 +22,14 @@ namespace Renderer
         NOT_FAILED(fenceEventHandle = CreateEventExW(nullptr, nullptr, CREATE_EVENT_MANUAL_RESET, EVENT_ALL_ACCESS), 0); // todo.pavlza: close handles?
     }
 
-    GraphicsQueue::~GraphicsQueue()
-    {
-        fence->Release();
-        commandList->Release();
-        allocator->Release();
-        queue->Release();
-        currentPSO = nullptr;
-    }
-
     ID3D12GraphicsCommandList* GraphicsQueue::GetList()
     {
-        return commandList;
+        return commandList.Get();
     }
 
     ID3D12CommandQueue* GraphicsQueue::GetQueue()
     {
-        return queue;
+        return queue.Get();
     }
 
     void GraphicsQueue::AddBarrierToList(ID3D12Resource* resource, D3D12_RESOURCE_STATES from, D3D12_RESOURCE_STATES to)
@@ -68,19 +59,19 @@ namespace Renderer
     {
         commandList->Close();
 
-        ID3D12CommandList* cmdsLists[1] = { commandList };
+        ID3D12CommandList* cmdsLists[1] = { commandList.Get() };
         queue->ExecuteCommandLists(1, cmdsLists);
 
         WaitForCommandListCompletion();
 
         D3D_NOT_FAILED(allocator->Reset());
-        D3D_NOT_FAILED(commandList->Reset(allocator, currentPSO));
+        D3D_NOT_FAILED(commandList->Reset(allocator.Get(), currentPSO));
     }
 
     void GraphicsQueue::WaitForCommandListCompletion()
     {
         currentFenceValue++;
-        queue->Signal(fence, currentFenceValue);
+        queue->Signal(fence.Get(), currentFenceValue);
 
         if (fence->GetCompletedValue() != currentFenceValue)
         {
@@ -187,7 +178,6 @@ namespace Renderer
         heapDescription.NodeMask = 0;
 
         D3D_NOT_FAILED(deviceDX12.GetDevice()->CreateDescriptorHeap(&heapDescription, IID_PPV_ARGS(&rtvDescriptorHeaps[i])));
-
 
         DXGI_FORMAT format = bufferType == GBuffer ? DXGI_FORMAT_R32G32B32A32_FLOAT : DXGI_FORMAT_R8G8B8A8_UNORM;
 
