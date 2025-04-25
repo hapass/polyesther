@@ -238,7 +238,7 @@ namespace Renderer
             rootSignatureDescription.pStaticSamplers = &sampler;
             rootSignatureDescription.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
 
-            ID3DBlob* rootSignatureData = nullptr;
+            ID3DBlob* rootSignatureData = nullptr; // todo.pavelza: need clear lifetime
             D3D_NOT_FAILED(D3D12SerializeRootSignature(&rootSignatureDescription, D3D_ROOT_SIGNATURE_VERSION_1, &rootSignatureData, nullptr));
 
             D3D_NOT_FAILED(deviceDX12.GetDevice()->CreateRootSignature(0, rootSignatureData->GetBufferPointer(), rootSignatureData->GetBufferSize(), IID_PPV_ARGS(&rootSignature)));
@@ -266,15 +266,17 @@ namespace Renderer
             flags |= D3DCOMPILE_DEBUG;
 #endif
 
-            ID3DBlob* errorBlob = nullptr;
+            ID3DBlob* errorBlob = nullptr; // todo.pavelza: need clear lifetime
 
-            ID3DBlob* vertexShaderBlob = nullptr;
+            ID3DBlob* vertexShaderBlob = nullptr; // todo.pavelza: need clear lifetime
             HRESULT compileResult = D3DCompileFromFile(shaderPath.c_str(), nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE, "VS", "vs_5_1", flags, 0, &vertexShaderBlob, &errorBlob);
             LogCompilationErrorAndReleaseBlob(compileResult, errorBlob);
 
-            ID3DBlob* pixelShaderBlob = nullptr;
+            ID3DBlob* pixelShaderBlob = nullptr; // todo.pavelza: need clear lifetime
             compileResult = D3DCompileFromFile(shaderPath.c_str(), nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE, "PS", "ps_5_1", flags, 0, &pixelShaderBlob, &errorBlob);
             LogCompilationErrorAndReleaseBlob(compileResult, errorBlob);
+
+            // todo.pavelza: should compile all the shaders upfront, otherwise we compile the same shaders multiple times
 
             D3D12_INPUT_ELEMENT_DESC inputElementDescription[XVertexMetadata::vertexAttributesCount];
 
@@ -366,7 +368,7 @@ namespace Renderer
         void CreateRootDescriptorHeap(UINT descriptorsCount)
         {
             D3D12_DESCRIPTOR_HEAP_DESC heapDescription;
-            heapDescription.Type = D3D12_DESCRIPTOR_HEAP_TYPE::D3D12_DESCR IPTOR_HEAP_TYPE_CBV_SRV_UAV;
+            heapDescription.Type = D3D12_DESCRIPTOR_HEAP_TYPE::D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
             heapDescription.NumDescriptors = descriptorsCount;
             heapDescription.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
             heapDescription.NodeMask = 0;
@@ -740,7 +742,7 @@ namespace Renderer
 
     bool SceneRendererDX12::Render(const Scene& scene, Texture& texture)
     {
-        //todo.pavelza: manage lifetime of DX12 objects before switching scenes will work
+        //todo.pavelza: manage lifetime of DX12 objects before switching scenes will work, might need to also wait for command list to be empty before destruction like in imgui renderer
         if (context == nullptr || context->sceneName != scene.name)
         {
             context = std::make_shared<RendererDX12Context>(scene, texture, std::wstring(shaderFolderPath.begin(), shaderFolderPath.end()), deviceDX12);

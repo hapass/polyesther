@@ -257,7 +257,7 @@ namespace Tests
             Assert::AreEqual(std::string("triangle"), scene.name);
 
             Renderer::DeviceDX12 device(Renderer::DeviceDX12::Mode::UseSoftwareRasterizer);
-            Renderer::SceneRendererDX12 renderer(AssetsDir, device);
+            Renderer::SceneRendererDX12 renderer(AssetsDir, device); //todo.pavelza: test scene switching with the same renderer
 
             Renderer::Texture texture(200, 150);
             renderer.Render(scene, texture);

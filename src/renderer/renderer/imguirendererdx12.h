@@ -21,7 +21,7 @@ namespace Renderer
         void Render(const Texture& texture, const std::function<void(ImTextureID)>& func);
 
     private:
-        D3D12_GPU_DESCRIPTOR_HANDLE UploadTexturesToGPU(const Texture& texture); //todo.pavelza: code duplication with scenerendererdx12.cpp?
+        D3D12_GPU_DESCRIPTOR_HANDLE UploadTexturesToGPU(const Texture& texture); //todo.pavelza: code duplication with scenerendererdx12.cpp
         std::shared_ptr<ImguiRendererContext> context;
         const DeviceDX12& deviceDX12;
     };
