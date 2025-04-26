@@ -125,7 +125,9 @@ namespace Renderer
 
     struct SceneRendererSoftwareContext
     {
-        std::string sceneName;
+        SceneRendererSoftwareContext(const Scene& scene): scene(scene) {}
+
+        const Scene& scene;
 
         size_t OutputWidth;
         size_t OutputHeight;
@@ -415,7 +417,7 @@ namespace Renderer
         {
             for (VertexS& v : tr.vertices)
             {
-                v.v.position = PerspectiveTransform(static_cast<float>(OutputWidth), static_cast<float>(OutputHeight)) * transform * v.v.position;
+                v.v.position = PerspectiveTransform(scene.camera, static_cast<float>(OutputWidth), static_cast<float>(OutputHeight)) * transform * v.v.position;
                 v.pos_view = transform * v.pos_view;
                 // This is possible because we do not do non-uniform scale in transform. If we are about to do non-uniform scale, we should calculate the normal matrix.
                 v.v.normal = transform * v.v.normal;
@@ -516,10 +518,9 @@ namespace Renderer
 
     bool SceneRendererSoftware::Render(const Scene& scene, Texture& texture)
     {
-        if (context == nullptr || context->sceneName != scene.name)
+        if (context == nullptr || context->scene.name != scene.name)
         {
-            context = std::make_shared<SceneRendererSoftwareContext>();
-            context->sceneName = scene.name;
+            context = std::make_shared<SceneRendererSoftwareContext>(scene);
         }
 
         context->OutputWidth = texture.GetWidth();

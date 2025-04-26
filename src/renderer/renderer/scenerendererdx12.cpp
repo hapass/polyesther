@@ -613,7 +613,7 @@ namespace Renderer
         bool Render(Texture& output)
         {
             // Build the view matrix.
-            Matrix mvp = PerspectiveTransform(static_cast<float>(texture.GetWidth()), static_cast<float>(texture.GetHeight())) * ViewTransform(scene.camera);
+            Matrix mvp = PerspectiveTransform(scene.camera, static_cast<float>(texture.GetWidth()), static_cast<float>(texture.GetHeight())) * ViewTransform(scene.camera);
 
             Matrix mv = ViewTransform(scene.camera);
 
@@ -742,8 +742,6 @@ namespace Renderer
         const DeviceDX12& deviceDX12;
         const Scene& scene;
         const Texture& texture;
-
-        std::string sceneName;
     };
 
     SceneRendererDX12::~SceneRendererDX12()
@@ -753,10 +751,9 @@ namespace Renderer
 
     bool SceneRendererDX12::Render(const Scene& scene, Texture& texture)
     {
-        if (context == nullptr || context->sceneName != scene.name)
+        if (context == nullptr || context->scene.name != scene.name)
         {
             context = std::make_shared<RendererDX12Context>(scene, texture, std::wstring(shaderFolderPath.begin(), shaderFolderPath.end()), deviceDX12);
-            context->sceneName = scene.name;
         }
 
         return context->Render(texture);

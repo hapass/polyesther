@@ -494,13 +494,9 @@ namespace Renderer
         REPORT_ERROR_IF_FALSE(file.is_open());
     }
 
-    Matrix PerspectiveTransform(float width, float height)
+    Matrix PerspectiveTransform(const Camera& camera, float width, float height)
     {
-        static float Far = 400.0f; // todo.pavelza: move to camera
-        static float Near = .1f;
-        static float FOV = 25;
-
-        float halfFieldOfView = FOV * (static_cast<float>(M_PI) / 180);
+        float halfFieldOfView = camera.fieldOfView * (static_cast<float>(M_PI) / 180);
         float aspect = width / height;
 
         Matrix m;
@@ -520,13 +516,13 @@ namespace Renderer
         //col 3
         m.m[2] = 0.0f;
         m.m[6] = 0.0f;
-        m.m[10] = Far / (Near - Far);
+        m.m[10] = camera.farPlane / (camera.nearPlane - camera.farPlane);
         m.m[14] = -1.0f;
 
         //col 4
         m.m[3] = 0.0f;
         m.m[7] = 0.0f;
-        m.m[11] = Near * Far / (Near - Far);
+        m.m[11] = camera.nearPlane * camera.farPlane / (camera.nearPlane - camera.farPlane);
         m.m[15] = 0.0f;
 
         return m;

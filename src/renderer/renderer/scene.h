@@ -46,6 +46,10 @@ namespace Renderer
 
     struct Camera
     {
+        float farPlane = 400.0f;
+        float nearPlane = 0.1f;
+        float fieldOfView = 25.0f;
+
         Vec position;
         float pitch = 0.0f; // around x while at 0 position
         float yaw = 0.0f; // around z while at 0 position
@@ -74,7 +78,7 @@ namespace Renderer
     // Near plane of the camera frustum is at -Near, far plane of the camera frustum is at -Far.
     // As DirectX clip space z axis ranges from 0 to 1, we map -Near to 0 and -Far to 1.
     // The coordinate system is right handed.
-    Matrix PerspectiveTransform(float width, float height);
+    Matrix PerspectiveTransform(const Camera& camera, float width, float height);
 
     Matrix ViewTransform(const Camera& camera);
 
