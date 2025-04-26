@@ -452,7 +452,7 @@ namespace Renderer
         void UploadTexturesToGPU(const std::string& textureName, int32_t index, ComPtr<ID3D12Resource>& dataBuffer)
         {
             Texture texture;
-            NOT_FAILED(Load(textureName, texture), false);
+            Load(textureName, texture);
 
             D3D12_RESOURCE_DESC textureDesc = {};
             textureDesc.MipLevels = 1;
@@ -751,6 +751,11 @@ namespace Renderer
 
     bool SceneRendererDX12::Render(const Scene& scene, Texture& texture)
     {
+        if (texture.GetWidth() == 0 || texture.GetHeight() == 0)
+        {
+            return false;
+        }
+
         if (context == nullptr || context->scene.name != scene.name)
         {
             context = std::make_shared<RendererDX12Context>(scene, texture, std::wstring(shaderFolderPath.begin(), shaderFolderPath.end()), deviceDX12);

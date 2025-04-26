@@ -246,13 +246,13 @@ namespace Renderer
                     if (Textures.size() > 0)
                     {
                         uint32_t materialId = TBuffer[i];
+                        assert(Textures[materialId].GetHeight() > 0 && Textures[materialId].GetWidth() > 0);
 
                         // From 0 to TextureWidth - 1 (TextureWidth pixels in total)
                         size_t textureX = static_cast<size_t>(texX * (Textures[materialId].GetWidth() - 1));
                         // From 0 to TextureHeight - 1 (TextureHeight pixels in total)
                         size_t textureY = static_cast<size_t>(texY * (Textures[materialId].GetHeight() - 1));
 
-                        // todo.pavelza: 0 height texture undefined behavior
                         textureY = (Textures[materialId].GetHeight() - 1) - textureY; // invert texture coords
 
                         assert(textureY < Textures[materialId].GetHeight() && textureX < Textures[materialId].GetWidth());
@@ -518,6 +518,11 @@ namespace Renderer
 
     bool SceneRendererSoftware::Render(const Scene& scene, Texture& texture)
     {
+        if (texture.GetWidth() == 0 || texture.GetHeight() == 0)
+        {
+            return false;
+        }
+
         if (context == nullptr || context->scene.name != scene.name)
         {
             context = std::make_shared<SceneRendererSoftwareContext>(scene);

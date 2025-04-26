@@ -80,6 +80,9 @@ namespace Renderer
             return true;
         }
 
+        Texture temp(1, 1);
+        temp.SetColor(0, Color::Red);
+        texture = std::move(temp);
         return false;
     };
 

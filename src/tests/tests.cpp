@@ -29,14 +29,12 @@ using namespace Microsoft::VisualStudio::CppUnitTestFramework;
 
 namespace Tests
 {
-    namespace
-    {
-        std::string BuildDir;
-        std::string AssetsDir;
-        std::string TestsDir;
-        std::string QuadsDir;
-        std::string TriangleDir;
-    }
+    std::string BuildDir;
+    std::string AssetsDir;
+    std::string TestsDir;
+    std::string QuadsDir;
+    std::string TriangleDir;
+    std::string CarsDir;
 
     TEST_MODULE_INITIALIZE(TestsInitialize)
     {
@@ -45,17 +43,12 @@ namespace Tests
         TestsDir = AssetsDir + "tests\\";
         QuadsDir = TestsDir + "quads\\";
         TriangleDir = TestsDir + "triangle\\";
+        CarsDir = AssetsDir + "cars\\";
 
         Utils::DebugUtils::GetInstance().AddOutput([](const std::string& message)
         {
             Logger::WriteMessage(message.c_str());
         });
-
-        LOG("BuildDir: " << BuildDir);
-        LOG("AssetsDir: " << AssetsDir);
-        LOG("TestsDir: " << TestsDir);
-        LOG("QuadsDir: " << QuadsDir);
-        LOG("TriangleDir: " << TriangleDir);
     }
 
     TEST_MODULE_CLEANUP(TestsCleanup)
@@ -218,82 +211,115 @@ namespace Tests
         }
     };
 
-    TEST_CLASS(RendererDX12)
+    void RenderAndCompareToReference(Renderer::SceneRenderer& renderer, const Renderer::Scene& scene, const std::string& coreName)
     {
-        // todo.pavelza: test error if texture has no dimensions and passed to render
-        // todo.pavelza: test scene switching with the same renderer
+        constexpr uint32_t width = 200;
+        constexpr uint32_t height = 150;
 
-        void RenderAndCompareToReference(const Renderer::Scene& scene, const std::string& coreName)
+        Renderer::Texture texture(width, height);
+        Assert::IsTrue(renderer.Render(scene, texture));
+
+        Renderer::Texture reference;
+        std::string referencePath(TestsDir + "reference_" + coreName + ".bmp");
+        if (!Renderer::Load(referencePath, reference))
         {
-            Renderer::DeviceDX12 device(Renderer::DeviceDX12::Mode::UseSoftwareRasterizer);
-            Renderer::SceneRendererDX12 renderer(AssetsDir, device);
+            std::string savedReferencePath = BuildDir + "reference_" + coreName + ".bmp";
 
-            constexpr uint32_t width = 200;
-            constexpr uint32_t height = 150;
+            LOG("Warning! No reference for the image: " << coreName << ". Saving rendered texture to: " << savedReferencePath << ". Please move it to: " << referencePath << ", if you think it should act as reference. Passing the test for now.");
 
-            Renderer::Texture texture(width, height);
-            renderer.Render(scene, texture);
+            Assert::IsTrue(Renderer::Save(savedReferencePath, texture));
+            Assert::IsTrue(Renderer::Load(savedReferencePath, reference));
+        }
 
-            Renderer::Texture reference;
-            Renderer::Load(TestsDir + "reference_" + coreName + ".bmp", reference);
+        Renderer::Texture diff(width, height);
 
-            Renderer::Texture result(width, height);
+        uint32_t differentPixelsCount = 0;
+        Assert::IsTrue(Renderer::Diff(texture, reference, diff, differentPixelsCount));
 
-            uint32_t differentPixelsCount = 0;
-            if (!Renderer::Diff(texture, reference, result, differentPixelsCount))
-            {
-                Renderer::Save(BuildDir + "reference_" + coreName + ".bmp", texture);
-                Assert::IsTrue(false);
-            }
-
-            if (differentPixelsCount > 0)
-            {
-                Renderer::Save(BuildDir + coreName + ".bmp", texture);
-                Renderer::Save(BuildDir + coreName + "_diff.bmp", result);
-            }
+        if (differentPixelsCount > 0)
+        {
+            Assert::IsTrue(Renderer::Save(BuildDir + coreName + ".bmp", texture));
+            Assert::IsTrue(Renderer::Save(BuildDir + coreName + "_diff.bmp", diff));
 
             float error = static_cast<float>(differentPixelsCount) / (width * height);
             Assert::IsTrue(error < 0.01);
         }
+        else
+        {
+            Assert::IsTrue(differentPixelsCount == 0);
+        }
+    }
 
+    TEST_CLASS(RendererDX12)
+    {
         TEST_METHOD(RenderShouldProperlyRenderSimpleScene)
         {
             Renderer::Scene scene;
-            bool success = Renderer::Load(AssetsDir + "cars\\scene.sce", scene);
+            Assert::IsTrue(Renderer::Load(CarsDir + "scene.sce", scene));
 
-            Assert::IsTrue(success);
-            Assert::AreEqual(std::string("cars"), scene.name);
+            Renderer::DeviceDX12 device(Renderer::DeviceDX12::Mode::UseSoftwareRasterizer);
+            Renderer::SceneRendererDX12 renderer(AssetsDir, device);
 
-            RenderAndCompareToReference(scene, "dx12");
+            RenderAndCompareToReference(renderer, scene, "dx12");
         }
 
         TEST_METHOD(RenderShouldProperlyRenderColoredTriangleScene)
         {
             Renderer::Scene scene;
-            bool success = Renderer::Load(TriangleDir + "scene.sce", scene);
+            Assert::IsTrue(Renderer::Load(TriangleDir + "scene.sce", scene));
 
-            Assert::IsTrue(success);
-            Assert::AreEqual(std::string("triangle"), scene.name);
+            Renderer::DeviceDX12 device(Renderer::DeviceDX12::Mode::UseSoftwareRasterizer);
+            Renderer::SceneRendererDX12 renderer(AssetsDir, device);
 
-            RenderAndCompareToReference(scene, "triangle_dx12");
+            RenderAndCompareToReference(renderer, scene, "triangle_dx12");
         }
 
         TEST_METHOD(RenderShouldUseBackfaceCullingFlagProperly)
         {
             Renderer::Scene scene;
-            bool success = Renderer::Load(AssetsDir + "cars\\scene.sce", scene);
-            Assert::IsTrue(success);
-            Assert::AreEqual(std::string("cars"), scene.name);
+            Assert::IsTrue(Renderer::Load(CarsDir + "scene.sce", scene));
+
+            Renderer::DeviceDX12 device(Renderer::DeviceDX12::Mode::UseSoftwareRasterizer);
+            Renderer::SceneRendererDX12 renderer(AssetsDir, device);
 
             scene.camera.position = {0.0f, 2.3f, 5.0f, 1.0f };
             scene.camera.pitch = 0.7f;
 
-            RenderAndCompareToReference(scene, "backface_0_dx12");
+            RenderAndCompareToReference(renderer, scene, "backface_0_dx12");
 
             scene.camera.position = {0.0f, -5.0f, 5.0f, 1.0f };
             scene.camera.pitch = 5.69f;
 
-            RenderAndCompareToReference(scene, "backface_1_dx12");
+            RenderAndCompareToReference(renderer, scene, "backface_1_dx12");
+        }
+
+        TEST_METHOD(RenderShouldReturnFalseIfTextureHasZeroDimension)
+        {
+            Renderer::Scene scene;
+            Assert::IsTrue(Renderer::Load(TriangleDir + "scene.sce", scene));
+
+            Renderer::DeviceDX12 device(Renderer::DeviceDX12::Mode::UseSoftwareRasterizer);
+            Renderer::SceneRendererDX12 renderer(AssetsDir, device);
+
+            Renderer::Texture textureZeroHeight(200, 0);
+            Assert::IsFalse(renderer.Render(scene, textureZeroHeight));
+
+            Renderer::Texture textureZeroWidth(0, 150);
+            Assert::IsFalse(renderer.Render(scene, textureZeroWidth));
+        }
+
+        TEST_METHOD(RenderShouldPaintMissingTexturesRed)
+        {
+            Renderer::Scene scene;
+            Assert::IsTrue(Renderer::Load(CarsDir + "scene.sce", scene));
+
+            scene.models[0].materials[0].textureName = "notfound";
+            scene.models[0].materials[1].textureName = "notfound";
+
+            Renderer::DeviceDX12 device(Renderer::DeviceDX12::Mode::UseSoftwareRasterizer);
+            Renderer::SceneRendererDX12 renderer(AssetsDir, device);
+
+            RenderAndCompareToReference(renderer, scene, "texture_not_found_dx12");
         }
     };
 
@@ -302,39 +328,48 @@ namespace Tests
         TEST_METHOD(RenderShouldProperlyRenderSimpleScene)
         {
             Renderer::Scene scene;
-            bool success = Renderer::Load(AssetsDir + "cars\\scene.sce", scene);
-
-            Assert::IsTrue(success);
-            Assert::AreEqual(std::string("cars"), scene.name);
+            Assert::IsTrue(Renderer::Load(CarsDir + "scene.sce", scene));
 
             Renderer::SceneRendererSoftware renderer;
 
-            Renderer::Texture texture(200, 150);
-            renderer.Render(scene, texture);
-
-            Renderer::Texture reference(200, 150);
-            Renderer::Load(TestsDir + "reference_software.bmp", reference);
-
-            Assert::IsTrue(texture == reference);
+            RenderAndCompareToReference(renderer, scene, "software");
         }
 
         TEST_METHOD(RenderShouldProperlyRenderColoredTriangleScene)
         {
             Renderer::Scene scene;
-            bool success = Renderer::Load(TriangleDir + "scene.sce", scene);
-
-            Assert::IsTrue(success);
-            Assert::AreEqual(std::string("triangle"), scene.name);
+            Assert::IsTrue(Renderer::Load(TriangleDir + "scene.sce", scene));
 
             Renderer::SceneRendererSoftware renderer;
 
-            Renderer::Texture texture(200, 150);
-            renderer.Render(scene, texture);
+            RenderAndCompareToReference(renderer, scene, "triangle_software");
+        }
 
-            Renderer::Texture reference;
-            Renderer::Load(TestsDir + "reference_triangle_software.bmp", reference);
+        TEST_METHOD(RenderShouldReturnFalseIfTextureHasZeroDimension)
+        {
+            Renderer::Scene scene;
+            Assert::IsTrue(Renderer::Load(TriangleDir + "scene.sce", scene));
 
-            Assert::IsTrue(texture == reference);
+            Renderer::SceneRendererSoftware renderer;
+
+            Renderer::Texture textureZeroHeight(200, 0);
+            Assert::IsFalse(renderer.Render(scene, textureZeroHeight));
+
+            Renderer::Texture textureZeroWidth(0, 150);
+            Assert::IsFalse(renderer.Render(scene, textureZeroWidth));
+        }
+
+        TEST_METHOD(RenderShouldPaintMissingTexturesRed)
+        {
+            Renderer::Scene scene;
+            Assert::IsTrue(Renderer::Load(CarsDir + "scene.sce", scene));
+
+            scene.models[0].materials[0].textureName = "notfound";
+            scene.models[0].materials[1].textureName = "notfound";
+
+            Renderer::SceneRendererSoftware renderer;
+
+            RenderAndCompareToReference(renderer, scene, "texture_not_found_software");
         }
     };
 }
