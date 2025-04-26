@@ -439,7 +439,7 @@ namespace Renderer
                             std::string culling;
                             if (lineStream >> culling)
                             {
-                                model.backfaceCulling = culling != "culling_off"; // todo.pavelza: add tests
+                                model.backfaceCulling = culling != "culling_off";
                             }
 
                             scene.models.push_back(std::move(model));

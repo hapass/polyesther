@@ -220,6 +220,42 @@ namespace Tests
 
     TEST_CLASS(RendererDX12)
     {
+        // todo.pavelza: test error if texture has no dimensions and passed to render
+        // todo.pavelza: test scene switching with the same renderer
+
+        void RenderAndCompareToReference(const Renderer::Scene& scene, const std::string& coreName)
+        {
+            Renderer::DeviceDX12 device(Renderer::DeviceDX12::Mode::UseSoftwareRasterizer);
+            Renderer::SceneRendererDX12 renderer(AssetsDir, device);
+
+            constexpr uint32_t width = 200;
+            constexpr uint32_t height = 150;
+
+            Renderer::Texture texture(width, height);
+            renderer.Render(scene, texture);
+
+            Renderer::Texture reference;
+            Renderer::Load(TestsDir + "reference_" + coreName + ".bmp", reference);
+
+            Renderer::Texture result(width, height);
+
+            uint32_t differentPixelsCount = 0;
+            if (!Renderer::Diff(texture, reference, result, differentPixelsCount))
+            {
+                Renderer::Save(BuildDir + "reference_" + coreName + ".bmp", texture);
+                Assert::IsTrue(false);
+            }
+
+            if (differentPixelsCount > 0)
+            {
+                Renderer::Save(BuildDir + coreName + ".bmp", texture);
+                Renderer::Save(BuildDir + coreName + "_diff.bmp", result);
+            }
+
+            float error = static_cast<float>(differentPixelsCount) / (width * height);
+            Assert::IsTrue(error < 0.01);
+        }
+
         TEST_METHOD(RenderShouldProperlyRenderSimpleScene)
         {
             Renderer::Scene scene;
@@ -228,24 +264,7 @@ namespace Tests
             Assert::IsTrue(success);
             Assert::AreEqual(std::string("cars"), scene.name);
 
-            Renderer::DeviceDX12 device(Renderer::DeviceDX12::Mode::UseSoftwareRasterizer);
-            Renderer::SceneRendererDX12 renderer(AssetsDir, device);
-
-            Renderer::Texture texture(200, 150); // todo.pavelza: test error if texture has no dimensions and passed to render
-            renderer.Render(scene, texture);
-            Renderer::Save(BuildDir + "dx12.bmp", texture);
-
-            Renderer::Texture reference;
-            Renderer::Load(TestsDir + "reference_dx12.bmp", reference);
-
-            Renderer::Texture result(200, 150);
-            uint32_t differentPixelsCount = 0;
-            Renderer::Diff(texture, reference, result, differentPixelsCount);
-
-            Renderer::Save(BuildDir + "dx12_diff.bmp", result);
-
-            float error = static_cast<float>(differentPixelsCount) / (200.0f * 150.0f);
-            Assert::IsTrue(error < 0.01);
+            RenderAndCompareToReference(scene, "dx12");
         }
 
         TEST_METHOD(RenderShouldProperlyRenderColoredTriangleScene)
@@ -256,24 +275,25 @@ namespace Tests
             Assert::IsTrue(success);
             Assert::AreEqual(std::string("triangle"), scene.name);
 
-            Renderer::DeviceDX12 device(Renderer::DeviceDX12::Mode::UseSoftwareRasterizer);
-            Renderer::SceneRendererDX12 renderer(AssetsDir, device); //todo.pavelza: test scene switching with the same renderer
+            RenderAndCompareToReference(scene, "triangle_dx12");
+        }
 
-            Renderer::Texture texture(200, 150);
-            renderer.Render(scene, texture);
-            Renderer::Save(BuildDir + "triangle_dx12.bmp", texture);
+        TEST_METHOD(RenderShouldUseBackfaceCullingFlagProperly)
+        {
+            Renderer::Scene scene;
+            bool success = Renderer::Load(AssetsDir + "cars\\scene.sce", scene);
+            Assert::IsTrue(success);
+            Assert::AreEqual(std::string("cars"), scene.name);
 
-            Renderer::Texture reference;
-            Renderer::Load(TestsDir + "reference_triangle_dx12.bmp", reference);
+            scene.camera.position = {0.0f, 2.3f, 5.0f, 1.0f };
+            scene.camera.pitch = 0.7f;
 
-            Renderer::Texture result(200, 150);
-            uint32_t differentPixelsCount = 0;
-            Renderer::Diff(texture, reference, result, differentPixelsCount);
+            RenderAndCompareToReference(scene, "backface_0_dx12");
 
-            Renderer::Save(BuildDir + "triangle_dx12_diff.bmp", result);
+            scene.camera.position = {0.0f, -5.0f, 5.0f, 1.0f };
+            scene.camera.pitch = 5.69f;
 
-            float error = static_cast<float>(differentPixelsCount) / (200.0f * 150.0f);
-            Assert::IsTrue(error < 0.01);
+            RenderAndCompareToReference(scene, "backface_1_dx12");
         }
     };
 
