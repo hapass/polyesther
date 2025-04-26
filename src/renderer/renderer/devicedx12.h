@@ -12,7 +12,7 @@ namespace Renderer
     {
         DELETE_CTORS(GraphicsQueue);
         GraphicsQueue(ID3D12Device* device);
-        ~GraphicsQueue() = default;
+        ~GraphicsQueue();
 
         ID3D12GraphicsCommandList* GetList();
         ID3D12CommandQueue* GetQueue();
@@ -44,6 +44,7 @@ namespace Renderer
             UseSoftwareRasterizer
         };
 
+        DELETE_CTORS(DeviceDX12);
         DeviceDX12(Mode mode = Mode::Default);
 
         GraphicsQueue& GetQueue() const;

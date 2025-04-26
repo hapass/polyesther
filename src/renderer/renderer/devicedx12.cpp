@@ -19,7 +19,12 @@ namespace Renderer
         commandList->SetName(L"Main command list.");
 
         D3D_NOT_FAILED(device->CreateFence(currentFenceValue, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fence)));
-        NOT_FAILED(fenceEventHandle = CreateEventExW(nullptr, nullptr, CREATE_EVENT_MANUAL_RESET, EVENT_ALL_ACCESS), 0); // todo.pavlza: close handles?
+        NOT_FAILED(fenceEventHandle = CreateEventExW(nullptr, nullptr, CREATE_EVENT_MANUAL_RESET, EVENT_ALL_ACCESS), 0);
+    }
+
+    GraphicsQueue::~GraphicsQueue()
+    {
+        CloseHandle(fenceEventHandle);
     }
 
     ID3D12GraphicsCommandList* GraphicsQueue::GetList()
