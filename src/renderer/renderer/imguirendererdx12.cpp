@@ -223,6 +223,5 @@ namespace Renderer
     {
         deviceDX12.GetQueue().WaitForCommandListCompletion();
         ImGui_ImplDX12_Shutdown();
-        context.reset();
     }
 }

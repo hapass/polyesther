@@ -4,18 +4,14 @@
 #include <d3d12.h>
 #include <memory>
 #include <vector>
+#include <utils.h>
 
 namespace Renderer
 {
     struct GraphicsQueue
     {
+        DELETE_CTORS(GraphicsQueue);
         GraphicsQueue(ID3D12Device* device);
-
-        GraphicsQueue(const GraphicsQueue& other) = delete;
-        GraphicsQueue(GraphicsQueue&& other) noexcept = delete;
-        GraphicsQueue& operator=(const GraphicsQueue& other) = delete;
-        GraphicsQueue& operator=(GraphicsQueue&& other) noexcept = delete;
-
         ~GraphicsQueue() = default;
 
         ID3D12GraphicsCommandList* GetList();
@@ -66,13 +62,8 @@ namespace Renderer
             FinalImage
         };
 
+        DELETE_CTORS(RenderTarget);
         RenderTarget(const DeviceDX12& device, ID3D12DescriptorHeap* srvDescriptorHeap, size_t width, size_t height, Type type);
-
-        RenderTarget(const RenderTarget& other) = delete;
-        RenderTarget(RenderTarget&& other) noexcept = delete;
-        RenderTarget& operator=(const RenderTarget& other) = delete;
-        RenderTarget& operator=(RenderTarget&& other) noexcept = delete;
-
         ~RenderTarget() = default;
 
         void ClearAndSetRenderTargets(GraphicsQueue& queue);
@@ -94,7 +85,7 @@ namespace Renderer
 
         std::vector<Microsoft::WRL::ComPtr<ID3D12Resource>> renderTargets;
         std::vector<Microsoft::WRL::ComPtr<ID3D12DescriptorHeap>> rtvDescriptorHeaps;
-        std::vector<D3D12_CPU_DESCRIPTOR_HANDLE> rtvHandles; 
+        std::vector<D3D12_CPU_DESCRIPTOR_HANDLE> rtvHandles;
         std::vector<D3D12_CPU_DESCRIPTOR_HANDLE> srvHandles;
 
         FLOAT clearColor[4] = { 0.0f, 0.f, 0.f, 1.000000000f };

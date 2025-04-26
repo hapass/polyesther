@@ -141,6 +141,12 @@ namespace Utils
 #define ASSERT(call) \
     if (!(call)) throw std::exception("assert failed!");
 
+#define DELETE_CTORS(ClassName) \
+    ClassName(const ClassName& other) = delete; \
+    ClassName(ClassName&& other) noexcept = delete; \
+    ClassName& operator=(const ClassName& other) = delete; \
+    ClassName& operator=(ClassName&& other) noexcept = delete; \
+
 #ifdef ENABLE_DETAILED_PERF_LOG
 #define PERF_START(sampleName) Utils::FrameCounter::GetInstance().Start(sampleName)
 #define PERF_END() Utils::FrameCounter::GetInstance().End()

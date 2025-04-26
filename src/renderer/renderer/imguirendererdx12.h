@@ -15,6 +15,7 @@ namespace Renderer
 
     struct ImguiRenderer
     {
+        DELETE_CTORS(ImguiRenderer);
         ImguiRenderer(const DeviceDX12& device, uint32_t gameWidth, uint32_t gameHeight, HWND window);
         ~ImguiRenderer();
 

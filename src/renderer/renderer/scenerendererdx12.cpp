@@ -16,6 +16,7 @@
 #include <string>
 #include <tuple>
 #include <map>
+#include <unordered_map>
 #include <cassert>
 #include <iostream>
 
@@ -88,9 +89,17 @@ namespace Renderer
             CreateRootSignature(numberOfTextures);
 
             // pso
-            gbufferPSO = CreatePSO(shaderPath + L"gbuffer.hlsl", D3D12_CULL_MODE_BACK, 3);
-            noCullingGBufferPSO = CreatePSO(shaderPath + L"gbuffer.hlsl", D3D12_CULL_MODE_NONE, 3);
-            finalImagePSO = CreatePSO(shaderPath + L"default.hlsl", D3D12_CULL_MODE_BACK, 1);
+            ComPtr<ID3DBlob> gbuffer_vs;
+            ComPtr<ID3DBlob> gbuffer_ps;
+            ComPtr<ID3DBlob> default_vs;
+            ComPtr<ID3DBlob> default_ps;
+
+            CompileShaders(shaderPath + L"gbuffer.hlsl", gbuffer_vs, gbuffer_ps);
+            CompileShaders(shaderPath + L"default.hlsl", default_vs, default_ps);
+
+            gbufferPSO = CreatePSO(gbuffer_vs.Get(), gbuffer_ps.Get(), D3D12_CULL_MODE_BACK, 3);
+            noCullingGBufferPSO = CreatePSO(gbuffer_vs.Get(), gbuffer_ps.Get(), D3D12_CULL_MODE_NONE, 3);
+            finalImagePSO = CreatePSO(default_vs.Get(), default_ps.Get(), D3D12_CULL_MODE_BACK, 1);
 
             // queue
             deviceDX12.GetQueue().SetCurrentPipelineStateObject(gbufferPSO.Get());
@@ -238,27 +247,25 @@ namespace Renderer
             rootSignatureDescription.pStaticSamplers = &sampler;
             rootSignatureDescription.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
 
-            ID3DBlob* rootSignatureData = nullptr; // todo.pavelza: need clear lifetime
+            ComPtr<ID3DBlob> rootSignatureData;
             D3D_NOT_FAILED(D3D12SerializeRootSignature(&rootSignatureDescription, D3D_ROOT_SIGNATURE_VERSION_1, &rootSignatureData, nullptr));
 
             D3D_NOT_FAILED(deviceDX12.GetDevice()->CreateRootSignature(0, rootSignatureData->GetBufferPointer(), rootSignatureData->GetBufferSize(), IID_PPV_ARGS(&rootSignature)));
         }
 
-        void LogCompilationErrorAndReleaseBlob(HRESULT compileResult, ID3DBlob*& errorBlob)
+        void LogCompilationErrorAndReleaseBlob(HRESULT compileResult, ComPtr<ID3DBlob>& errorBlob)
         {
             if (compileResult != S_OK)
             {
-                if (errorBlob != nullptr)
+                if (errorBlob.Get() != nullptr)
                 {
                     LOG("Message: " << (char*)errorBlob->GetBufferPointer());
-                    errorBlob->Release();
-                    errorBlob = nullptr;
                 }
                 D3D_NOT_FAILED(compileResult);
             }
         }
 
-        ComPtr<ID3D12PipelineState> CreatePSO(const std::wstring& shaderPath, D3D12_CULL_MODE cullMode = D3D12_CULL_MODE::D3D12_CULL_MODE_BACK, int32_t numRenderTargets = 1)
+        void CompileShaders(const std::wstring& shaderPath, ComPtr<ID3DBlob>& vs, ComPtr<ID3DBlob>& ps)
         {
             UINT flags = D3DCOMPILE_ENABLE_UNBOUNDED_DESCRIPTOR_TABLES;
 
@@ -266,18 +273,17 @@ namespace Renderer
             flags |= D3DCOMPILE_DEBUG;
 #endif
 
-            ID3DBlob* errorBlob = nullptr; // todo.pavelza: need clear lifetime
+            ComPtr<ID3DBlob> errorBlob;
 
-            ID3DBlob* vertexShaderBlob = nullptr; // todo.pavelza: need clear lifetime
-            HRESULT compileResult = D3DCompileFromFile(shaderPath.c_str(), nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE, "VS", "vs_5_1", flags, 0, &vertexShaderBlob, &errorBlob);
+            HRESULT compileResult = D3DCompileFromFile(shaderPath.c_str(), nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE, "VS", "vs_5_1", flags, 0, &vs, &errorBlob);
             LogCompilationErrorAndReleaseBlob(compileResult, errorBlob);
 
-            ID3DBlob* pixelShaderBlob = nullptr; // todo.pavelza: need clear lifetime
-            compileResult = D3DCompileFromFile(shaderPath.c_str(), nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE, "PS", "ps_5_1", flags, 0, &pixelShaderBlob, &errorBlob);
+            compileResult = D3DCompileFromFile(shaderPath.c_str(), nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE, "PS", "ps_5_1", flags, 0, &ps, &errorBlob);
             LogCompilationErrorAndReleaseBlob(compileResult, errorBlob);
+        }
 
-            // todo.pavelza: should compile all the shaders upfront, otherwise we compile the same shaders multiple times
-
+        ComPtr<ID3D12PipelineState> CreatePSO(ID3DBlob* vertexShaderBlob, ID3DBlob* pixelShaderBlob, D3D12_CULL_MODE cullMode = D3D12_CULL_MODE::D3D12_CULL_MODE_BACK, int32_t numRenderTargets = 1)
+        {
             D3D12_INPUT_ELEMENT_DESC inputElementDescription[XVertexMetadata::vertexAttributesCount];
 
             uint32_t offset = 0;
@@ -740,9 +746,13 @@ namespace Renderer
         std::string sceneName;
     };
 
+    SceneRendererDX12::~SceneRendererDX12()
+    {
+        deviceDX12.GetQueue().WaitForCommandListCompletion();
+    }
+
     bool SceneRendererDX12::Render(const Scene& scene, Texture& texture)
     {
-        //todo.pavelza: manage lifetime of DX12 objects before switching scenes will work, might need to also wait for command list to be empty before destruction like in imgui renderer
         if (context == nullptr || context->sceneName != scene.name)
         {
             context = std::make_shared<RendererDX12Context>(scene, texture, std::wstring(shaderFolderPath.begin(), shaderFolderPath.end()), deviceDX12);

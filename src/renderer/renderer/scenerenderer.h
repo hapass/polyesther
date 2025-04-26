@@ -9,5 +9,6 @@ namespace Renderer
     struct SceneRenderer
     {
         virtual bool Render(const Scene& scene, Texture& texture) = 0;
+        virtual ~SceneRenderer() = default;
     };
 }
